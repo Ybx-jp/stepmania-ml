@@ -1,0 +1,46 @@
+name: stepmania-chart-gen
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  # Core Python and PyTorch
+  - python=3.10
+  - pytorch=2.1
+  - pytorch-cuda=12.1
+
+  # Phase 1 Core Dependencies
+  - numpy
+  - pandas
+  - matplotlib
+  - jupyter
+  - ipykernel
+  - librosa
+  - soundfile
+  - scikit-learn
+  - tqdm
+  - pyyaml
+  - pip
+
+  # Additional Phase 1 dependencies via pip
+  # (keeping pip minimal for Phase 1)
+
+# Future dependencies to add when needed:
+# Phase 2 - Generative Models:
+#  - pip:
+#    - diffusers
+#    - accelerate
+#    - transformers
+#
+# Experiment Tracking:
+#  - tensorboard
+#  - wandb
+#
+# Hyperparameter Optimization:
+#  - optuna
+#
+# Additional Processing:
+#  - scipy
+#  - seaborn
+#  - pydub
+#  - simpleaudio

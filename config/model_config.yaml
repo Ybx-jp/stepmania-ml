@@ -1,0 +1,70 @@
+# Model architecture configuration
+
+# Difficulty classification model
+classifier:
+  # Input dimensions
+  audio_features_dim: 13  # MFCC features
+  chart_sequence_dim: 4   # 4-panel arrows
+  max_sequence_length: 960  # 2 minutes at 16th note resolution (120s / 0.125s)
+
+  # Audio encoder
+  audio_encoder:
+    hidden_dim: 256
+    num_layers: 3
+    dropout: 0.1
+
+  # Chart encoder
+  chart_encoder:
+    embedding_dim: 64
+    hidden_dim: 256
+    num_layers: 2
+    dropout: 0.1
+
+  # Fusion and classification
+  fusion_dim: 512
+  num_classes: 10  # Difficulty levels 1-10
+  classifier_dropout: 0.2
+
+# Diffusion generative model
+diffusion:
+  # Model architecture
+  model_type: "unet1d"  # 1D U-Net for sequence generation
+
+  # Input/output dimensions
+  chart_dim: 4  # 4-panel arrows
+  audio_condition_dim: 256
+  difficulty_condition_dim: 16  # Embedded difficulty
+  max_sequence_length: 960
+
+  # U-Net settings
+  unet:
+    base_channels: 64
+    channel_multipliers: [1, 2, 4, 8]
+    num_res_blocks: 2
+    attention_resolutions: [16, 8]
+    dropout: 0.1
+
+  # Diffusion process
+  diffusion_steps: 1000
+  noise_schedule: "cosine"  # cosine, linear
+
+  # Conditioning
+  use_audio_conditioning: true
+  use_difficulty_conditioning: true
+  condition_dropout: 0.1  # For classifier-free guidance
+
+# Training hyperparameters (default values)
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  num_epochs: 100
+  early_stopping_patience: 10
+  gradient_clip_norm: 1.0
+
+  # Optimizer
+  optimizer: "adamw"
+  weight_decay: 0.01
+
+  # Scheduler
+  scheduler: "cosine"
+  warmup_steps: 1000

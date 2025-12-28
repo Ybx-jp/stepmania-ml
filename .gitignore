@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+# Data files
+data/raw/*
+data/processed/*
+data/external/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/external/.gitkeep
+
+# Model checkpoints
+models/classifier/*
+models/diffusion/*
+!models/classifier/.gitkeep
+!models/diffusion/.gitkeep
+
+# Outputs
+outputs/charts/*
+outputs/figures/*
+outputs/logs/*
+!outputs/charts/.gitkeep
+!outputs/figures/.gitkeep
+!outputs/logs/.gitkeep
+
+# Optuna database
+optuna_study.db
+
+# Tensorboard logs
+runs/
+lightning_logs/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Dev Notes Scratchpad
+conversation.md
+feedback.md
