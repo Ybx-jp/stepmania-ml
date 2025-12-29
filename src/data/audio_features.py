@@ -170,10 +170,6 @@ class AudioFeatureExtractor:
             padded = np.pad(mfcc, ((0, 0), (0, padding)), mode='constant', constant_values=0)
             return padded
 
-
-
-
-
 def create_feature_extractor(config: Optional[Dict] = None) -> AudioFeatureExtractor:
     """Factory function to create configured feature extractor"""
     if config is None:
