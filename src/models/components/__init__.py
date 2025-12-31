@@ -27,16 +27,12 @@ __all__ = [
 
     # Fusion
     'LateFusionModule',
-    'GatedFusionModule',
-    'AdditiveFusionModule',
 
     # Pooling
     'MaskedAttentionPool',
     'MaskedMeanMaxPool',
-    'MaskedGlobalPool',
 
     # Heads
     'ClassificationHead',
     'RegressionHead',
-    'DualHead'
 ]

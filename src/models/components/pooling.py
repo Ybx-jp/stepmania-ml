@@ -101,32 +101,3 @@ class MaskedAttentionPool(nn.Module):
         pooled = (x * attn_weights.unsqueeze(-1)).sum(dim=1)  # (B, D)
 
         return pooled
-
-
-class MaskedGlobalPool(nn.Module):
-    """Simple masked global average pooling."""
-
-    def __init__(self):
-        """Initialize masked global pooling."""
-        super().__init__()
-
-    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        """
-        Apply masked global average pooling.
-
-        Args:
-            x: Input tensor (B, L, D)
-            mask: Attention mask (B, L) where 1 = valid, 0 = padding
-
-        Returns:
-            Globally pooled features (B, D)
-        """
-        # Expand mask for broadcasting: (B, L) → (B, L, 1)
-        mask_expanded = mask.unsqueeze(-1).float()
-
-        # Masked average
-        masked_x = x * mask_expanded
-        seq_lengths = mask.sum(dim=1, keepdim=True).float().clamp(min=1.0)
-        pooled = masked_x.sum(dim=1) / seq_lengths
-
-        return pooled
