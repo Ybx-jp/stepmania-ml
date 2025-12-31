@@ -25,6 +25,14 @@ classifier:
   num_classes: 10  # Difficulty levels 1-10
   classifier_dropout: 0.2
 
+  # Backbone temporal reasoning
+  backbone_blocks: 3
+  backbone_dropout: 0.1
+
+  # Architecture options
+  fusion_type: "late"  # late
+  pooling_type: "attention"  # attention, mean_max
+
 # Diffusion generative model
 diffusion:
   # Model architecture

@@ -14,6 +14,7 @@ from typing import Dict, Optional, Union
 
 from .components.encoders import AudioEncoder, ChartEncoder
 from .components.fusion import LateFusionModule, GatedFusionModule, AdditiveFusionModule
+from .components.backbone import Conv1DBackbone
 from .components.pooling import MaskedAttentionPool, MaskedMeanMaxPool, MaskedGlobalPool
 from .components.heads import ClassificationHead, RegressionHead, DualHead
 
@@ -95,6 +96,14 @@ class LateFusionClassifier(nn.Module):
         else:
             raise ValueError(f"Unknown fusion type: {fusion_type}")
 
+        # Conv backbone for temporal reasoning
+        self.backbone = Conv1DBackbone(
+            input_dim=config['fusion_dim'],
+            hidden_dim=config['fusion_dim'],
+            num_blocks=config.get('backbone_blocks', 3),
+            dropout=config.get('backbone_dropout', 0.1)
+        )
+
         # Mask-aware pooling
         pooling_type = config.get('pooling_type', 'attention')
         if pooling_type == 'attention':
@@ -140,13 +149,16 @@ class LateFusionClassifier(nn.Module):
         audio_encoded = self.audio_encoder(audio, mask)      # (B, L, audio_hidden_dim)
         chart_encoded = self.chart_encoder(chart, mask)      # (B, L, chart_hidden_dim)
 
-        # Late fusion after temporal encoding
+        # Late fusion after encoding
         fused_features = self.fusion_module(
             audio_encoded, chart_encoded, mask
         )  # (B, L, fusion_dim)
 
+        # Conv backbone for temporal reasoning
+        processed_features = self.backbone(fused_features, mask)  # (B, L, fusion_dim)
+
         # Mask-aware pooling to handle variable sequence lengths
-        pooled_features = self.pooling(fused_features, mask)  # (B, pooled_dim)
+        pooled_features = self.pooling(processed_features, mask)  # (B, pooled_dim)
 
         # Final classification
         logits = self.classifier_head(pooled_features)       # (B, num_classes)
@@ -175,13 +187,17 @@ class LateFusionClassifier(nn.Module):
         # Fuse features
         fused_features = self.fusion_module(audio_encoded, chart_encoded, mask)
 
+        # Process through backbone
+        processed_features = self.backbone(fused_features, mask)
+
         # Pool features
-        pooled_features = self.pooling(fused_features, mask)
+        pooled_features = self.pooling(processed_features, mask)
 
         return {
             'audio_encoded': audio_encoded,
             'chart_encoded': chart_encoded,
             'fused_features': fused_features,
+            'processed_features': processed_features,
             'pooled_features': pooled_features
         }
 
