@@ -57,18 +57,13 @@ class LateFusionClassifier(nn.Module):
         # Separate encoders for each modality
         self.audio_encoder = AudioEncoder(
             input_dim=config['audio_features_dim'],
-            hidden_dim=config['audio_encoder']['hidden_dim'],
-            num_res_blocks=config['audio_encoder']['num_layers'],
-            dropout=config['audio_encoder']['dropout']
+            hidden_dim=config['audio_encoder']['hidden_dim']
         )
 
         self.chart_encoder = ChartEncoder(
             input_dim=config['chart_sequence_dim'],
             embedding_dim=config['chart_encoder'].get('embedding_dim', 64),
-            hidden_dim=config['chart_encoder']['hidden_dim'],
-            num_res_blocks=config['chart_encoder']['num_layers'],
-            dropout=config['chart_encoder']['dropout']
-        )
+            hidden_dim=config['chart_encoder']['hidden_dim']        )
 
         # Late fusion module
         fusion_type = config.get('fusion_type', 'late')

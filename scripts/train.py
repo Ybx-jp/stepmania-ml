@@ -73,7 +73,7 @@ def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers
 
     # Create data loaders
     batch_size = config['training']['batch_size']
-    pin_memory = torch.cuda.is_available()
+    pin_memory = config
 
     train_loader = DataLoader(
         train_dataset,

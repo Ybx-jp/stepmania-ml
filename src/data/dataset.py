@@ -125,7 +125,7 @@ class StepManiaDataset(Dataset):
                 chart, chart_tensors = result
 
                 # Find corresponding audio file
-                audio_file = self._find_audio_file(chart.audio_file)
+                audio_file = self._find_audio_file(chart.audio_file, chart_file)
                 if audio_file is None:
                     print(f"Audio file not found for {chart_file}")
                     continue
@@ -148,25 +148,25 @@ class StepManiaDataset(Dataset):
 
         return valid_samples
 
-    def _find_audio_file(self, audio_filename: str) -> Optional[str]:
+    def _find_audio_file(self, audio_filename: str, chart_file: str) -> Optional[str]:
         """
-        Find corresponding audio file with extension matching.
-        Similar to helper methods in the notebook.
+        Find corresponding audio file in the same directory as the chart file.
         """
         if not audio_filename:
             return None
 
-        # Try exact filename first
-        audio_path = os.path.join(self.audio_dir, audio_filename)
+        # Look in the same directory as the chart file
+        chart_dir = os.path.dirname(chart_file)
+        audio_path = os.path.join(chart_dir, audio_filename)
         if os.path.exists(audio_path):
             return audio_path
 
-        # Try common extensions
+        # Try common extensions in same directory
         base_name = os.path.splitext(audio_filename)[0]
         extensions = ['.ogg', '.mp3', '.wav', '.flac', '.m4a']
 
         for ext in extensions:
-            audio_path = os.path.join(self.audio_dir, base_name + ext)
+            audio_path = os.path.join(chart_dir, base_name + ext)
             if os.path.exists(audio_path):
                 return audio_path
 

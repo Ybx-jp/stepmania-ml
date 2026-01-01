@@ -64,9 +64,7 @@ class Trainer:
             optimizer,
             mode='min',
             factor=config.get('factor', 0.5),
-            patience=config.get('patience', 5),
-            verbose=True
-        )
+            patience=config.get('patience', 5)        )
 
         # Checkpointing
         self.best_val_loss = float('inf')

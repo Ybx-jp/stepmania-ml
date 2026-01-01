@@ -5,7 +5,7 @@ classifier:
   # Input dimensions
   audio_features_dim: 13  # MFCC features
   chart_sequence_dim: 4   # 4-panel arrows
-  max_sequence_length: 960  # 2 minutes at 16th note resolution (120s / 0.125s)
+  max_sequence_length: 1440  # 2 minutes at 16th note resolution (120s / 0.125s)
 
   # Audio encoder
   audio_encoder:
@@ -31,7 +31,7 @@ classifier:
 
   # Architecture options
   fusion_type: "late"  # late
-  pooling_type: "attention"  # attention, mean_max
+  pooling_type: "mean_max"  # attention, mean_max
 
 # Diffusion generative model
 diffusion:
