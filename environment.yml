@@ -16,11 +16,12 @@ dependencies:
   - jupyter
   - ipykernel
   - librosa
-  - soundfile
+  - pysoundfile
   - scikit-learn
   - tqdm
   - pyyaml
   - pip
+  - pytest
 
   # Additional Phase 1 dependencies via pip
   # (keeping pip minimal for Phase 1)

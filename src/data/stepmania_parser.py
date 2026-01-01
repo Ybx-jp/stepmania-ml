@@ -14,7 +14,7 @@ import re
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 import numpy as np
-
+import librosa
 
 @dataclass
 class TimingEvent:
@@ -62,8 +62,8 @@ class StepManiaParser:
     def __init__(self,
                  target_sample_rate: int = 22050,
                  timesteps_per_beat: int = 4,  # 16th note resolution
-                 min_song_length: float = 90.0,
-                 max_song_length: float = 120.0,
+                 min_song_length: float = 75.0,
+                 max_song_length: float = 130.0,
                  min_bpm: float = 60.0,
                  max_bpm: float = 200.0):
 
@@ -89,7 +89,7 @@ class StepManiaParser:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
 
-        chart = self._parse_sm(content)
+        chart = self._parse_sm(content, file_path)
 
         # Validate for Phase 1 requirements
         if not self._validate_phase1_requirements(chart):
@@ -100,7 +100,21 @@ class StepManiaParser:
 
         return chart
 
-    def _parse_sm(self, content: str) -> StepManiaChart:
+    def _get_audio_duration(self, chart_file_path: str, audio_filename: str) -> float:
+        """Get real audio duration from audio file"""
+
+        chart_dir = os.path.dirname(chart_file_path)
+
+        if not audio_filename:
+            raise ValueError("No audio filename provided in chart metadata")
+
+        audio_path = os.path.join(chart_dir, audio_filename)
+        if not os.path.exists(audio_path):
+            raise ValueError(f"Audio file not found: {audio_path}")
+
+        return librosa.get_duration(path=audio_path)
+
+    def _parse_sm(self, content: str, file_path: str) -> StepManiaChart:
         """Parse .sm file content"""
         # Remove comments and normalize line endings
         content = re.sub(r'//.*?\n', '\n', content)
@@ -125,8 +139,8 @@ class StepManiaParser:
         # Parse note data
         note_data = self._parse_notes_sm(content)
 
-        # Estimate song length (will be refined with actual audio)
-        song_length = float(metadata.get('SAMPLELENGTH', '120'))
+        # Get real song length from audio file
+        song_length = self._get_audio_duration(file_path, metadata.get('MUSIC', ''))
 
         # Create chart object
         chart = StepManiaChart(
@@ -150,9 +164,8 @@ class StepManiaParser:
 
     def _extract_primary_bpm(self, metadata: Dict[str, str]) -> float:
         """Extract primary BPM, ensuring it's fixed for Phase 1"""
-        if 'BPMS' not in metadata:
-            return 120.0  # Default BPM
-
+        if not metadata['BPMS']:
+            raise ValueError("BPMS metadata is missing")
         bpm_string = metadata['BPMS']
         bpm_pairs = bpm_string.split(',')
 
@@ -165,26 +178,30 @@ class StepManiaParser:
             _, bpm_str = bpm_pairs[0].split('=', 1)
             return float(bpm_str.strip())
         else:
-            return 120.0
+            raise ValueError("Error parsing BPMS value")
 
     def _validate_phase1_requirements(self, chart: StepManiaChart) -> bool:
         """Validate chart meets Phase 1 requirements"""
         # Check BPM range
         if not (self.min_bpm <= chart.bpm <= self.max_bpm):
+            print(f"{chart.title} failed bpm requirement")
             return False
 
         # Check song length
         if not (self.min_song_length <= chart.song_length_seconds <= self.max_song_length):
+            print(f"{chart.title} failed song length requirement")
             return False
 
         # Check for multiple BPM changes (not allowed in Phase 1)
         bpm_events = [e for e in chart.timing_events if e.event_type == 'bpm']
         if len(bpm_events) > 1:
+            print(f"{chart.title} failed bpm change requirement")
             return False
 
         # Check for valid difficulty charts in target range (1-10)
         valid_charts = [n for n in chart.note_data if 1 <= n.difficulty_value <= 10]
         if not valid_charts:
+            print(f"{chart.title} failed valid chart requirement")
             return False
 
         return True
@@ -252,11 +269,11 @@ class StepManiaParser:
             dance_style = lines[0].strip()
             author = lines[1].strip()
             difficulty_name = lines[2].strip()
-            difficulty_value = int(lines[3].strip()) if lines[3].strip().isdigit() else 0
+            difficulty_value = int(lines[3].strip().rstrip(':')) if lines[3].strip().rstrip(':').isdigit() else 0
             radar_values = lines[4].strip()
 
             # Only process single (4-panel) charts
-            if dance_style.lower() != 'dance-single':
+            if dance_style.lower().rstrip(':') != 'dance-single':
                 continue
 
             # Extract note data (everything after the 5th line)
@@ -302,7 +319,7 @@ class StepManiaParser:
                     beat_position = current_beat + (line_idx * beats_per_line)
 
                     # Convert to timestep index
-                    timestep_idx = int(round(beat_position * self.timesteps_per_beat))
+                    timestep_idx = int(np.floor(beat_position * self.timesteps_per_beat))
 
                     # Ensure timestep is within bounds
                     if 0 <= timestep_idx < chart.timesteps_total:
@@ -332,11 +349,10 @@ class StepManiaParser:
         if max_simultaneous > 2:
             return False
 
-        # Check overall step density (not too sparse or too dense)
-        total_steps = np.sum(chart_tensor)
-        step_density = total_steps / chart_tensor.shape[0]
+        active_timesteps = np.sum(np.sum(chart_tensor, axis=1) > 0)
+        active_ratio = active_timesteps / chart_tensor.shape[0]
 
-        if step_density < 0.01 or step_density > 0.5:  # Reasonable bounds
+        if active_ratio < 0.01 or active_ratio > 0.4:  # Reasonable bounds
             return False
 
         return True
