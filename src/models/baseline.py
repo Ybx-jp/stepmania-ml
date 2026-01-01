@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from typing import Dict, Optional
 
-from .components.pooling import MaskedGlobalPool, MaskedAttentionPool, MaskedMeanMaxPool
+from .components.pooling import MaskedAttentionPool, MaskedMeanMaxPool
 from .components.heads import ClassificationHead
 
 

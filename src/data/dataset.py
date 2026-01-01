@@ -95,7 +95,7 @@ class StepManiaDataset(Dataset):
                 'audio': torch.from_numpy(audio_padded).float(),
                 'mask': torch.from_numpy(mask).bool(),
                 'length': original_length,
-                'difficulty': torch.tensor(sample_meta['difficulty'], dtype=torch.long)
+                'difficulty': torch.tensor(sample_meta['difficulty'] - 1, dtype=torch.long)  # Convert 1-10 to 0-9 for CrossEntropy
             }
 
             # Cache processed sample (stub for now)

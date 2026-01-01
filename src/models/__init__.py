@@ -9,12 +9,11 @@ Models:
 - PooledFeatureBaseline: Statistical features baseline
 """
 
-from .classifier import LateFusionClassifier, DualTaskClassifier
+from .classifier import LateFusionClassifier
 from .baseline import MLPBaseline, SimpleConcatBaseline, PooledFeatureBaseline
 
 __all__ = [
     'LateFusionClassifier',
-    'DualTaskClassifier',
     'MLPBaseline',
     'SimpleConcatBaseline',
     'PooledFeatureBaseline'

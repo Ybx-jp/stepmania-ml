@@ -73,6 +73,8 @@ training:
   optimizer: "adamw"
   weight_decay: 0.01
 
-  # Scheduler
-  scheduler: "cosine"
-  warmup_steps: 1000
+  # Scheduler - ReduceLROnPlateau
+  scheduler: "reduce_on_plateau"
+  patience: 5
+  factor: 0.5
+  monitor: "val_loss"

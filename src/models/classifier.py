@@ -13,10 +13,10 @@ import torch.nn as nn
 from typing import Dict, Optional, Union
 
 from .components.encoders import AudioEncoder, ChartEncoder
-from .components.fusion import LateFusionModule, GatedFusionModule, AdditiveFusionModule
+from .components.fusion import LateFusionModule
 from .components.backbone import Conv1DBackbone
-from .components.pooling import MaskedAttentionPool, MaskedMeanMaxPool, MaskedGlobalPool
-from .components.heads import ClassificationHead, RegressionHead, DualHead
+from .components.pooling import MaskedAttentionPool, MaskedMeanMaxPool
+from .components.heads import ClassificationHead, RegressionHead
 
 
 class LateFusionClassifier(nn.Module):

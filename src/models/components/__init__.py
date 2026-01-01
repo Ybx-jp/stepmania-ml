@@ -11,9 +11,9 @@ Components:
 
 from .conv_blocks import Conv1DBlock, ResidualBlock1D, DownsampleBlock1D
 from .encoders import AudioEncoder, ChartEncoder
-from .fusion import LateFusionModule, GatedFusionModule, AdditiveFusionModule
-from .pooling import MaskedAttentionPool, MaskedMeanMaxPool, MaskedGlobalPool
-from .heads import ClassificationHead, RegressionHead, DualHead
+from .fusion import LateFusionModule
+from .pooling import MaskedAttentionPool, MaskedMeanMaxPool
+from .heads import ClassificationHead, RegressionHead
 
 __all__ = [
     # Conv blocks
