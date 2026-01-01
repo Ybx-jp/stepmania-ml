@@ -63,7 +63,8 @@ def create_datasets(train_files: List[str],
                    max_sequence_length: int = 1200,
                    parser: Optional[StepManiaParser] = None,
                    feature_extractor: Optional[AudioFeatureExtractor] = None,
-                   cache_dir: Optional[str] = None) -> Tuple[StepManiaDataset, StepManiaDataset, StepManiaDataset]:
+                   cache_dir: Optional[str] = None,
+                   data_config: Optional[Dict] = None) -> Tuple[StepManiaDataset, StepManiaDataset, StepManiaDataset]:
     """
     Create StepManiaDataset instances for train/val/test splits.
 
@@ -76,13 +77,14 @@ def create_datasets(train_files: List[str],
         parser: Optional shared parser instance
         feature_extractor: Optional shared feature extractor
         cache_dir: Optional cache directory
+        data_config: Optional data config dict (from data_config.yaml['data']['stepmania'])
 
     Returns:
         Tuple of (train_dataset, val_dataset, test_dataset)
     """
     # Create shared processors if not provided
     if parser is None:
-        parser = StepManiaParser()
+        parser = StepManiaParser(config=data_config)
     if feature_extractor is None:
         feature_extractor = AudioFeatureExtractor()
 

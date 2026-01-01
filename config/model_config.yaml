@@ -63,6 +63,10 @@ diffusion:
 
 # Training hyperparameters (default values)
 training:
+  # Device configuration
+  device: "cpu"  # "cpu" or "cuda"
+  pin_memory: false  # Set true only when using CUDA
+
   batch_size: 32
   learning_rate: 0.001
   num_epochs: 100

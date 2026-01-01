@@ -60,19 +60,34 @@ class StepManiaParser:
     """Parser for StepMania .sm and .ssc files with Phase 1 focus"""
 
     def __init__(self,
+                 config: Optional[Dict] = None,
                  target_sample_rate: int = 22050,
                  timesteps_per_beat: int = 4,  # 16th note resolution
                  min_song_length: float = 75.0,
                  max_song_length: float = 130.0,
                  min_bpm: float = 60.0,
                  max_bpm: float = 200.0):
+        """
+        Initialize parser with optional config dict.
 
+        Args:
+            config: Optional dict from data_config.yaml['data']['stepmania']
+                   Keys: min_song_length, max_song_length, min_bpm, max_bpm
+        """
         self.target_sample_rate = target_sample_rate
         self.timesteps_per_beat = timesteps_per_beat
-        self.min_song_length = min_song_length
-        self.max_song_length = max_song_length
-        self.min_bpm = min_bpm
-        self.max_bpm = max_bpm
+
+        # Use config values if provided, otherwise use defaults
+        if config:
+            self.min_song_length = config.get('min_song_length', min_song_length)
+            self.max_song_length = config.get('max_song_length', max_song_length)
+            self.min_bpm = config.get('min_bpm', min_bpm)
+            self.max_bpm = config.get('max_bpm', max_bpm)
+        else:
+            self.min_song_length = min_song_length
+            self.max_song_length = max_song_length
+            self.min_bpm = min_bpm
+            self.max_bpm = max_bpm
 
     def parse_file(self, file_path: str) -> Optional[StepManiaChart]:
         """

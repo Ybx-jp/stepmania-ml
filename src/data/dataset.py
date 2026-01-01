@@ -80,33 +80,32 @@ class StepManiaDataset(Dataset):
         if cached_sample is not None:
             return cached_sample
 
-        try:
-            # Load chart tensor and audio features
-            chart_tensor, audio_tensor, original_length = self._load_chart_and_audio(sample_meta)
+        # Load chart tensor and audio features
+        chart_tensor, audio_tensor, original_length = self._load_chart_and_audio(sample_meta)
 
-            # Apply joint padding/truncation to ensure alignment
-            chart_padded, audio_padded, mask = self._apply_joint_padding_truncation(
-                chart_tensor, audio_tensor
-            )
+        # Apply joint padding/truncation to ensure alignment
+        chart_padded, audio_padded, mask = self._apply_joint_padding_truncation(
+            chart_tensor, audio_tensor
+        )
 
-            # Create final sample
-            processed_sample = {
-                'chart': torch.from_numpy(chart_padded).float(),
-                'audio': torch.from_numpy(audio_padded).float(),
-                'mask': torch.from_numpy(mask).bool(),
-                'length': original_length,
-                'difficulty': torch.tensor(sample_meta['difficulty'] - 1, dtype=torch.long)  # Convert 1-10 to 0-9 for CrossEntropy
-            }
+        # Validate difficulty is in expected range
+        difficulty = sample_meta['difficulty']
+        if not (1 <= difficulty <= 10):
+            raise ValueError(f"Invalid difficulty {difficulty} for {sample_meta['chart_file']}")
 
-            # Cache processed sample (stub for now)
-            self._save_to_cache(idx, processed_sample)
+        # Create final sample
+        processed_sample = {
+            'chart': torch.from_numpy(chart_padded).float(),
+            'audio': torch.from_numpy(audio_padded).float(),
+            'mask': torch.from_numpy(mask).bool(),
+            'length': original_length,
+            'difficulty': torch.tensor(difficulty - 1, dtype=torch.long)  # Convert 1-10 to 0-9 for CrossEntropy
+        }
 
-            return processed_sample
+        # Cache processed sample (stub for now)
+        self._save_to_cache(idx, processed_sample)
 
-        except Exception as e:
-            print(f"Error loading sample {idx}: {e}")
-            # Return dummy sample for failed loads
-            return self._create_dummy_sample(sample_meta['difficulty'])
+        return processed_sample
 
     def _create_sample_metadata(self) -> List[Dict]:
         """
@@ -131,12 +130,17 @@ class StepManiaDataset(Dataset):
                     continue
 
                 # Create sample metadata for each valid difficulty
-                for i, note_data in enumerate(chart.note_data):
+                # note_data and chart_tensors are already filtered by parser.process_chart
+                for note_data, chart_tensor in zip(chart.note_data, chart_tensors):
+                    # Extra safety check for CrossEntropy bounds (1-10 -> 0-9)
+                    if not (1 <= note_data.difficulty_value <= 10):
+                        print(f"Skipping invalid difficulty {note_data.difficulty_value} in {chart_file}")
+                        continue
                     sample = {
                         'chart_file': chart_file,
                         'audio_file': audio_file,
                         'chart': chart,
-                        'chart_tensor': chart_tensors[i],
+                        'chart_tensor': chart_tensor,
                         'difficulty': note_data.difficulty_value,
                         'difficulty_name': note_data.difficulty_name
                     }
@@ -182,9 +186,6 @@ class StepManiaDataset(Dataset):
             sample_meta['audio_file'],
             sample_meta['chart']
         )
-
-        if audio_features is None:
-            raise ValueError("Failed to extract audio features")
 
         # Get aligned tensors
         chart_tensor = sample_meta['chart_tensor']  # (timesteps, 4)
@@ -243,19 +244,6 @@ class StepManiaDataset(Dataset):
             ])
 
         return chart_padded, audio_padded, mask
-
-    def _create_dummy_sample(self, difficulty: int) -> Dict[str, torch.Tensor]:
-        """
-        Fallback for failed loads.
-        Similar to error handling in the robust dataset from notebook.
-        """
-        return {
-            'chart': torch.zeros(self.max_sequence_length, 4),
-            'audio': torch.zeros(self.max_sequence_length, 13),
-            'mask': torch.zeros(self.max_sequence_length, dtype=torch.bool),
-            'length': 0,
-            'difficulty': torch.tensor(difficulty, dtype=torch.long)
-        }
 
     # Cache methods - stubs for later implementation
     def _get_cache_path(self, idx: int) -> str:

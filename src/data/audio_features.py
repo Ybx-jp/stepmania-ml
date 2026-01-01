@@ -58,8 +58,7 @@ class AudioFeatureExtractor:
         Uses chart-specific hop_length for perfect alignment.
         """
         if not os.path.exists(audio_file_path):
-            print(f"Audio file not found: {audio_file_path}")
-            return None
+            raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
 
         try:
             # Load audio with target sample rate
@@ -85,13 +84,11 @@ class AudioFeatureExtractor:
                 fmax=self.config.fmax
             )
 
-            # Validate alignment with chart
+            # Align audio frames to match chart timesteps exactly
             expected_frames = chart.timesteps_total
             actual_frames = mfcc.shape[1]
 
-            if abs(expected_frames - actual_frames) > 2:  # Allow small tolerance
-                print(f"Alignment mismatch: expected {expected_frames}, got {actual_frames}")
-                # Truncate or pad to match expected length
+            if expected_frames != actual_frames:
                 mfcc = self._align_features(mfcc, expected_frames)
 
             return AudioFeatures(
@@ -103,8 +100,7 @@ class AudioFeatureExtractor:
             )
 
         except Exception as e:
-            print(f"Error extracting features from {audio_file_path}: {e}")
-            return None
+            raise RuntimeError(f"Error extracting features from {audio_file_path}: {e}") from e
 
     def extract_standalone(self,
                           audio_file_path: str,
@@ -117,8 +113,7 @@ class AudioFeatureExtractor:
         Useful for exploration or when chart data is not available.
         """
         if not os.path.exists(audio_file_path):
-            print(f"Audio file not found: {audio_file_path}")
-            return None
+            raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
 
         try:
             # Load audio
@@ -150,8 +145,7 @@ class AudioFeatureExtractor:
             )
 
         except Exception as e:
-            print(f"Error extracting features from {audio_file_path}: {e}")
-            return None
+            raise RuntimeError(f"Error extracting features from {audio_file_path}: {e}") from e
 
     def _align_features(self, mfcc: np.ndarray, target_frames: int) -> np.ndarray:
         """Align feature dimensions to target frame count"""

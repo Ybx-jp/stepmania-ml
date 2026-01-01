@@ -50,7 +50,7 @@ def load_config(config_path: str) -> dict:
     return config
 
 
-def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers: int):
+def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers: int, data_config: dict = None):
     """Create datasets and data loaders using existing utilities."""
     # Find all chart files
     chart_files = glob.glob(f"{data_dir}/**/*.sm", recursive=True)
@@ -61,6 +61,9 @@ def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers
     # Create train/val/test splits
     train_files, val_files, test_files = create_data_splits(chart_files)
 
+    # Extract stepmania config for parser
+    stepmania_config = data_config.get('data', {}).get('stepmania', {}) if data_config else None
+
     # Create datasets using existing utility
     max_seq_len = config['classifier']['max_sequence_length']
     train_dataset, val_dataset, test_dataset = create_datasets(
@@ -68,12 +71,13 @@ def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers
         val_files=val_files,
         test_files=test_files,
         audio_dir=audio_dir,
-        max_sequence_length=max_seq_len
+        max_sequence_length=max_seq_len,
+        data_config=stepmania_config
     )
 
     # Create data loaders
     batch_size = config['training']['batch_size']
-    pin_memory = config
+    pin_memory = config['training'].get('pin_memory', False)
 
     train_loader = DataLoader(
         train_dataset,
@@ -134,10 +138,16 @@ def main():
     config = load_config(args.config)
     print(f"Loaded config from {args.config}")
 
+    # Load data configuration
+    data_config_path = os.path.join(os.path.dirname(args.config), 'data_config.yaml')
+    data_config = load_config(data_config_path) if os.path.exists(data_config_path) else None
+    if data_config:
+        print(f"Loaded data config from {data_config_path}")
+
     # Create datasets and data loaders
     print("Creating datasets...")
     train_loader, val_loader = create_data_loaders(
-        args.data_dir, args.audio_dir, config, args.num_workers
+        args.data_dir, args.audio_dir, config, args.num_workers, data_config
     )
 
     # Create model and optimizer
@@ -149,6 +159,10 @@ def main():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Model parameters: {total_params:,} total, {trainable_params:,} trainable")
 
+    # Get device from config
+    device_str = config['training'].get('device', 'cpu')
+    device = torch.device(device_str)
+
     # Create trainer
     trainer = Trainer(
         model=model,
@@ -156,7 +170,8 @@ def main():
         val_loader=val_loader,
         optimizer=optimizer,
         config=config['training'],
-        checkpoint_dir=args.checkpoint_dir
+        checkpoint_dir=args.checkpoint_dir,
+        device=device
     )
 
     # Resume from checkpoint if specified
