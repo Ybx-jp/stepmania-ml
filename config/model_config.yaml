@@ -36,7 +36,8 @@ classifier:
   # Chart statistics features for difficulty prediction
   use_chart_stats: true
   chart_stats_dim: 5        # Number of statistics features
-  stats_hidden_dim: 32      # MLP hidden dimension
+  stats_hidden_dim: 8      # MLP hidden dimension
+  stats_dropout: 0.5
 
 # Diffusion generative model
 diffusion:

@@ -125,7 +125,8 @@ class LateFusionClassifier(nn.Module):
             self.stats_mlp = nn.Sequential(
                 nn.Linear(stats_dim, stats_hidden),
                 nn.ReLU(),
-                nn.Linear(stats_hidden, stats_hidden)
+                nn.Linear(stats_hidden, stats_hidden),
+                nn.Dropout(p=config.get('stats_dropout', 0.5))
             )
             pooled_dim += stats_hidden  # Expand classifier input dim
 

@@ -332,13 +332,17 @@ class StepManiaDataset(Dataset):
         else:
             peak_density = total_notes
 
-        return np.array([
-            notes_per_second,
-            jump_ratio,
-            max_stream,
-            avg_gap,
-            peak_density
+        # Normalize features to roughly 0-1 range
+        # Using reasonable expected ranges based on typical StepMania charts
+        normalized_stats = np.array([
+            min(notes_per_second / 12.0, 1.0),          # ~12 nps is very high
+            jump_ratio,                                  # Already 0-1
+            min(np.log1p(max_stream) / 6.0, 1.0),       # log(400)≈6, handles long streams
+            1.0 - min(avg_gap / 50.0, 1.0),             # Invert: small gap = high difficulty
+            min(np.log1p(peak_density) / 5.0, 1.0),    # log(150)≈5, handles dense sections
         ], dtype=np.float32)
+
+        return normalized_stats
 
     # Cache methods - stubs for later implementation
     def _get_cache_path(self, idx: int) -> str:
