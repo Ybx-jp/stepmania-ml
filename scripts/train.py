@@ -6,6 +6,14 @@ Usage:
     python scripts/train.py --config config/model_config.yaml --data_dir path/to/stepmania/data
 """
 
+import warnings
+import os
+
+# Suppress noisy warnings from audio libraries
+warnings.filterwarnings('ignore', category=UserWarning, module='librosa')
+warnings.filterwarnings('ignore', category=FutureWarning, module='librosa')
+os.environ['AUDIOREAD_LOG_LEVEL'] = 'ERROR'
+
 import argparse
 import yaml
 import torch

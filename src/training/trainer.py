@@ -69,6 +69,7 @@ class Trainer:
         # Checkpointing
         self.best_val_loss = float('inf')
         self.current_epoch = 0
+        self.history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
 
         # Metrics
         self.val_accuracy = MulticlassAccuracy(
@@ -184,14 +185,6 @@ class Trainer:
         """Main training loop."""
         num_epochs = self.config.get('num_epochs', 100)
 
-        # History tracking
-        history = {
-            'train_loss': [],
-            'train_acc': [],
-            'val_loss': [],
-            'val_acc': []
-        }
-
         print(f"Starting training for {num_epochs} epochs")
         print(f"Checkpoints will be saved to: {self.checkpoint_dir}")
 
@@ -205,10 +198,10 @@ class Trainer:
             val_metrics = self.validate_epoch()
 
             # Update history
-            history['train_loss'].append(train_metrics['train_loss'])
-            history['train_acc'].append(train_metrics['train_acc'])
-            history['val_loss'].append(val_metrics['val_loss'])
-            history['val_acc'].append(val_metrics['val_acc'])
+            self.history['train_loss'].append(train_metrics['train_loss'])
+            self.history['train_acc'].append(train_metrics['train_acc'])
+            self.history['val_loss'].append(val_metrics['val_loss'])
+            self.history['val_acc'].append(val_metrics['val_acc'])
 
             # Print epoch summary
             print(f"Epoch {self.current_epoch}:")
@@ -225,35 +218,37 @@ class Trainer:
                 self.save_best_checkpoint(val_metrics)
                 print(f"  New best validation loss: {self.best_val_loss:.4f}")
 
-            # Save last checkpoint
-            self.save_last_checkpoint(epoch, {**train_metrics, **val_metrics})
+            # Save last checkpoint with history
+            self.save_last_checkpoint(epoch, {**train_metrics, **val_metrics}, self.history)
 
         print("Training completed!")
-        return history
+        return self.history
 
     def save_best_checkpoint(self, metrics: Dict[str, float]):
-        """Save best model checkpoint."""
+        """Save best model checkpoint with history."""
         checkpoint = {
             'epoch': self.current_epoch,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict(),
             'best_val_loss': self.best_val_loss,
-            'metrics': metrics
+            'metrics': metrics,
+            'history': self.history
         }
 
         path = os.path.join(self.checkpoint_dir, 'best_val_loss.pt')
         torch.save(checkpoint, path)
 
-    def save_last_checkpoint(self, epoch: int, metrics: Dict[str, float]):
-        """Save most recent checkpoint."""
+    def save_last_checkpoint(self, epoch: int, metrics: Dict[str, float], history: Dict = None):
+        """Save most recent checkpoint with training history."""
         checkpoint = {
             'epoch': self.current_epoch,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict(),
             'best_val_loss': self.best_val_loss,
-            'metrics': metrics
+            'metrics': metrics,
+            'history': history
         }
 
         path = os.path.join(self.checkpoint_dir, 'last.pt')
