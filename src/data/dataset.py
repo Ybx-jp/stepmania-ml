@@ -61,6 +61,28 @@ class StepManiaDataset(Dataset):
         """Return total number of valid samples"""
         return len(self.valid_samples)
 
+    def get_data_info(self) -> Dict:
+        """
+        Get metadata about the dataset for logging/checkpointing.
+
+        Returns:
+            Dictionary with:
+            - difficulty_distribution: counts per difficulty level (1-10)
+            - total_samples: total number of valid samples
+            - chart_files: list of source chart files
+        """
+        from collections import Counter
+
+        difficulty_counts = Counter(s['difficulty'] for s in self.valid_samples)
+        # Ensure all 10 levels are represented (even if 0)
+        distribution = {i: difficulty_counts.get(i, 0) for i in range(1, 11)}
+
+        return {
+            'difficulty_distribution': distribution,
+            'total_samples': len(self.valid_samples),
+            'chart_files': self.chart_files
+        }
+
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         """
         Load and return a single training-ready sample.
@@ -93,13 +115,18 @@ class StepManiaDataset(Dataset):
         if not (1 <= difficulty <= 10):
             raise ValueError(f"Invalid difficulty {difficulty} for {sample_meta['chart_file']}")
 
+        # Compute chart statistics for difficulty features
+        song_length_seconds = sample_meta['chart'].song_length_seconds
+        chart_stats = self._compute_chart_stats(chart_tensor, song_length_seconds)
+
         # Create final sample
         processed_sample = {
             'chart': torch.from_numpy(chart_padded).float(),
             'audio': torch.from_numpy(audio_padded).float(),
             'mask': torch.from_numpy(mask).bool(),
             'length': original_length,
-            'difficulty': torch.tensor(difficulty - 1, dtype=torch.long)  # Convert 1-10 to 0-9 for CrossEntropy
+            'difficulty': torch.tensor(difficulty - 1, dtype=torch.long),  # Convert 1-10 to 0-9 for CrossEntropy
+            'chart_stats': torch.from_numpy(chart_stats).float()  # (5,) difficulty features
         }
 
         # Cache processed sample (stub for now)
@@ -244,6 +271,74 @@ class StepManiaDataset(Dataset):
             ])
 
         return chart_padded, audio_padded, mask
+
+    def _compute_chart_stats(self, chart_tensor: np.ndarray, song_length_seconds: float) -> np.ndarray:
+        """
+        Compute difficulty-relevant statistics from chart tensor.
+
+        Computes 5 features that correlate with chart difficulty:
+        1. notes_per_second - total notes / song duration
+        2. jump_ratio - fraction of timesteps with 2+ simultaneous notes
+        3. max_stream_length - longest consecutive run of non-empty timesteps
+        4. avg_gap - average gap between notes (in timesteps)
+        5. peak_density - max notes in any 16-beat window
+
+        Args:
+            chart_tensor: Binary chart encoding (timesteps, 4)
+            song_length_seconds: Duration of the song in seconds
+
+        Returns:
+            numpy array of shape (5,) with computed statistics
+        """
+        # Notes per timestep (0-4)
+        notes_per_timestep = chart_tensor.sum(axis=1)
+        total_notes = notes_per_timestep.sum()
+        num_timesteps = len(chart_tensor)
+
+        # 1. Notes per second
+        notes_per_second = total_notes / max(song_length_seconds, 1.0)
+
+        # 2. Jump ratio (timesteps with 2+ notes)
+        jumps = (notes_per_timestep >= 2).sum()
+        jump_ratio = jumps / max(num_timesteps, 1)
+
+        # 3. Max stream length (consecutive non-empty timesteps)
+        has_note = notes_per_timestep > 0
+        max_stream = 0
+        current_stream = 0
+        for has in has_note:
+            if has:
+                current_stream += 1
+                max_stream = max(max_stream, current_stream)
+            else:
+                current_stream = 0
+
+        # 4. Average gap between notes
+        note_positions = np.where(has_note)[0]
+        if len(note_positions) > 1:
+            gaps = np.diff(note_positions)
+            avg_gap = gaps.mean()
+        else:
+            avg_gap = num_timesteps  # No notes or single note = max gap
+
+        # 5. Peak density (max notes in any 16-beat window = 64 timesteps at 4 per beat)
+        window_size = min(64, num_timesteps)
+        if num_timesteps >= window_size:
+            # Sliding window max
+            peak_density = 0
+            for i in range(num_timesteps - window_size + 1):
+                window_notes = notes_per_timestep[i:i + window_size].sum()
+                peak_density = max(peak_density, window_notes)
+        else:
+            peak_density = total_notes
+
+        return np.array([
+            notes_per_second,
+            jump_ratio,
+            max_stream,
+            avg_gap,
+            peak_density
+        ], dtype=np.float32)
 
     # Cache methods - stubs for later implementation
     def _get_cache_path(self, idx: int) -> str:

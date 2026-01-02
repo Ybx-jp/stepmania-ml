@@ -117,6 +117,18 @@ class LateFusionClassifier(nn.Module):
         else:
             raise ValueError(f"Unknown pooling type: {pooling_type}")
 
+        # Chart statistics branch (optional)
+        self.use_chart_stats = config.get('use_chart_stats', False)
+        if self.use_chart_stats:
+            stats_dim = config.get('chart_stats_dim', 5)
+            stats_hidden = config.get('stats_hidden_dim', 32)
+            self.stats_mlp = nn.Sequential(
+                nn.Linear(stats_dim, stats_hidden),
+                nn.ReLU(),
+                nn.Linear(stats_hidden, stats_hidden)
+            )
+            pooled_dim += stats_hidden  # Expand classifier input dim
+
         # Classification head
         self.classifier_head = ClassificationHead(
             input_dim=pooled_dim,
@@ -128,7 +140,8 @@ class LateFusionClassifier(nn.Module):
     def forward(self,
                 audio: torch.Tensor,
                 chart: torch.Tensor,
-                mask: torch.Tensor) -> torch.Tensor:
+                mask: torch.Tensor,
+                chart_stats: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Forward pass through the complete model.
 
@@ -136,6 +149,7 @@ class LateFusionClassifier(nn.Module):
             audio: Audio features (B, L, audio_features_dim)
             chart: Chart sequences (B, L, chart_sequence_dim)
             mask: Attention mask (B, L) where 1 = valid, 0 = padding
+            chart_stats: Optional chart statistics (B, stats_dim) for difficulty features
 
         Returns:
             Classification logits (B, num_classes)
@@ -154,6 +168,11 @@ class LateFusionClassifier(nn.Module):
 
         # Mask-aware pooling to handle variable sequence lengths
         pooled_features = self.pooling(processed_features, mask)  # (B, pooled_dim)
+
+        # Concatenate chart statistics if enabled
+        if self.use_chart_stats and chart_stats is not None:
+            stats_features = self.stats_mlp(chart_stats)  # (B, stats_hidden)
+            pooled_features = torch.cat([pooled_features, stats_features], dim=-1)
 
         # Final classification
         logits = self.classifier_head(pooled_features)       # (B, num_classes)
