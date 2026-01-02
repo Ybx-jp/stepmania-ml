@@ -61,6 +61,28 @@ class StepManiaDataset(Dataset):
         """Return total number of valid samples"""
         return len(self.valid_samples)
 
+    def get_data_info(self) -> Dict:
+        """
+        Get metadata about the dataset for logging/checkpointing.
+
+        Returns:
+            Dictionary with:
+            - difficulty_distribution: counts per difficulty level (1-10)
+            - total_samples: total number of valid samples
+            - chart_files: list of source chart files
+        """
+        from collections import Counter
+
+        difficulty_counts = Counter(s['difficulty'] for s in self.valid_samples)
+        # Ensure all 10 levels are represented (even if 0)
+        distribution = {i: difficulty_counts.get(i, 0) for i in range(1, 11)}
+
+        return {
+            'difficulty_distribution': distribution,
+            'total_samples': len(self.valid_samples),
+            'chart_files': self.chart_files
+        }
+
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         """
         Load and return a single training-ready sample.

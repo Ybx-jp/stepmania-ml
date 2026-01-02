@@ -26,8 +26,8 @@ classifier:
   classifier_dropout: 0.2
 
   # Backbone temporal reasoning
-  backbone_blocks: 3
-  backbone_dropout: 0.1
+  backbone_blocks: 4
+  backbone_dropout: 0.4
 
   # Architecture options
   fusion_type: "late"  # late
@@ -69,9 +69,12 @@ training:
 
   batch_size: 32
   learning_rate: 0.001
-  num_epochs: 10
+  num_epochs: 15
   early_stopping_patience: 5
   gradient_clip_norm: 1.0
+
+  # Class weighting for imbalanced data
+  use_class_weights: true  # Compute inverse-frequency weights from training data
 
   # Optimizer
   optimizer: "adamw"

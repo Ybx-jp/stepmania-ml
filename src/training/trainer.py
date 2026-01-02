@@ -56,8 +56,15 @@ class Trainer:
         # Create checkpoint directory
         os.makedirs(checkpoint_dir, exist_ok=True)
 
+        # Compute class weights if enabled (before creating criterion)
+        class_weights = None
+        if config.get('use_class_weights', False):
+            class_weights = self._compute_class_weights()
+            if class_weights is not None:
+                print(f"Using class weights: {class_weights.tolist()}")
+
         # Loss function - CrossEntropy for 0-9 indexed classes
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
 
         # Scheduler - ReduceLROnPlateau monitoring val_loss
         self.scheduler = ReduceLROnPlateau(
@@ -80,6 +87,68 @@ class Trainer:
         self.val_confusion = MulticlassConfusionMatrix(
             num_classes=10
         ).to(self.device)
+
+        # Collect data info from datasets for checkpoint logging
+        self.data_info = self._collect_data_info()
+
+    def _collect_data_info(self) -> Dict:
+        """Collect data info from train/val datasets for checkpoint logging."""
+        data_info = {}
+
+        # Get info from train dataset if available
+        if hasattr(self.train_loader.dataset, 'get_data_info'):
+            train_info = self.train_loader.dataset.get_data_info()
+            data_info['train'] = {
+                'difficulty_distribution': train_info['difficulty_distribution'],
+                'total_samples': train_info['total_samples']
+            }
+
+        # Get info from val dataset if available
+        if hasattr(self.val_loader.dataset, 'get_data_info'):
+            val_info = self.val_loader.dataset.get_data_info()
+            data_info['val'] = {
+                'difficulty_distribution': val_info['difficulty_distribution'],
+                'total_samples': val_info['total_samples']
+            }
+
+        return data_info
+
+    def _compute_class_weights(self) -> Optional[torch.Tensor]:
+        """
+        Compute inverse-frequency class weights from training data distribution.
+
+        Uses the formula: weight[c] = total_samples / (num_classes * class_count[c])
+        This gives higher weight to underrepresented classes.
+
+        Returns:
+            Tensor of shape (num_classes,) with class weights, or None if data unavailable
+        """
+        if not hasattr(self.train_loader.dataset, 'get_data_info'):
+            print("Warning: Dataset doesn't support get_data_info, skipping class weights")
+            return None
+
+        data_info = self.train_loader.dataset.get_data_info()
+        distribution = data_info.get('difficulty_distribution', {})
+        total_samples = data_info.get('total_samples', 0)
+
+        if total_samples == 0:
+            return None
+
+        num_classes = 10  # Difficulty levels 1-10 (indexed 0-9)
+        weights = []
+
+        for class_idx in range(num_classes):
+            # Distribution uses 1-10 keys, but we need 0-9 indices
+            count = distribution.get(class_idx + 1, 0)
+            if count > 0:
+                # Inverse frequency weighting
+                weight = total_samples / (num_classes * count)
+            else:
+                # For classes with no samples, use a reasonable default
+                weight = 1.0
+            weights.append(weight)
+
+        return torch.tensor(weights, dtype=torch.float32).to(self.device)
 
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch."""
@@ -233,7 +302,8 @@ class Trainer:
             'scheduler_state_dict': self.scheduler.state_dict(),
             'best_val_loss': self.best_val_loss,
             'metrics': metrics,
-            'history': self.history
+            'history': self.history,
+            'data_info': self.data_info
         }
 
         path = os.path.join(self.checkpoint_dir, 'best_val_loss.pt')
@@ -248,7 +318,8 @@ class Trainer:
             'scheduler_state_dict': self.scheduler.state_dict(),
             'best_val_loss': self.best_val_loss,
             'metrics': metrics,
-            'history': history
+            'history': history,
+            'data_info': self.data_info
         }
 
         path = os.path.join(self.checkpoint_dir, 'last.pt')
