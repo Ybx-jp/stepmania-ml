@@ -32,6 +32,8 @@ classifier:
   # Architecture options
   fusion_type: "late"  # late
   pooling_type: "mean_max"  # attention, mean_max
+  head_type: "ordinal"  # classification, ordinal (ordinal reduces off-by-1 errors)
+  classifier_hidden_dim: 64 # Add hidden layer before ordinal projection
 
   # Chart statistics features for difficulty prediction
   use_chart_stats: true
@@ -74,7 +76,8 @@ training:
   pin_memory: false  # Set true only when using CUDA
 
   batch_size: 32
-  learning_rate: 0.001
+  learning_rate: 0.0001
+  num_classes: 10
   num_epochs: 15
   early_stopping_patience: 5
   gradient_clip_norm: 1.0

@@ -16,7 +16,7 @@ from .components.encoders import AudioEncoder, ChartEncoder
 from .components.fusion import LateFusionModule
 from .components.backbone import Conv1DBackbone
 from .components.pooling import MaskedAttentionPool, MaskedMeanMaxPool
-from .components.heads import ClassificationHead, RegressionHead
+from .components.heads import ClassificationHead, RegressionHead, OrdinalRegressionHead
 
 
 class LateFusionClassifier(nn.Module):
@@ -130,13 +130,24 @@ class LateFusionClassifier(nn.Module):
             )
             pooled_dim += stats_hidden  # Expand classifier input dim
 
-        # Classification head
-        self.classifier_head = ClassificationHead(
-            input_dim=pooled_dim,
-            num_classes=config['num_classes'],
-            hidden_dim=config.get('classifier_hidden_dim', None),
-            dropout=config['classifier_dropout']
-        )
+        # Classification/regression head (swappable)
+        self.head_type = config.get('head_type', 'classification')
+        if self.head_type == 'classification':
+            self.classifier_head = ClassificationHead(
+                input_dim=pooled_dim,
+                num_classes=config['num_classes'],
+                hidden_dim=config.get('classifier_hidden_dim', None),
+                dropout=config['classifier_dropout']
+            )
+        elif self.head_type == 'ordinal':
+            self.classifier_head = OrdinalRegressionHead(
+                input_dim=pooled_dim,
+                num_classes=config['num_classes'],
+                hidden_dim=config.get('classifier_hidden_dim', None),
+                dropout=config['classifier_dropout']
+            )
+        else:
+            raise ValueError(f"Unknown head_type: {self.head_type}")
 
     def forward(self,
                 audio: torch.Tensor,
@@ -175,10 +186,27 @@ class LateFusionClassifier(nn.Module):
             stats_features = self.stats_mlp(chart_stats)  # (B, stats_hidden)
             pooled_features = torch.cat([pooled_features, stats_features], dim=-1)
 
-        # Final classification
-        logits = self.classifier_head(pooled_features)       # (B, num_classes)
+        # Final classification/ordinal regression
+        logits = self.classifier_head(pooled_features)
+        # Note: For 'classification' head: (B, num_classes) class logits
+        #       For 'ordinal' head: (B, num_classes-1) cumulative logits
 
         return logits
+
+    def predict_class_from_logits(self, logits: torch.Tensor) -> torch.Tensor:
+        """
+        Get class predictions from forward() output.
+
+        Args:
+            logits: Output from forward()
+
+        Returns:
+            Predicted class indices (B,) with values 0..num_classes-1
+        """
+        if self.head_type == 'ordinal':
+            return OrdinalRegressionHead.logits_to_class(logits)
+        else:
+            return logits.argmax(dim=1)
 
     def get_feature_representations(self,
                                     audio: torch.Tensor,
