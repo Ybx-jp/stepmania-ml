@@ -213,10 +213,10 @@ class StepManiaParser:
             print(f"{chart.title} failed bpm change requirement")
             return False
 
-        # Check for valid difficulty charts in target range (1-10)
-        valid_charts = [n for n in chart.note_data if 1 <= n.difficulty_value <= 10]
+        # Check for valid difficulty charts (any dance-single charts with note data)
+        valid_charts = [n for n in chart.note_data if n.difficulty_name]
         if not valid_charts:
-            print(f"{chart.title} failed valid chart requirement")
+            print(f"{chart.title} failed valid chart requirement (no dance-single charts)")
             return False
 
         return True
@@ -388,11 +388,7 @@ class StepManiaParser:
             valid_note_data = []
 
             for note_data in chart.note_data:
-                # Skip difficulties outside Phase 1 range
-                if not (1 <= note_data.difficulty_value <= 10):
-                    continue
-
-                # Convert to tensor
+                # Convert to tensor (difficulty name filtering done in dataset)
                 chart_tensor = self.convert_to_tensor(chart, note_data)
 
                 # Validate quality

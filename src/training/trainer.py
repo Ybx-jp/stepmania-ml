@@ -4,7 +4,7 @@ Basic trainer class for StepMania difficulty classification.
 Implements minimal training loop with:
 - ReduceLROnPlateau scheduler monitoring val_loss
 - Simple checkpointing (best_val_loss.pt and last.pt)
-- CrossEntropy loss for 0-9 indexed difficulty classes
+- CrossEntropy loss for difficulty name classes (0-4: Beginner, Easy, Medium, Hard, Challenge)
 """
 
 import os
@@ -15,8 +15,8 @@ from torchmetrics.classification import MulticlassAccuracy, MulticlassConfusionM
 from typing import Dict, Optional
 from tqdm import tqdm
 
-from src.models.components.heads import OrdinalRegressionHead
-from src.losses.ordinal import encode_ordinal_targets
+# Difficulty name constants for display
+DIFFICULTY_NAMES = ['Beginner', 'Easy', 'Medium', 'Hard', 'Challenge']
 
 
 class Trainer:
@@ -59,24 +59,20 @@ class Trainer:
         # Create checkpoint directory
         os.makedirs(checkpoint_dir, exist_ok=True)
 
-        # Detect head type from model
-        self.head_type = getattr(model, 'head_type', 'classification')
-        self.num_classes = config.get('num_classes')  # Difficulty levels
+        # Classification settings
+        self.num_classes = config.get('num_classes', 5)  # 5 difficulty name classes
+        self.head_type = 'classification'  # Always use classification head
 
         # Compute class weights if enabled (before creating criterion)
         class_weights = None
-        if config.get('use_class_weights', False) and self.head_type == 'classification':
+        if config.get('use_class_weights', False):
             class_weights = self._compute_class_weights()
             if class_weights is not None:
                 print(f"Using class weights: {class_weights.tolist()}")
 
-        # Loss function - depends on head type
-        if self.head_type == 'ordinal':
-            self.criterion = nn.BCEWithLogitsLoss()
-            print("Using ordinal regression with BCEWithLogitsLoss")
-        else:
-            self.criterion = nn.CrossEntropyLoss(weight=class_weights)
-            print("Using classification with CrossEntropyLoss")
+        # Loss function - CrossEntropy for classification
+        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
+        print(f"Using classification with CrossEntropyLoss ({self.num_classes} classes: {DIFFICULTY_NAMES})")
 
         # Scheduler - ReduceLROnPlateau monitoring val_loss
         self.scheduler = ReduceLROnPlateau(
@@ -92,12 +88,12 @@ class Trainer:
 
         # Metrics
         self.val_accuracy = MulticlassAccuracy(
-            num_classes=10,
+            num_classes=self.num_classes,
             average="micro"
         ).to(self.device)
 
         self.val_confusion = MulticlassConfusionMatrix(
-            num_classes=10
+            num_classes=self.num_classes
         ).to(self.device)
 
         # Collect data info from datasets for checkpoint logging
@@ -105,35 +101,39 @@ class Trainer:
         self.chart_stats_summary = self._compute_chart_stats_summary()
 
     def _compute_chart_stats_summary(self) -> Optional[Dict]:
-        """Compute mean chart statistics per difficulty level."""
-        # Check if dataset has chart_stats
-        sample = self.train_loader.dataset[0]
-        if 'chart_stats' not in sample:
+        """Compute mean chart statistics per difficulty class (0-4)."""
+        # Access pre-computed chart_stats from dataset's valid_samples metadata
+        # This avoids calling __getitem__ which would load audio for every sample
+        dataset = self.train_loader.dataset
+        if not hasattr(dataset, 'valid_samples') or len(dataset.valid_samples) == 0:
             return None
 
-        # Collect stats by difficulty
+        # Check if chart_stats are available in metadata
+        if 'chart_stats' not in dataset.valid_samples[0]:
+            return None
+
+        # Collect stats by difficulty class (0-4) from metadata
         from collections import defaultdict
-        stats_by_difficulty = defaultdict(list)
+        stats_by_class = defaultdict(list)
 
-        for i in range(len(self.train_loader.dataset)):
-            sample = self.train_loader.dataset[i]
-            difficulty = sample['difficulty'].item() + 1  # Convert 0-indexed to 1-indexed
-            chart_stats = sample['chart_stats'].numpy()
-            stats_by_difficulty[difficulty].append(chart_stats)
+        for sample_meta in dataset.valid_samples:
+            difficulty_class = sample_meta['difficulty_class']
+            chart_stats = sample_meta['chart_stats']
+            stats_by_class[difficulty_class].append(chart_stats)
 
-        # Compute mean per difficulty
+        # Compute mean per difficulty class
         import numpy as np
         summary = {}
-        for difficulty in range(1, 11):
-            if difficulty in stats_by_difficulty:
-                stats_array = np.array(stats_by_difficulty[difficulty])
-                summary[difficulty] = {
+        for class_idx in range(self.num_classes):
+            if class_idx in stats_by_class:
+                stats_array = np.array(stats_by_class[class_idx])
+                summary[class_idx] = {
                     'mean': stats_array.mean(axis=0).tolist(),
                     'std': stats_array.std(axis=0).tolist(),
                     'count': len(stats_array)
                 }
 
-        print(f"Computed chart_stats_summary for {len(summary)} difficulty levels")
+        print(f"Computed chart_stats_summary for {len(summary)} difficulty classes: {DIFFICULTY_NAMES[:len(summary)]}")
         return summary
 
     def _collect_data_info(self) -> Dict:
@@ -179,65 +179,20 @@ class Trainer:
         if total_samples == 0:
             return None
 
-        num_classes = 10  # Difficulty levels 1-10 (indexed 0-9)
         weights = []
 
-        for class_idx in range(num_classes):
-            # Distribution uses 1-10 keys, but we need 0-9 indices
-            count = distribution.get(class_idx + 1, 0)
+        for class_idx in range(self.num_classes):
+            # Distribution uses 0-indexed class indices
+            count = distribution.get(class_idx, 0)
             if count > 0:
                 # Inverse frequency weighting
-                weight = total_samples / (num_classes * count)
+                weight = total_samples / (self.num_classes * count)
             else:
                 # For classes with no samples, use a reasonable default
                 weight = 1.0
             weights.append(weight)
 
         return torch.tensor(weights, dtype=torch.float32).to(self.device)
-
-    def _log_ordinal_score_stats(self):
-        """Log ordinal score distribution and error metrics for debugging."""
-        self.model.eval()
-        with torch.no_grad():
-            # Sample one batch
-            sample_batch = next(iter(self.train_loader))
-            audio = sample_batch['audio'].to(self.device)
-            chart = sample_batch['chart'].to(self.device)
-            mask = sample_batch['mask'].to(self.device)
-            targets = sample_batch['difficulty'].to(self.device)
-            chart_stats = sample_batch.get('chart_stats')
-            if chart_stats is not None:
-                chart_stats = chart_stats.to(self.device)
-
-            # Get pooled features
-            reps = self.model.get_feature_representations(audio, chart, mask)
-            pooled = reps['pooled_features']
-
-            # Add chart stats if enabled
-            if self.model.use_chart_stats and chart_stats is not None:
-                stats_features = self.model.stats_mlp(chart_stats)
-                pooled = torch.cat([pooled, stats_features], dim=-1)
-
-            # Get score from ordinal head
-            score = self.model.classifier_head.get_score(pooled)
-            thresholds = self.model.classifier_head.thresholds
-
-            # Get predictions
-            logits = self.model.classifier_head(pooled)
-            predictions = self.model.predict_class_from_logits(logits)
-
-            # Compute MAE and off-by-1 rate
-            errors = (predictions - targets).abs().float()
-            mae = errors.mean().item()
-            off_by_1 = (errors <= 1).float().mean().item() * 100  # percentage
-            median_error = errors.median().item()
-
-            print(f"  Ordinal score: mean={score.mean().item():.3f}, std={score.std().item():.3f}, "
-                  f"min={score.min().item():.3f}, max={score.max().item():.3f}")
-            print(f"  Thresholds: [{thresholds[0].item():.2f}, ..., {thresholds[-1].item():.2f}]")
-            print(f"  MAE (classes): {mae:.3f}, Median: {median_error:.3f}, Off-by-1 or better: {off_by_1:.1f}%")
-
-        self.model.train()
 
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch."""
@@ -265,14 +220,8 @@ class Trainer:
             self.optimizer.zero_grad()
             logits = self.model(audio, chart, mask, chart_stats=chart_stats)
 
-            # Compute loss (different for ordinal vs classification)
-            if self.head_type == 'ordinal':
-                ordinal_targets = encode_ordinal_targets(
-                    targets, self.num_classes
-                )
-                loss = self.criterion(logits, ordinal_targets)
-            else:
-                loss = self.criterion(logits, targets)
+            # Compute classification loss
+            loss = self.criterion(logits, targets)
 
             # Backward pass
             loss.backward()
@@ -298,10 +247,6 @@ class Trainer:
                 'loss': f"{loss.item():.4f}",
                 'acc': f"{current_acc:.4f}"
             })
-
-        # Debug: log ordinal score distribution once per epoch
-        if self.head_type == 'ordinal':
-            self._log_ordinal_score_stats()
 
         return {
             'train_loss': total_loss / len(self.train_loader),
@@ -336,14 +281,8 @@ class Trainer:
                 # Forward pass
                 logits = self.model(audio, chart, mask, chart_stats=chart_stats)
 
-                # Compute loss (different for ordinal vs classification)
-                if self.head_type == 'ordinal':
-                    ordinal_targets = encode_ordinal_targets(
-                        targets, self.num_classes
-                    )
-                    loss = self.criterion(logits, ordinal_targets)
-                else:
-                    loss = self.criterion(logits, targets)
+                # Compute classification loss
+                loss = self.criterion(logits, targets)
 
                 # Track metrics
                 total_loss += loss.item()

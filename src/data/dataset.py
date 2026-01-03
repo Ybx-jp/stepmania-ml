@@ -8,6 +8,10 @@ Responsibilities:
 - Apply joint padding/truncation
 - Create attention masks
 - Return consistent tensor format
+
+Classification Target:
+- Difficulty name (Beginner, Easy, Medium, Hard, Challenge) -> 5 classes
+- Numeric difficulty (1-12+) retained as metadata for analysis
 """
 
 import os
@@ -21,8 +25,56 @@ from .stepmania_parser import StepManiaParser
 from .audio_features import AudioFeatureExtractor
 
 
+# Standard StepMania difficulty names -> class indices
+# These are the canonical names; variants are normalized in get_difficulty_class()
+DIFFICULTY_NAMES = ['Beginner', 'Easy', 'Medium', 'Hard', 'Challenge']
+DIFFICULTY_NAME_TO_IDX = {name: idx for idx, name in enumerate(DIFFICULTY_NAMES)}
+
+
+def get_difficulty_class(difficulty_name: str) -> Optional[int]:
+    """
+    Map difficulty name to class index (0-4).
+
+    Handles common StepMania difficulty name variants:
+    - Beginner / Novice -> 0
+    - Easy / Basic / Light -> 1
+    - Medium / Another / Trick / Standard -> 2
+    - Hard / Maniac / Heavy -> 3
+    - Challenge / Expert / Oni / Edit -> 4
+
+    Args:
+        difficulty_name: The difficulty name from the chart file (may have trailing colon)
+
+    Returns:
+        Class index (0-4) or None if name is unrecognized
+    """
+    # Strip whitespace and trailing colon from .sm file format
+    name = difficulty_name.strip().rstrip(':').lower()
+
+    # Beginner variants
+    if name in ('beginner', 'novice'):
+        return 0
+    # Easy variants
+    elif name in ('easy', 'basic', 'light'):
+        return 1
+    # Medium variants
+    elif name in ('medium', 'another', 'trick', 'standard'):
+        return 2
+    # Hard variants
+    elif name in ('hard', 'maniac', 'heavy'):
+        return 3
+    # Challenge variants
+    elif name in ('challenge', 'expert', 'oni', 'smaniac'):
+        return 4
+    # Edit charts are user-created, typically expert-level
+    elif name == 'edit':
+        return 4
+    else:
+        return None
+
+
 class StepManiaDataset(Dataset):
-    """Dataset for StepMania chart difficulty classification"""
+    """Dataset for StepMania chart difficulty classification by difficulty name."""
 
     def __init__(self,
                  chart_files: List[str],
@@ -67,18 +119,25 @@ class StepManiaDataset(Dataset):
 
         Returns:
             Dictionary with:
-            - difficulty_distribution: counts per difficulty level (1-10)
+            - difficulty_distribution: counts per difficulty name class (0-4)
+            - difficulty_names: list of class names ['Beginner', 'Easy', ...]
+            - numeric_difficulty_distribution: counts per numeric difficulty (1-12+)
             - total_samples: total number of valid samples
             - chart_files: list of source chart files
         """
         from collections import Counter
 
-        difficulty_counts = Counter(s['difficulty'] for s in self.valid_samples)
-        # Ensure all 10 levels are represented (even if 0)
-        distribution = {i: difficulty_counts.get(i, 0) for i in range(1, 11)}
+        # Distribution by difficulty name class (0-4)
+        class_counts = Counter(s['difficulty_class'] for s in self.valid_samples)
+        class_distribution = {i: class_counts.get(i, 0) for i in range(5)}
+
+        # Also track numeric difficulty distribution for analysis
+        numeric_counts = Counter(s['difficulty_value'] for s in self.valid_samples)
 
         return {
-            'difficulty_distribution': distribution,
+            'difficulty_distribution': class_distribution,
+            'difficulty_names': DIFFICULTY_NAMES,
+            'numeric_difficulty_distribution': dict(sorted(numeric_counts.items())),
             'total_samples': len(self.valid_samples),
             'chart_files': self.chart_files
         }
@@ -93,7 +152,9 @@ class StepManiaDataset(Dataset):
             - 'audio': (max_seq_len, 13) padded/truncated MFCC features
             - 'mask': (max_seq_len,) attention mask (True = valid, False = padding)
             - 'length': original sequence length before padding
-            - 'difficulty': scalar difficulty value
+            - 'difficulty': scalar difficulty class (0-4 for CrossEntropy)
+            - 'difficulty_value': numeric difficulty for analysis (not used in training)
+            - 'chart_stats': (5,) normalized chart statistics
         """
         sample_meta = self.valid_samples[idx]
 
@@ -110,14 +171,11 @@ class StepManiaDataset(Dataset):
             chart_tensor, audio_tensor
         )
 
-        # Validate difficulty is in expected range
-        difficulty = sample_meta['difficulty']
-        if not (1 <= difficulty <= 10):
-            raise ValueError(f"Invalid difficulty {difficulty} for {sample_meta['chart_file']}")
+        # Get difficulty class (0-4)
+        difficulty_class = sample_meta['difficulty_class']
 
-        # Compute chart statistics for difficulty features
-        song_length_seconds = sample_meta['chart'].song_length_seconds
-        chart_stats = self._compute_chart_stats(chart_tensor, song_length_seconds)
+        # Use pre-computed chart statistics
+        chart_stats = sample_meta['chart_stats']
 
         # Create final sample
         processed_sample = {
@@ -125,7 +183,8 @@ class StepManiaDataset(Dataset):
             'audio': torch.from_numpy(audio_padded).float(),
             'mask': torch.from_numpy(mask).bool(),
             'length': original_length,
-            'difficulty': torch.tensor(difficulty - 1, dtype=torch.long),  # Convert 1-10 to 0-9 for CrossEntropy
+            'difficulty': torch.tensor(difficulty_class, dtype=torch.long),  # 0-4 for CrossEntropy
+            'difficulty_value': torch.tensor(sample_meta['difficulty_value'], dtype=torch.long),  # Numeric for analysis
             'chart_stats': torch.from_numpy(chart_stats).float()  # (5,) difficulty features
         }
 
@@ -138,10 +197,20 @@ class StepManiaDataset(Dataset):
         """
         Parse chart files and create sample index.
         Similar to load_and_correct_labels in the notebook pattern.
+
+        Each sample now has:
+        - difficulty_class: 0-4 index for Beginner/Easy/Medium/Hard/Challenge
+        - difficulty_value: original numeric difficulty (for analysis)
+        - difficulty_name: original difficulty name string
         """
         valid_samples = []
+        skipped_unknown_difficulty = 0
+        num_files = len(self.chart_files)
 
-        for chart_file in self.chart_files:
+        print(f"Parsing {num_files} chart files...")
+        for idx, chart_file in enumerate(self.chart_files):
+            if idx % 50 == 0:
+                print(f"  Parsing file {idx}/{num_files}...", end='\r')
             try:
                 # Parse chart using StepManiaParser
                 result = self.parser.process_chart(chart_file)
@@ -159,23 +228,34 @@ class StepManiaDataset(Dataset):
                 # Create sample metadata for each valid difficulty
                 # note_data and chart_tensors are already filtered by parser.process_chart
                 for note_data, chart_tensor in zip(chart.note_data, chart_tensors):
-                    # Extra safety check for CrossEntropy bounds (1-10 -> 0-9)
-                    if not (1 <= note_data.difficulty_value <= 10):
-                        print(f"Skipping invalid difficulty {note_data.difficulty_value} in {chart_file}")
+                    # Map difficulty name to class index (0-4)
+                    difficulty_class = get_difficulty_class(note_data.difficulty_name)
+                    if difficulty_class is None:
+                        skipped_unknown_difficulty += 1
                         continue
+
+                    # Pre-compute chart stats during metadata creation (avoid slow __getitem__ calls)
+                    chart_stats = self._compute_chart_stats(chart_tensor, chart.song_length_seconds)
+
                     sample = {
                         'chart_file': chart_file,
                         'audio_file': audio_file,
                         'chart': chart,
                         'chart_tensor': chart_tensor,
-                        'difficulty': note_data.difficulty_value,
-                        'difficulty_name': note_data.difficulty_name
+                        'chart_stats': chart_stats,  # Pre-computed
+                        'difficulty_class': difficulty_class,  # 0-4 for training target
+                        'difficulty_value': note_data.difficulty_value,  # numeric (for analysis)
+                        'difficulty_name': note_data.difficulty_name  # original string
                     }
                     valid_samples.append(sample)
 
             except Exception as e:
                 print(f"Error processing {chart_file}: {e}")
                 continue
+
+        print()  # Newline after progress
+        if skipped_unknown_difficulty > 0:
+            print(f"Skipped {skipped_unknown_difficulty} charts with unrecognized difficulty names")
 
         return valid_samples
 
