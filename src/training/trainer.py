@@ -15,8 +15,8 @@ from torchmetrics.classification import MulticlassAccuracy, MulticlassConfusionM
 from typing import Dict, Optional
 from tqdm import tqdm
 
-# Difficulty name constants for display
-DIFFICULTY_NAMES = ['Beginner', 'Easy', 'Medium', 'Hard', 'Challenge']
+# Difficulty name constants for display (Challenge folded into Hard)
+DIFFICULTY_NAMES = ['Beginner', 'Easy', 'Medium', 'Hard']
 
 
 class Trainer:

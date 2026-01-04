@@ -23,7 +23,7 @@ classifier:
 
   # Fusion and classification
   fusion_dim: 256
-  num_classes: 5  # Difficulty names: Beginner, Easy, Medium, Hard, Challenge
+  num_classes: 4  # Difficulty names: Beginner, Easy, Medium, Hard (Challenge folded into Hard)
   classifier_dropout: 0.2
 
   # Backbone temporal reasoning
@@ -38,9 +38,9 @@ classifier:
 
   # Chart statistics features for difficulty prediction
   use_chart_stats: true
-  chart_stats_dim: 5        # Number of statistics features
-  stats_hidden_dim: 8      # MLP hidden dimension
-  stats_dropout: 0.5
+  chart_stats_dim: 8        # Number of statistics features (added crossover, consecutive_jump, gap_variance)
+  stats_hidden_dim: 32      # MLP hidden dimension (increased for better stats contribution)
+  stats_dropout: 0.3
 
 # Diffusion generative model
 diffusion:
@@ -78,7 +78,7 @@ training:
 
   batch_size: 32
   learning_rate: 0.0001
-  num_classes: 5  # Difficulty names: Beginner, Easy, Medium, Hard, Challenge
+  num_classes: 4  # Difficulty names: Beginner, Easy, Medium, Hard (Challenge folded into Hard)
   num_epochs: 15
   early_stopping_patience: 5
   gradient_clip_norm: 1.0
