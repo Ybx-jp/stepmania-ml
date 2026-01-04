@@ -1,37 +1,47 @@
 # Model architecture configuration
 
 # Difficulty classification model
+# Target: 5 difficulty name classes (Beginner, Easy, Medium, Hard, Challenge)
 classifier:
   # Input dimensions
-  audio_features_dim: 13  # MFCC features
+  # Audio features: MFCC (13) + onset_env (1) + onset_rate (1) + tempo (1) + spectral_contrast (7) = 23
+  audio_features_dim: 23
   chart_sequence_dim: 4   # 4-panel arrows
   max_sequence_length: 1440  # 2 minutes at 16th note resolution (120s / 0.125s)
 
   # Audio encoder
   audio_encoder:
-    hidden_dim: 256
-    num_layers: 3
-    dropout: 0.1
+    hidden_dim: 128
+    num_layers: 2
+    dropout: 0.3
 
   # Chart encoder
   chart_encoder:
     embedding_dim: 64
-    hidden_dim: 256
+    hidden_dim: 128
     num_layers: 2
-    dropout: 0.1
+    dropout: 0.3
 
   # Fusion and classification
-  fusion_dim: 512
-  num_classes: 10  # Difficulty levels 1-10
+  fusion_dim: 256
+  num_classes: 4  # Difficulty names: Beginner, Easy, Medium, Hard (Challenge folded into Hard)
   classifier_dropout: 0.2
 
   # Backbone temporal reasoning
-  backbone_blocks: 3
-  backbone_dropout: 0.1
+  backbone_blocks: 4
+  backbone_dropout: 0.4
 
   # Architecture options
   fusion_type: "late"  # late
   pooling_type: "mean_max"  # attention, mean_max
+  head_type: "classification"  # classification (reverted from ordinal)
+  classifier_hidden_dim: 64 # Add hidden layer before classification
+
+  # Chart statistics features for difficulty prediction
+  use_chart_stats: true
+  chart_stats_dim: 8        # Number of statistics features (added crossover, consecutive_jump, gap_variance)
+  stats_hidden_dim: 32      # MLP hidden dimension (increased for better stats contribution)
+  stats_dropout: 0.3
 
 # Diffusion generative model
 diffusion:
@@ -68,10 +78,14 @@ training:
   pin_memory: false  # Set true only when using CUDA
 
   batch_size: 32
-  learning_rate: 0.001
-  num_epochs: 100
-  early_stopping_patience: 10
+  learning_rate: 0.0001
+  num_classes: 4  # Difficulty names: Beginner, Easy, Medium, Hard (Challenge folded into Hard)
+  num_epochs: 15
+  early_stopping_patience: 5
   gradient_clip_norm: 1.0
+
+  # Class weighting for imbalanced data
+  use_class_weights: true  # Compute inverse-frequency weights from training data
 
   # Optimizer
   optimizer: "adamw"
@@ -79,6 +93,6 @@ training:
 
   # Scheduler - ReduceLROnPlateau
   scheduler: "reduce_on_plateau"
-  patience: 5
+  patience: 3
   factor: 0.5
   monitor: "val_loss"

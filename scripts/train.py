@@ -6,6 +6,14 @@ Usage:
     python scripts/train.py --config config/model_config.yaml --data_dir path/to/stepmania/data
 """
 
+import warnings
+import os
+
+# Suppress noisy warnings from audio libraries
+warnings.filterwarnings('ignore', category=UserWarning, module='librosa')
+warnings.filterwarnings('ignore', category=FutureWarning, module='librosa')
+os.environ['AUDIOREAD_LOG_LEVEL'] = 'ERROR'
+
 import argparse
 import yaml
 import torch
@@ -14,6 +22,7 @@ from torch.utils.data import DataLoader
 import glob
 import os
 import sys
+from datetime import datetime
 
 # Add project root to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -21,6 +30,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from src.models import LateFusionClassifier
 from src.utils.data_splits import create_data_splits, create_datasets
 from src.training.trainer import Trainer
+
+
+def generate_checkpoint_subdir(base_dir: str, model_name: str = "classifier") -> str:
+    """
+    Generate timestamped checkpoint subdirectory.
+
+    Args:
+        base_dir: Base checkpoint directory (e.g., "checkpoints")
+        model_name: Model type name (default: "classifier")
+
+    Returns:
+        Full path to timestamped subdirectory (e.g., "checkpoints/classifier_01_02_14-30")
+    """
+    timestamp = datetime.now().strftime("%m_%d_%H-%M")
+    subdir_name = f"{model_name}_{timestamp}"
+    return os.path.join(base_dir, subdir_name)
 
 
 def parse_args():
@@ -34,7 +59,9 @@ def parse_args():
     parser.add_argument('--audio_dir', type=str, required=True,
                        help='Path to audio files directory')
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints',
-                       help='Directory to save checkpoints')
+                       help='Base directory for checkpoints')
+    parser.add_argument('--checkpoint_subdir', type=str, default=None,
+                       help='Specific checkpoint subdirectory name (auto-generated if not provided)')
     parser.add_argument('--resume', type=str, default=None,
                        help='Path to checkpoint to resume from')
     parser.add_argument('--num_workers', type=int, default=4,
@@ -163,6 +190,19 @@ def main():
     device_str = config['training'].get('device', 'cpu')
     device = torch.device(device_str)
 
+    # Determine checkpoint directory
+    if args.checkpoint_subdir:
+        # User explicitly specified subdirectory name
+        checkpoint_dir = os.path.join(args.checkpoint_dir, args.checkpoint_subdir)
+    elif args.resume:
+        # Resuming from checkpoint - use same directory as checkpoint file
+        checkpoint_dir = os.path.dirname(args.resume)
+    else:
+        # New training run - generate timestamped subdirectory
+        checkpoint_dir = generate_checkpoint_subdir(args.checkpoint_dir, model_name="classifier")
+
+    print(f"Checkpoint directory: {checkpoint_dir}")
+
     # Create trainer
     trainer = Trainer(
         model=model,
@@ -170,7 +210,7 @@ def main():
         val_loader=val_loader,
         optimizer=optimizer,
         config=config['training'],
-        checkpoint_dir=args.checkpoint_dir,
+        checkpoint_dir=checkpoint_dir,
         device=device
     )
 
