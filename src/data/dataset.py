@@ -144,12 +144,12 @@ class StepManiaDataset(Dataset):
         Returns:
             Dictionary with:
             - 'chart': (max_seq_len, 4) padded/truncated chart tensor
-            - 'audio': (max_seq_len, 13) padded/truncated MFCC features
+            - 'audio': (max_seq_len, audio_features_dim) padded/truncated audio features
             - 'mask': (max_seq_len,) attention mask (True = valid, False = padding)
             - 'length': original sequence length before padding
             - 'difficulty': scalar difficulty class (0-4 for CrossEntropy)
             - 'difficulty_value': numeric difficulty for analysis (not used in training)
-            - 'chart_stats': (5,) normalized chart statistics
+            - 'chart_stats': (8,) normalized chart statistics
         """
         sample_meta = self.valid_samples[idx]
 
@@ -291,7 +291,7 @@ class StepManiaDataset(Dataset):
 
         # Get aligned tensors
         chart_tensor = sample_meta['chart_tensor']  # (timesteps, 4)
-        audio_tensor = audio_features.get_aligned_features()  # (timesteps, 13)
+        audio_tensor = audio_features.get_aligned_features()  # (timesteps, audio_features_dim)
 
         # Ensure both tensors have same length (they should from alignment)
         assert chart_tensor.shape[0] == audio_tensor.shape[0], \

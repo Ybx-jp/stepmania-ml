@@ -4,7 +4,8 @@
 # Target: 5 difficulty name classes (Beginner, Easy, Medium, Hard, Challenge)
 classifier:
   # Input dimensions
-  audio_features_dim: 13  # MFCC features
+  # Audio features: MFCC (13) + onset_env (1) + onset_rate (1) + tempo (1) + spectral_contrast (7) = 23
+  audio_features_dim: 23
   chart_sequence_dim: 4   # 4-panel arrows
   max_sequence_length: 1440  # 2 minutes at 16th note resolution (120s / 0.125s)
 
