@@ -109,13 +109,29 @@ class AudioFeatureExtractor:
             raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
 
         try:
-            # Load audio with target sample rate
-            audio, sr = librosa.load(
+            # Load full audio first, then slice - more robust than using offset parameter
+            # (offset/seek fails on many MP3 files due to VBR encoding issues)
+            audio_full, sr = librosa.load(
                 audio_file_path,
                 sr=self.config.sample_rate,
-                offset=chart.offset,  # Apply chart offset
-                duration=chart.song_length_seconds
+                offset=0,
+                duration=None
             )
+
+            # Apply offset and duration by slicing
+            start_sample = int(chart.offset * sr) if chart.offset > 0 else 0
+            end_sample = start_sample + int(chart.song_length_seconds * sr)
+
+            # Ensure we don't exceed audio length
+            start_sample = max(0, min(start_sample, len(audio_full)))
+            end_sample = max(start_sample, min(end_sample, len(audio_full)))
+
+            audio = audio_full[start_sample:end_sample]
+
+            # Pad with silence if audio is too short
+            expected_samples = int(chart.song_length_seconds * sr)
+            if len(audio) < expected_samples:
+                audio = np.pad(audio, (0, expected_samples - len(audio)), mode='constant')
 
             # Use chart-aligned hop_length
             aligned_hop_length = chart.hop_length
