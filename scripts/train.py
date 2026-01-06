@@ -104,7 +104,8 @@ def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers
 
     # Create data loaders
     batch_size = config['training']['batch_size']
-    pin_memory = config['training'].get('pin_memory', False)
+    # Auto-detect pin_memory based on CUDA availability
+    pin_memory = torch.cuda.is_available()
 
     train_loader = DataLoader(
         train_dataset,
@@ -186,10 +187,6 @@ def main():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Model parameters: {total_params:,} total, {trainable_params:,} trainable")
 
-    # Get device from config
-    device_str = config['training'].get('device', 'cpu')
-    device = torch.device(device_str)
-
     # Determine checkpoint directory
     if args.checkpoint_subdir:
         # User explicitly specified subdirectory name
@@ -203,15 +200,14 @@ def main():
 
     print(f"Checkpoint directory: {checkpoint_dir}")
 
-    # Create trainer
+    # Create trainer (device will be auto-detected)
     trainer = Trainer(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         optimizer=optimizer,
         config=config['training'],
-        checkpoint_dir=checkpoint_dir,
-        device=device
+        checkpoint_dir=checkpoint_dir
     )
 
     # Resume from checkpoint if specified
