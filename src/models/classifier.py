@@ -130,7 +130,7 @@ class LateFusionClassifier(nn.Module):
             )
             pooled_dim += stats_hidden  # Expand classifier input dim
 
-        # Classification/regression head (swappable)
+        # Classification/regression head for difficulty (swappable)
         self.head_type = config.get('head_type', 'classification')
         if self.head_type == 'classification':
             self.classifier_head = ClassificationHead(
@@ -149,11 +149,19 @@ class LateFusionClassifier(nn.Module):
         else:
             raise ValueError(f"Unknown head_type: {self.head_type}")
 
+        # Source classification head (community vs official) - shares config with difficulty head
+        self.source_head = ClassificationHead(
+            input_dim=pooled_dim,
+            num_classes=2,  # community=0, official=1
+            hidden_dim=config.get('classifier_hidden_dim', None),
+            dropout=config['classifier_dropout']
+        )
+
     def forward(self,
                 audio: torch.Tensor,
                 chart: torch.Tensor,
                 mask: torch.Tensor,
-                chart_stats: Optional[torch.Tensor] = None) -> torch.Tensor:
+                chart_stats: Optional[torch.Tensor] = None) -> Dict[str, torch.Tensor]:
         """
         Forward pass through the complete model.
 
@@ -164,7 +172,9 @@ class LateFusionClassifier(nn.Module):
             chart_stats: Optional chart statistics (B, stats_dim) for difficulty features
 
         Returns:
-            Classification logits (B, num_classes)
+            Dictionary with:
+            - 'difficulty': Difficulty classification logits (B, num_classes)
+            - 'source': Source classification logits (B, 2)
         """
         # Separate encoding for each modality
         audio_encoded = self.audio_encoder(audio, mask)      # (B, L, audio_hidden_dim)
@@ -186,24 +196,39 @@ class LateFusionClassifier(nn.Module):
             stats_features = self.stats_mlp(chart_stats)  # (B, stats_hidden)
             pooled_features = torch.cat([pooled_features, stats_features], dim=-1)
 
-        # Final classification/ordinal regression
-        logits = self.classifier_head(pooled_features)
+        # Difficulty classification/ordinal regression
+        difficulty_logits = self.classifier_head(pooled_features)
         # Note: For 'classification' head: (B, num_classes) class logits
         #       For 'ordinal' head: (B, num_classes-1) cumulative logits
 
-        return logits
+        # Source classification (community vs official)
+        source_logits = self.source_head(pooled_features)  # (B, 2)
 
-    def predict_class_from_logits(self, logits: torch.Tensor) -> torch.Tensor:
+        return {
+            'difficulty': difficulty_logits,
+            'source': source_logits
+        }
+
+    def predict_class_from_logits(self,
+                                   logits: Union[torch.Tensor, Dict[str, torch.Tensor]],
+                                   task: str = 'difficulty') -> torch.Tensor:
         """
         Get class predictions from forward() output.
 
         Args:
-            logits: Output from forward()
+            logits: Output from forward() - either dict with 'difficulty'/'source' keys,
+                    or raw tensor for backward compatibility
+            task: Which task to get predictions for ('difficulty' or 'source')
 
         Returns:
             Predicted class indices (B,) with values 0..num_classes-1
         """
-        if self.head_type == 'ordinal':
+        # Handle dict output from 2-head model
+        if isinstance(logits, dict):
+            logits = logits[task]
+
+        # For difficulty with ordinal head, use special conversion
+        if task == 'difficulty' and self.head_type == 'ordinal':
             return OrdinalRegressionHead.logits_to_class(logits)
         else:
             return logits.argmax(dim=1)

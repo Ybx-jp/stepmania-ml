@@ -16,7 +16,7 @@ Classification Target:
 
 import os
 import pickle
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -29,6 +29,10 @@ from .audio_features import AudioFeatureExtractor
 # Challenge folded into Hard due to rarity in dataset
 DIFFICULTY_NAMES = ['Beginner', 'Easy', 'Medium', 'Hard']
 DIFFICULTY_NAME_TO_IDX = {name: idx for idx, name in enumerate(DIFFICULTY_NAMES)}
+
+# Source labels for 2-head experiment
+SOURCE_NAMES = ['community', 'official']
+SOURCE_NAME_TO_IDX = {name: idx for idx, name in enumerate(SOURCE_NAMES)}
 
 
 def get_difficulty_class(difficulty_name: str) -> Optional[int]:
@@ -108,15 +112,36 @@ class StepManiaDataset(Dataset):
         """Return total number of valid samples"""
         return len(self.valid_samples)
 
+    def _detect_source_from_path(self, chart_file: str) -> Tuple[int, str]:
+        """
+        Detect source (community vs official) from file path.
+
+        Args:
+            chart_file: Path to the chart file
+
+        Returns:
+            Tuple of (source_label, source_name) where:
+            - source_label: 0 for community, 1 for official
+            - source_name: 'community' or 'official'
+        """
+        # Normalize path separators for cross-platform compatibility
+        normalized_path = chart_file.replace('\\', '/')
+
+        if '/community/' in normalized_path:
+            return 0, 'community'
+        return 1, 'official'
+
     def get_data_info(self) -> Dict:
         """
         Get metadata about the dataset for logging/checkpointing.
 
         Returns:
             Dictionary with:
-            - difficulty_distribution: counts per difficulty name class (0-4)
+            - difficulty_distribution: counts per difficulty name class (0-3)
             - difficulty_names: list of class names ['Beginner', 'Easy', ...]
             - numeric_difficulty_distribution: counts per numeric difficulty (1-12+)
+            - source_distribution: counts per source (0=community, 1=official)
+            - source_names: list of source names ['community', 'official']
             - total_samples: total number of valid samples
             - chart_files: list of source chart files
         """
@@ -129,10 +154,16 @@ class StepManiaDataset(Dataset):
         # Also track numeric difficulty distribution for analysis
         numeric_counts = Counter(s['difficulty_value'] for s in self.valid_samples)
 
+        # Source distribution for 2-head experiment
+        source_counts = Counter(s['source_label'] for s in self.valid_samples)
+        source_distribution = {i: source_counts.get(i, 0) for i in range(2)}
+
         return {
             'difficulty_distribution': class_distribution,
             'difficulty_names': DIFFICULTY_NAMES,
             'numeric_difficulty_distribution': dict(sorted(numeric_counts.items())),
+            'source_distribution': source_distribution,
+            'source_names': SOURCE_NAMES,
             'total_samples': len(self.valid_samples),
             'chart_files': self.chart_files
         }
@@ -147,8 +178,9 @@ class StepManiaDataset(Dataset):
             - 'audio': (max_seq_len, audio_features_dim) padded/truncated audio features
             - 'mask': (max_seq_len,) attention mask (True = valid, False = padding)
             - 'length': original sequence length before padding
-            - 'difficulty': scalar difficulty class (0-4 for CrossEntropy)
+            - 'difficulty': scalar difficulty class (0-3 for CrossEntropy)
             - 'difficulty_value': numeric difficulty for analysis (not used in training)
+            - 'source': scalar source class (0=community, 1=official for CrossEntropy)
             - 'chart_stats': (8,) normalized chart statistics
         """
         sample_meta = self.valid_samples[idx]
@@ -172,15 +204,19 @@ class StepManiaDataset(Dataset):
         # Use pre-computed chart statistics
         chart_stats = sample_meta['chart_stats']
 
+        # Get source label
+        source_label = sample_meta['source_label']
+
         # Create final sample
         processed_sample = {
             'chart': torch.from_numpy(chart_padded).float(),
             'audio': torch.from_numpy(audio_padded).float(),
             'mask': torch.from_numpy(mask).bool(),
             'length': original_length,
-            'difficulty': torch.tensor(difficulty_class, dtype=torch.long),  # 0-4 for CrossEntropy
+            'difficulty': torch.tensor(difficulty_class, dtype=torch.long),  # 0-3 for CrossEntropy
             'difficulty_value': torch.tensor(sample_meta['difficulty_value'], dtype=torch.long),  # Numeric for analysis
-            'chart_stats': torch.from_numpy(chart_stats).float()  # (5,) difficulty features
+            'source': torch.tensor(source_label, dtype=torch.long),  # 0=community, 1=official for CrossEntropy
+            'chart_stats': torch.from_numpy(chart_stats).float()  # (8,) difficulty features
         }
 
         # Cache processed sample (stub for now)
@@ -220,10 +256,13 @@ class StepManiaDataset(Dataset):
                     print(f"Audio file not found for {chart_file}")
                     continue
 
+                # Detect source from path (community vs official)
+                source_label, source_name = self._detect_source_from_path(chart_file)
+
                 # Create sample metadata for each valid difficulty
                 # note_data and chart_tensors are already filtered by parser.process_chart
                 for note_data, chart_tensor in zip(chart.note_data, chart_tensors):
-                    # Map difficulty name to class index (0-4)
+                    # Map difficulty name to class index (0-3)
                     difficulty_class = get_difficulty_class(note_data.difficulty_name)
                     if difficulty_class is None:
                         skipped_unknown_difficulty += 1
@@ -238,9 +277,11 @@ class StepManiaDataset(Dataset):
                         'chart': chart,
                         'chart_tensor': chart_tensor,
                         'chart_stats': chart_stats,  # Pre-computed
-                        'difficulty_class': difficulty_class,  # 0-4 for training target
+                        'difficulty_class': difficulty_class,  # 0-3 for training target
                         'difficulty_value': note_data.difficulty_value,  # numeric (for analysis)
-                        'difficulty_name': note_data.difficulty_name  # original string
+                        'difficulty_name': note_data.difficulty_name,  # original string
+                        'source_label': source_label,  # 0=community, 1=official
+                        'source_name': source_name  # 'community' or 'official'
                     }
                     valid_samples.append(sample)
 
