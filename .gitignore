@@ -39,8 +39,7 @@ venv.bak/
 .vscode/
 
 # Data files
-data/raw/*
-data/processed/*
+data/community/*
 data/external/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
@@ -51,6 +50,7 @@ models/classifier/*
 models/diffusion/*
 !models/classifier/.gitkeep
 !models/diffusion/.gitkeep
+checkpoints/
 
 # Outputs
 outputs/charts/*
@@ -79,3 +79,4 @@ Thumbs.db
 # Dev Notes Scratchpad
 conversation.md
 feedback.md
+out.txt
