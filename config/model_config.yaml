@@ -81,7 +81,10 @@ training:
   gradient_clip_norm: 1.0
 
   # Class weighting for imbalanced data
-  use_class_weights: true  # Compute inverse-frequency weights from training data
+  use_class_weights: true  # Compute inverse-frequency weights for both difficulty and source
+
+  # 2-head experiment: source prediction (community vs official)
+  source_loss_weight: 1.0  # Lambda in: L = L_difficulty + lambda * L_source
 
   # Optimizer
   optimizer: "adamw"

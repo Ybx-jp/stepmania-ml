@@ -17,6 +17,7 @@ from tqdm import tqdm
 
 # Difficulty name constants for display (Challenge folded into Hard)
 DIFFICULTY_NAMES = ['Beginner', 'Easy', 'Medium', 'Hard']
+SOURCE_NAMES = ['community', 'official']
 
 
 class Trainer:
@@ -60,19 +61,30 @@ class Trainer:
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         # Classification settings
-        self.num_classes = config.get('num_classes', 5)  # 5 difficulty name classes
+        self.num_classes = config.get('num_classes', 4)  # 4 difficulty name classes
+        self.num_source_classes = 2  # community vs official
         self.head_type = 'classification'  # Always use classification head
 
         # Compute class weights if enabled (before creating criterion)
-        class_weights = None
+        difficulty_weights = None
+        source_weights = None
         if config.get('use_class_weights', False):
-            class_weights = self._compute_class_weights()
-            if class_weights is not None:
-                print(f"Using class weights: {class_weights.tolist()}")
+            difficulty_weights = self._compute_class_weights('difficulty')
+            source_weights = self._compute_class_weights('source')
+            if difficulty_weights is not None:
+                print(f"Using difficulty class weights: {difficulty_weights.tolist()}")
+            if source_weights is not None:
+                print(f"Using source class weights: {source_weights.tolist()}")
 
-        # Loss function - CrossEntropy for classification
-        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
-        print(f"Using classification with CrossEntropyLoss ({self.num_classes} classes: {DIFFICULTY_NAMES})")
+        # Loss functions - CrossEntropy for both classification tasks
+        self.difficulty_criterion = nn.CrossEntropyLoss(weight=difficulty_weights)
+        self.source_criterion = nn.CrossEntropyLoss(weight=source_weights)
+        self.source_loss_weight = config.get('source_loss_weight', 1.0)
+
+        print(f"Using 2-head classification:")
+        print(f"  Difficulty: CrossEntropyLoss ({self.num_classes} classes: {DIFFICULTY_NAMES})")
+        print(f"  Source: CrossEntropyLoss ({self.num_source_classes} classes: {SOURCE_NAMES})")
+        print(f"  Loss = L_difficulty + {self.source_loss_weight} * L_source")
 
         # Scheduler - ReduceLROnPlateau monitoring val_loss
         self.scheduler = ReduceLROnPlateau(
@@ -84,7 +96,12 @@ class Trainer:
         # Checkpointing
         self.best_val_loss = float('inf')
         self.current_epoch = 0
-        self.history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+        self.history = {
+            'train_loss': [], 'train_loss_difficulty': [], 'train_loss_source': [],
+            'train_acc_difficulty': [], 'train_acc_source': [],
+            'val_loss': [], 'val_loss_difficulty': [], 'val_loss_source': [],
+            'val_acc_difficulty': [], 'val_acc_source': []
+        }
 
         # Metrics
         self.val_accuracy = MulticlassAccuracy(
@@ -158,35 +175,48 @@ class Trainer:
 
         return data_info
 
-    def _compute_class_weights(self) -> Optional[torch.Tensor]:
+    def _compute_class_weights(self, task: str = 'difficulty') -> Optional[torch.Tensor]:
         """
         Compute inverse-frequency class weights from training data distribution.
 
         Uses the formula: weight[c] = total_samples / (num_classes * class_count[c])
         This gives higher weight to underrepresented classes.
 
+        Args:
+            task: Which task to compute weights for ('difficulty' or 'source')
+
         Returns:
             Tensor of shape (num_classes,) with class weights, or None if data unavailable
         """
         if not hasattr(self.train_loader.dataset, 'get_data_info'):
-            print("Warning: Dataset doesn't support get_data_info, skipping class weights")
+            print(f"Warning: Dataset doesn't support get_data_info, skipping {task} class weights")
             return None
 
         data_info = self.train_loader.dataset.get_data_info()
-        distribution = data_info.get('difficulty_distribution', {})
         total_samples = data_info.get('total_samples', 0)
 
         if total_samples == 0:
             return None
 
+        # Get distribution and num_classes based on task
+        if task == 'difficulty':
+            distribution = data_info.get('difficulty_distribution', {})
+            num_classes = self.num_classes
+        elif task == 'source':
+            distribution = data_info.get('source_distribution', {})
+            num_classes = self.num_source_classes
+        else:
+            print(f"Warning: Unknown task '{task}', skipping class weights")
+            return None
+
         weights = []
 
-        for class_idx in range(self.num_classes):
+        for class_idx in range(num_classes):
             # Distribution uses 0-indexed class indices
             count = distribution.get(class_idx, 0)
             if count > 0:
                 # Inverse frequency weighting
-                weight = total_samples / (self.num_classes * count)
+                weight = total_samples / (num_classes * count)
             else:
                 # For classes with no samples, use a reasonable default
                 weight = 1.0
@@ -195,33 +225,39 @@ class Trainer:
         return torch.tensor(weights, dtype=torch.float32).to(self.device)
 
     def train_epoch(self) -> Dict[str, float]:
-        """Train for one epoch."""
+        """Train for one epoch with dual-head loss."""
         self.model.train()
 
         total_loss = 0.0
-        correct = 0
+        total_loss_difficulty = 0.0
+        total_loss_source = 0.0
+        correct_difficulty = 0
+        correct_source = 0
         total = 0
 
         progress_bar = tqdm(self.train_loader, desc=f"Train Epoch {self.current_epoch}")
 
         for batch in progress_bar:
             # Extract batch data and move to device
-            audio = batch['audio'].to(self.device)  # (B, L, 13)
+            audio = batch['audio'].to(self.device)  # (B, L, 23)
             chart = batch['chart'].to(self.device)  # (B, L, 4)
             mask = batch['mask'].to(self.device)    # (B, L)
-            targets = batch['difficulty'].to(self.device)  # (B,) with values 0-9
+            targets_difficulty = batch['difficulty'].to(self.device)  # (B,) with values 0-3
+            targets_source = batch['source'].to(self.device)  # (B,) with values 0-1
 
             # Extract chart_stats if available
             chart_stats = batch.get('chart_stats', None)
             if chart_stats is not None:
                 chart_stats = chart_stats.to(self.device)
 
-            # Forward pass
+            # Forward pass - returns dict with 'difficulty' and 'source' logits
             self.optimizer.zero_grad()
-            logits = self.model(audio, chart, mask, chart_stats=chart_stats)
+            outputs = self.model(audio, chart, mask, chart_stats=chart_stats)
 
-            # Compute classification loss
-            loss = self.criterion(logits, targets)
+            # Compute dual loss: L = L_difficulty + lambda * L_source
+            loss_difficulty = self.difficulty_criterion(outputs['difficulty'], targets_difficulty)
+            loss_source = self.source_criterion(outputs['source'], targets_source)
+            loss = loss_difficulty + self.source_loss_weight * loss_source
 
             # Backward pass
             loss.backward()
@@ -235,32 +271,47 @@ class Trainer:
 
             self.optimizer.step()
 
-            # Track metrics
+            # Track metrics for both tasks
             total_loss += loss.item()
-            predictions = self.model.predict_class_from_logits(logits)
-            correct += (predictions == targets).sum().item()
-            total += targets.size(0)
+            total_loss_difficulty += loss_difficulty.item()
+            total_loss_source += loss_source.item()
+
+            preds_difficulty = self.model.predict_class_from_logits(outputs, task='difficulty')
+            preds_source = self.model.predict_class_from_logits(outputs, task='source')
+
+            correct_difficulty += (preds_difficulty == targets_difficulty).sum().item()
+            correct_source += (preds_source == targets_source).sum().item()
+            total += targets_difficulty.size(0)
 
             # Update progress bar
-            current_acc = correct / total
+            acc_diff = correct_difficulty / total
+            acc_src = correct_source / total
             progress_bar.set_postfix({
                 'loss': f"{loss.item():.4f}",
-                'acc': f"{current_acc:.4f}"
+                'diff_acc': f"{acc_diff:.4f}",
+                'src_acc': f"{acc_src:.4f}"
             })
 
+        num_batches = len(self.train_loader)
         return {
-            'train_loss': total_loss / len(self.train_loader),
-            'train_acc': correct / total
+            'train_loss': total_loss / num_batches,
+            'train_loss_difficulty': total_loss_difficulty / num_batches,
+            'train_loss_source': total_loss_source / num_batches,
+            'train_acc_difficulty': correct_difficulty / total,
+            'train_acc_source': correct_source / total
         }
 
     def validate_epoch(self) -> Dict[str, float]:
-        """Validate for one epoch."""
+        """Validate for one epoch with dual-head loss."""
         self.model.eval()
         self.val_accuracy.reset()
         self.val_confusion.reset()
 
         total_loss = 0.0
-        correct = 0
+        total_loss_difficulty = 0.0
+        total_loss_source = 0.0
+        correct_difficulty = 0
+        correct_source = 0
         total = 0
 
         with torch.no_grad():
@@ -271,45 +322,59 @@ class Trainer:
                 audio = batch['audio'].to(self.device)
                 chart = batch['chart'].to(self.device)
                 mask = batch['mask'].to(self.device)
-                targets = batch['difficulty'].to(self.device)  # 0-9 indexed
+                targets_difficulty = batch['difficulty'].to(self.device)  # 0-3 indexed
+                targets_source = batch['source'].to(self.device)  # 0-1 indexed
 
                 # Extract chart_stats if available
                 chart_stats = batch.get('chart_stats', None)
                 if chart_stats is not None:
                     chart_stats = chart_stats.to(self.device)
 
-                # Forward pass
-                logits = self.model(audio, chart, mask, chart_stats=chart_stats)
+                # Forward pass - returns dict with 'difficulty' and 'source' logits
+                outputs = self.model(audio, chart, mask, chart_stats=chart_stats)
 
-                # Compute classification loss
-                loss = self.criterion(logits, targets)
+                # Compute dual loss: L = L_difficulty + lambda * L_source
+                loss_difficulty = self.difficulty_criterion(outputs['difficulty'], targets_difficulty)
+                loss_source = self.source_criterion(outputs['source'], targets_source)
+                loss = loss_difficulty + self.source_loss_weight * loss_source
 
-                # Track metrics
+                # Track metrics for both tasks
                 total_loss += loss.item()
-                predictions = self.model.predict_class_from_logits(logits)
-                correct += (predictions == targets).sum().item()
-                total += targets.size(0)
+                total_loss_difficulty += loss_difficulty.item()
+                total_loss_source += loss_source.item()
+
+                preds_difficulty = self.model.predict_class_from_logits(outputs, task='difficulty')
+                preds_source = self.model.predict_class_from_logits(outputs, task='source')
+
+                correct_difficulty += (preds_difficulty == targets_difficulty).sum().item()
+                correct_source += (preds_source == targets_source).sum().item()
+                total += targets_difficulty.size(0)
 
                 # Update progress bar
-                current_acc = correct / total
+                acc_diff = correct_difficulty / total
+                acc_src = correct_source / total
                 progress_bar.set_postfix({
                     'loss': f"{loss.item():.4f}",
-                    'acc': f"{current_acc:.4f}"
+                    'diff_acc': f"{acc_diff:.4f}",
+                    'src_acc': f"{acc_src:.4f}"
                 })
 
-                self.val_accuracy.update(predictions, targets)
-                self.val_confusion.update(predictions, targets)
+                # Update metrics (for difficulty only, to maintain confusion matrix)
+                self.val_accuracy.update(preds_difficulty, targets_difficulty)
+                self.val_confusion.update(preds_difficulty, targets_difficulty)
 
-            avg_loss = total_loss / len(self.val_loader)
-
+        num_batches = len(self.val_loader)
         return {
-            'val_loss': avg_loss,
-            'val_acc': self.val_accuracy.compute().item(),
-            "confusion_matrix": self.val_confusion.compute().cpu()
+            'val_loss': total_loss / num_batches,
+            'val_loss_difficulty': total_loss_difficulty / num_batches,
+            'val_loss_source': total_loss_source / num_batches,
+            'val_acc_difficulty': correct_difficulty / total,
+            'val_acc_source': correct_source / total,
+            'confusion_matrix': self.val_confusion.compute().cpu()
         }
 
     def fit(self) -> Dict[str, list]:
-        """Main training loop."""
+        """Main training loop with dual-head tracking."""
         num_epochs = self.config.get('num_epochs', 100)
         start_epoch = self.current_epoch  # 0 for fresh start, or loaded epoch for resume
 
@@ -325,22 +390,30 @@ class Trainer:
             # Validation epoch
             val_metrics = self.validate_epoch()
 
-            # Update history
+            # Update history for both tasks
             self.history['train_loss'].append(train_metrics['train_loss'])
-            self.history['train_acc'].append(train_metrics['train_acc'])
+            self.history['train_loss_difficulty'].append(train_metrics['train_loss_difficulty'])
+            self.history['train_loss_source'].append(train_metrics['train_loss_source'])
+            self.history['train_acc_difficulty'].append(train_metrics['train_acc_difficulty'])
+            self.history['train_acc_source'].append(train_metrics['train_acc_source'])
             self.history['val_loss'].append(val_metrics['val_loss'])
-            self.history['val_acc'].append(val_metrics['val_acc'])
+            self.history['val_loss_difficulty'].append(val_metrics['val_loss_difficulty'])
+            self.history['val_loss_source'].append(val_metrics['val_loss_source'])
+            self.history['val_acc_difficulty'].append(val_metrics['val_acc_difficulty'])
+            self.history['val_acc_source'].append(val_metrics['val_acc_source'])
 
             # Print epoch summary
             print(f"Epoch {self.current_epoch}:")
-            print(f"  Train Loss: {train_metrics['train_loss']:.4f}, Train Acc: {train_metrics['train_acc']:.4f}")
-            print(f"  Val Loss: {val_metrics['val_loss']:.4f}, Val Acc: {val_metrics['val_acc']:.4f}")
+            print(f"  Train - Loss: {train_metrics['train_loss']:.4f} (diff: {train_metrics['train_loss_difficulty']:.4f}, src: {train_metrics['train_loss_source']:.4f})")
+            print(f"        - Acc:  diff={train_metrics['train_acc_difficulty']:.4f}, src={train_metrics['train_acc_source']:.4f}")
+            print(f"  Val   - Loss: {val_metrics['val_loss']:.4f} (diff: {val_metrics['val_loss_difficulty']:.4f}, src: {val_metrics['val_loss_source']:.4f})")
+            print(f"        - Acc:  diff={val_metrics['val_acc_difficulty']:.4f}, src={val_metrics['val_acc_source']:.4f}")
             print(f"  LR: {self.optimizer.param_groups[0]['lr']:.6f}")
 
-            # Update scheduler
+            # Update scheduler (still monitors total val_loss)
             self.scheduler.step(val_metrics['val_loss'])
 
-            # Save best model
+            # Save best model (based on total val_loss)
             if val_metrics['val_loss'] < self.best_val_loss:
                 self.best_val_loss = val_metrics['val_loss']
                 self.save_best_checkpoint(val_metrics)
