@@ -463,7 +463,15 @@ class Trainer:
         """Load checkpoint and resume training."""
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
 
-        self.model.load_state_dict(checkpoint['model_state_dict'])
+        # Load model state with strict=False to handle architecture changes (e.g., adding source_head)
+        missing_keys, unexpected_keys = self.model.load_state_dict(
+            checkpoint['model_state_dict'], strict=False
+        )
+        if missing_keys:
+            print(f"Warning: Missing keys in checkpoint (will be randomly initialized): {missing_keys}")
+        if unexpected_keys:
+            print(f"Warning: Unexpected keys in checkpoint (will be ignored): {unexpected_keys}")
+
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         self.best_val_loss = checkpoint['best_val_loss']
@@ -472,6 +480,12 @@ class Trainer:
         # Restore training history if available
         if 'history' in checkpoint and checkpoint['history'] is not None:
             self.history = checkpoint['history']
+            # Ensure history has all required keys for 2-head training
+            for key in ['train_loss_difficulty', 'train_loss_source', 'train_acc_difficulty',
+                        'train_acc_source', 'val_loss_difficulty', 'val_loss_source',
+                        'val_acc_difficulty', 'val_acc_source']:
+                if key not in self.history:
+                    self.history[key] = []
             print(f"Restored history with {len(self.history['train_loss'])} epochs")
 
         print(f"Loaded checkpoint from epoch {self.current_epoch}")

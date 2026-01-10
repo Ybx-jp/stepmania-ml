@@ -73,7 +73,7 @@ diffusion:
 
 # Training hyperparameters (default values)
 training:
-  batch_size: 32
+  batch_size: 128
   learning_rate: 0.0001
   num_classes: 4  # Difficulty names: Beginner, Easy, Medium, Hard (Challenge folded into Hard)
   num_epochs: 15
