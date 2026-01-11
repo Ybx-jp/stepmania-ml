@@ -37,11 +37,15 @@ classifier:
   head_type: "classification"  # classification (reverted from ordinal)
   classifier_hidden_dim: 64 # Add hidden layer before classification
 
-  # Chart statistics features for difficulty prediction
-  use_chart_stats: true
-  chart_stats_dim: 8        # Number of statistics features (added crossover, consecutive_jump, gap_variance)
-  stats_hidden_dim: 32      # MLP hidden dimension (increased for better stats contribution)
-  stats_dropout: 0.3
+  # Groove radar features for difficulty prediction and contrastive learning
+  # Replaces chart_stats with DDR-style groove radar values
+  use_groove_radar: true
+  radar_hidden_dim: 32      # MLP hidden dimension for groove radar branch
+  radar_dropout: 0.3
+
+  # Projection head for contrastive learning (optional)
+  use_projection_head: false  # Enable for contrastive training
+  projection_dim: 128         # Embedding dimension for contrastive loss
 
 # Diffusion generative model
 diffusion:
@@ -92,3 +96,34 @@ training:
   patience: 3
   factor: 0.5
   monitor: "val_loss"
+
+# Contrastive learning settings
+contrastive:
+  enabled: false  # Set to true to enable contrastive training
+
+  # Loss type: 'triplet_radar' (with adaptive margins) or 'triplet' or 'infonce'
+  contrastive_loss: 'triplet_radar'
+
+  # Triplet loss settings
+  triplet_margin: 1.0       # Base margin for triplet loss
+  margin_scale: 0.5         # Scale factor for groove radar-based adaptive margins
+
+  # InfoNCE settings (if using infonce loss)
+  infonce_temperature: 0.07
+
+  # Multi-task loss weights
+  classification_weight: 1.0  # Weight for classification loss
+  contrastive_weight: 0.5     # Weight for contrastive loss
+
+  # Triplet selection settings
+  positive_percentile: 20.0   # Top 20% most similar are "positive"
+  negative_percentile: 80.0   # Top 20% most dissimilar are "negative"
+  same_difficulty_only: false # If true, only match within same difficulty class
+
+  # Groove radar weights for similarity (optional)
+  # [stream, voltage, air, freeze, chaos] - equal by default
+  radar_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
+
+  # Dataset settings
+  precompute_triplets: true   # Precompute triplet indices at startup
+  resample_epoch: true        # Resample triplets each epoch for variety
