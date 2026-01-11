@@ -77,7 +77,7 @@ diffusion:
 
 # Training hyperparameters (default values)
 training:
-  batch_size: 32
+  batch_size: 64
   learning_rate: 0.0001
   num_classes: 4  # Difficulty names: Beginner, Easy, Medium, Hard (Challenge folded into Hard)
   num_epochs: 15
@@ -99,7 +99,7 @@ training:
 
 # Contrastive learning settings
 contrastive:
-  enabled: false  # Set to true to enable contrastive training
+  enabled: true  # Set to true to enable contrastive training
 
   # Loss type: 'triplet_radar' (with adaptive margins) or 'triplet' or 'infonce'
   contrastive_loss: 'triplet_radar'
@@ -112,8 +112,8 @@ contrastive:
   infonce_temperature: 0.07
 
   # Multi-task loss weights
-  classification_weight: 1.0  # Weight for classification loss
-  contrastive_weight: 0.5     # Weight for contrastive loss
+  classification_weight: 0.8  # Weight for classification loss
+  contrastive_weight: 1.0     # Weight for contrastive loss
 
   # Triplet selection settings
   positive_percentile: 20.0   # Top 20% most similar are "positive"

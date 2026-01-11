@@ -154,43 +154,78 @@ class StepManiaDataset(Dataset):
             - 'difficulty': scalar difficulty class (0-3 for CrossEntropy)
             - 'difficulty_value': numeric difficulty for analysis (not used in training)
             - 'groove_radar': (5,) normalized groove radar values [stream, voltage, air, freeze, chaos]
+
+        Note: If audio extraction fails, returns a different valid sample to avoid crashing.
         """
-        sample_meta = self.valid_samples[idx]
+        return self._get_sample_with_retry(idx, max_retries=10)
 
-        # Check cache first (stub for now)
-        cached_sample = self._load_from_cache(idx)
-        if cached_sample is not None:
-            return cached_sample
+    def _get_sample_with_retry(self, idx: int, max_retries: int = 10) -> Dict[str, torch.Tensor]:
+        """
+        Try to load a sample, retrying with different indices if loading fails.
 
-        # Load chart tensor and audio features
-        chart_tensor, audio_tensor, original_length = self._load_chart_and_audio(sample_meta)
+        Args:
+            idx: Initial sample index
+            max_retries: Maximum number of different samples to try
 
-        # Apply joint padding/truncation to ensure alignment
-        chart_padded, audio_padded, mask = self._apply_joint_padding_truncation(
-            chart_tensor, audio_tensor
-        )
+        Returns:
+            Successfully loaded sample dictionary
+        """
+        import random
 
-        # Get difficulty class (0-3)
-        difficulty_class = sample_meta['difficulty_class']
+        tried_indices = set()
+        current_idx = idx
 
-        # Use pre-computed groove radar values
-        groove_radar_vector = sample_meta['groove_radar'].to_vector()
+        for attempt in range(max_retries):
+            tried_indices.add(current_idx)
+            sample_meta = self.valid_samples[current_idx]
 
-        # Create final sample
-        processed_sample = {
-            'chart': torch.from_numpy(chart_padded).float(),
-            'audio': torch.from_numpy(audio_padded).float(),
-            'mask': torch.from_numpy(mask).bool(),
-            'length': original_length,
-            'difficulty': torch.tensor(difficulty_class, dtype=torch.long),  # 0-3 for CrossEntropy
-            'difficulty_value': torch.tensor(sample_meta['difficulty_value'], dtype=torch.long),  # Numeric for analysis
-            'groove_radar': torch.from_numpy(groove_radar_vector).float()  # (5,) groove radar features
-        }
+            # Check cache first (stub for now)
+            cached_sample = self._load_from_cache(current_idx)
+            if cached_sample is not None:
+                return cached_sample
 
-        # Cache processed sample (stub for now)
-        self._save_to_cache(idx, processed_sample)
+            # Load chart tensor and audio features
+            result = self._load_chart_and_audio(sample_meta)
 
-        return processed_sample
+            if result is not None:
+                chart_tensor, audio_tensor, original_length = result
+
+                # Apply joint padding/truncation to ensure alignment
+                chart_padded, audio_padded, mask = self._apply_joint_padding_truncation(
+                    chart_tensor, audio_tensor
+                )
+
+                # Get difficulty class (0-3)
+                difficulty_class = sample_meta['difficulty_class']
+
+                # Use pre-computed groove radar values
+                groove_radar_vector = sample_meta['groove_radar'].to_vector()
+
+                # Create final sample
+                processed_sample = {
+                    'chart': torch.from_numpy(chart_padded).float(),
+                    'audio': torch.from_numpy(audio_padded).float(),
+                    'mask': torch.from_numpy(mask).bool(),
+                    'length': original_length,
+                    'difficulty': torch.tensor(difficulty_class, dtype=torch.long),
+                    'difficulty_value': torch.tensor(sample_meta['difficulty_value'], dtype=torch.long),
+                    'groove_radar': torch.from_numpy(groove_radar_vector).float()
+                }
+
+                # Cache processed sample (stub for now)
+                self._save_to_cache(current_idx, processed_sample)
+
+                return processed_sample
+
+            # Loading failed, try a different sample
+            # Pick a random index that we haven't tried yet
+            available_indices = [i for i in range(len(self.valid_samples)) if i not in tried_indices]
+            if not available_indices:
+                break
+            current_idx = random.choice(available_indices)
+
+        # All retries exhausted - raise an error
+        raise RuntimeError(f"Failed to load any valid sample after {max_retries} attempts starting from index {idx}")
 
     def _create_sample_metadata(self) -> List[Dict]:
         """
@@ -301,32 +336,51 @@ class StepManiaDataset(Dataset):
 
         return None
 
-    def _load_chart_and_audio(self, sample_meta: Dict) -> tuple[np.ndarray, np.ndarray, int]:
+    def _load_chart_and_audio(self, sample_meta: Dict) -> Optional[tuple[np.ndarray, np.ndarray, int]]:
         """
         Load chart tensor and audio features for a sample.
         Similar to retrieve_image in the notebook pattern.
+
+        Returns:
+            Tuple of (chart_tensor, audio_tensor, original_length) or None if extraction fails.
         """
-        # Extract audio features aligned with chart
-        audio_features = self.feature_extractor.extract_from_chart(
-            sample_meta['audio_file'],
-            sample_meta['chart']
-        )
+        try:
+            # Extract audio features aligned with chart
+            audio_features = self.feature_extractor.extract_from_chart(
+                sample_meta['audio_file'],
+                sample_meta['chart']
+            )
 
-        # Get aligned tensors
-        chart_tensor = sample_meta['chart_tensor']  # (timesteps, 4)
-        audio_tensor = audio_features.get_aligned_features()  # (timesteps, audio_features_dim)
+            # Check if extraction failed
+            if audio_features is None:
+                return None
 
-        # Ensure both tensors have same length (they should from alignment)
-        assert chart_tensor.shape[0] == audio_tensor.shape[0], \
-            f"Chart/audio timestep mismatch after alignment: {chart_tensor.shape[0]} != {audio_tensor.shape[0]}"
+            # Get aligned tensors
+            chart_tensor = sample_meta['chart_tensor']  # (timesteps, 4)
+            audio_tensor = audio_features.get_aligned_features()  # (timesteps, audio_features_dim)
 
-        min_length = min(chart_tensor.shape[0], audio_tensor.shape[0])
-        chart_tensor = chart_tensor[:min_length]
-        audio_tensor = audio_tensor[:min_length]
+            # Check for NaN/Inf in audio tensor (should be handled by normalization, but double-check)
+            if np.any(np.isnan(audio_tensor)) or np.any(np.isinf(audio_tensor)):
+                print(f"Warning: NaN/Inf in audio features for {sample_meta['audio_file']}, skipping")
+                return None
 
-        original_length = min_length
+            # Ensure both tensors have same length (they should from alignment)
+            if chart_tensor.shape[0] != audio_tensor.shape[0]:
+                print(f"Warning: Chart/audio timestep mismatch: {chart_tensor.shape[0]} != {audio_tensor.shape[0]}")
+                # Try to align by taking minimum length
+                min_length = min(chart_tensor.shape[0], audio_tensor.shape[0])
+                chart_tensor = chart_tensor[:min_length]
+                audio_tensor = audio_tensor[:min_length]
+            else:
+                min_length = chart_tensor.shape[0]
 
-        return chart_tensor, audio_tensor, original_length
+            original_length = min_length
+
+            return chart_tensor, audio_tensor, original_length
+
+        except Exception as e:
+            print(f"Warning: Error loading chart/audio for {sample_meta.get('audio_file', 'unknown')}: {e}")
+            return None
 
     def _apply_joint_padding_truncation(self,
                                        chart_tensor: np.ndarray,
