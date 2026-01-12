@@ -93,14 +93,25 @@ def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers
 
     # Create datasets using existing utility
     max_seq_len = config['classifier']['max_sequence_length']
+    cache_dir = training_config.get('cache_dir', 'cache/samples')
+
     train_dataset, val_dataset, test_dataset = create_datasets(
         train_files=train_files,
         val_files=val_files,
         test_files=test_files,
         audio_dir=audio_dir,
         max_sequence_length=max_seq_len,
-        data_config=stepmania_config
+        data_config=stepmania_config,
+        cache_dir=cache_dir
     )
+
+    # Warm cache to precompute all audio features (one-time cost on first run)
+    print("\nWarming dataset cache (this may take 5-10 minutes on first run)...")
+    print("Training dataset:")
+    train_dataset.warm_cache(show_progress=True)
+    print("\nValidation dataset:")
+    val_dataset.warm_cache(show_progress=True)
+    print("Cache warming complete!\n")
 
     # Create data loaders with optimized settings
     batch_size = config['training']['batch_size']

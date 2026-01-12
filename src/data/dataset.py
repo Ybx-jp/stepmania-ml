@@ -108,6 +108,12 @@ class StepManiaDataset(Dataset):
 
         print(f"Dataset initialized with {len(self.valid_samples)} valid samples")
 
+        # Print cache statistics if cache is enabled
+        if self.cache_dir:
+            stats = self.get_cache_stats()
+            print(f"Cache: {stats['cached_samples']}/{stats['total_samples']} samples "
+                  f"({stats['cache_hit_rate']:.1%} hit rate)")
+
     def __len__(self) -> int:
         """Return total number of valid samples"""
         return len(self.valid_samples)
@@ -482,8 +488,7 @@ class StepManiaDataset(Dataset):
         cached = 0
         skipped = 0
         for idx in iterator:
-            cache_path = self._get_cache_path(idx)
-            if os.path.exists(cache_path):
+            if self._is_cached(idx):
                 skipped += 1
                 continue
 
@@ -495,3 +500,37 @@ class StepManiaDataset(Dataset):
                 print(f"Warning: Failed to cache sample {idx}: {e}")
 
         print(f"Cache warming complete: {cached} new, {skipped} existing")
+
+    def _is_cached(self, idx: int) -> bool:
+        """Check if sample is already cached."""
+        cache_path = self._get_cache_path(idx)
+        return cache_path is not None and os.path.exists(cache_path)
+
+    def get_cache_stats(self) -> Dict[str, float]:
+        """
+        Get cache statistics.
+
+        Returns:
+            Dictionary with cache statistics including:
+            - total_samples: Total number of samples
+            - cached_samples: Number of already cached samples
+            - uncached_samples: Number of samples not yet cached
+            - cache_hit_rate: Percentage of samples cached (0-1)
+        """
+        if self.cache_dir is None:
+            return {
+                'total_samples': len(self.valid_samples),
+                'cached_samples': 0,
+                'uncached_samples': len(self.valid_samples),
+                'cache_hit_rate': 0.0
+            }
+
+        total = len(self.valid_samples)
+        cached = sum(1 for i in range(total) if self._is_cached(i))
+
+        return {
+            'total_samples': total,
+            'cached_samples': cached,
+            'uncached_samples': total - cached,
+            'cache_hit_rate': cached / total if total > 0 else 0.0
+        }
