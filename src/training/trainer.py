@@ -5,12 +5,15 @@ Implements minimal training loop with:
 - ReduceLROnPlateau scheduler monitoring val_loss
 - Simple checkpointing (best_val_loss.pt and last.pt)
 - CrossEntropy loss for difficulty name classes (0-4: Beginner, Easy, Medium, Hard, Challenge)
+- Mixed precision training (AMP) for faster training
+- Gradient accumulation for larger effective batch sizes
 """
 
 import os
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.cuda.amp import autocast, GradScaler
 from torchmetrics.classification import MulticlassAccuracy, MulticlassConfusionMatrix
 from typing import Dict, Optional
 from tqdm import tqdm
@@ -29,7 +32,9 @@ class Trainer:
                  optimizer: torch.optim.Optimizer,
                  config: Dict,
                  checkpoint_dir: str = "checkpoints",
-                 device: Optional[torch.device] = None):
+                 device: Optional[torch.device] = None,
+                 use_amp: Optional[bool] = None,
+                 accumulation_steps: int = 1):
         """
         Initialize trainer.
 
@@ -41,6 +46,8 @@ class Trainer:
             config: Training configuration
             checkpoint_dir: Full path to checkpoint directory (may include timestamped subdirectory)
             device: Device to use for training (auto-detected if None)
+            use_amp: Enable automatic mixed precision (default: True if CUDA available)
+            accumulation_steps: Number of batches to accumulate gradients over
         """
         # Device configuration
         if device is None:
@@ -48,6 +55,19 @@ class Trainer:
         else:
             self.device = device
         print(f"Using device: {self.device}")
+
+        # Mixed precision training (AMP)
+        if use_amp is None:
+            use_amp = config.get('use_amp', self.device.type == 'cuda')
+        self.use_amp = use_amp and self.device.type == 'cuda'
+        self.scaler = GradScaler() if self.use_amp else None
+        if self.use_amp:
+            print("Using mixed precision training (AMP)")
+
+        # Gradient accumulation
+        self.accumulation_steps = config.get('accumulation_steps', accumulation_steps)
+        if self.accumulation_steps > 1:
+            print(f"Using gradient accumulation: {self.accumulation_steps} steps")
 
         self.model = model.to(self.device)  # Move model to device
         self.train_loader = train_loader
@@ -195,7 +215,7 @@ class Trainer:
         return torch.tensor(weights, dtype=torch.float32).to(self.device)
 
     def train_epoch(self) -> Dict[str, float]:
-        """Train for one epoch."""
+        """Train for one epoch with AMP and gradient accumulation support."""
         self.model.train()
 
         total_loss = 0.0
@@ -204,7 +224,7 @@ class Trainer:
 
         progress_bar = tqdm(self.train_loader, desc=f"Train Epoch {self.current_epoch}")
 
-        for batch in progress_bar:
+        for batch_idx, batch in enumerate(progress_bar):
             # Extract batch data and move to device
             audio = batch['audio'].to(self.device)  # (B, L, 13)
             chart = batch['chart'].to(self.device)  # (B, L, 4)
@@ -216,27 +236,44 @@ class Trainer:
             if chart_stats is not None:
                 chart_stats = chart_stats.to(self.device)
 
-            # Forward pass
-            self.optimizer.zero_grad()
-            logits = self.model(audio, chart, mask, chart_stats=chart_stats)
+            # Forward pass with AMP
+            with autocast(enabled=self.use_amp):
+                logits = self.model(audio, chart, mask, chart_stats=chart_stats)
+                loss = self.criterion(logits, targets)
+                # Scale loss for gradient accumulation
+                if self.accumulation_steps > 1:
+                    loss = loss / self.accumulation_steps
 
-            # Compute classification loss
-            loss = self.criterion(logits, targets)
+            # Backward pass with AMP
+            if self.scaler:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
-            # Backward pass
-            loss.backward()
+            # Optimizer step (every accumulation_steps or at end of epoch)
+            if (batch_idx + 1) % self.accumulation_steps == 0 or (batch_idx + 1) == len(self.train_loader):
+                if self.scaler:
+                    # Unscale before clipping
+                    self.scaler.unscale_(self.optimizer)
 
-            # Gradient clipping
-            if self.config.get('gradient_clip_norm'):
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(),
-                    self.config['gradient_clip_norm']
-                )
+                # Gradient clipping
+                if self.config.get('gradient_clip_norm'):
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(),
+                        self.config['gradient_clip_norm']
+                    )
 
-            self.optimizer.step()
+                if self.scaler:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
 
-            # Track metrics
-            total_loss += loss.item()
+                self.optimizer.zero_grad()
+
+            # Track metrics (use unscaled loss for logging)
+            actual_loss = loss.item() * self.accumulation_steps if self.accumulation_steps > 1 else loss.item()
+            total_loss += actual_loss
             predictions = self.model.predict_class_from_logits(logits)
             correct += (predictions == targets).sum().item()
             total += targets.size(0)
@@ -244,7 +281,7 @@ class Trainer:
             # Update progress bar
             current_acc = correct / total
             progress_bar.set_postfix({
-                'loss': f"{loss.item():.4f}",
+                'loss': f"{actual_loss:.4f}",
                 'acc': f"{current_acc:.4f}"
             })
 
@@ -254,7 +291,7 @@ class Trainer:
         }
 
     def validate_epoch(self) -> Dict[str, float]:
-        """Validate for one epoch."""
+        """Validate for one epoch with AMP support."""
         self.model.eval()
         self.val_accuracy.reset()
         self.val_confusion.reset()
@@ -278,11 +315,10 @@ class Trainer:
                 if chart_stats is not None:
                     chart_stats = chart_stats.to(self.device)
 
-                # Forward pass
-                logits = self.model(audio, chart, mask, chart_stats=chart_stats)
-
-                # Compute classification loss
-                loss = self.criterion(logits, targets)
+                # Forward pass with AMP
+                with autocast(enabled=self.use_amp):
+                    logits = self.model(audio, chart, mask, chart_stats=chart_stats)
+                    loss = self.criterion(logits, targets)
 
                 # Track metrics
                 total_loss += loss.item()
@@ -359,11 +395,14 @@ class Trainer:
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict(),
+            'scaler_state_dict': self.scaler.state_dict() if self.scaler else None,
             'best_val_loss': self.best_val_loss,
             'metrics': metrics,
             'history': self.history,
             'data_info': self.data_info,
-            'chart_stats_summary': self.chart_stats_summary
+            'chart_stats_summary': self.chart_stats_summary,
+            'use_amp': self.use_amp,
+            'accumulation_steps': self.accumulation_steps
         }
 
         path = os.path.join(self.checkpoint_dir, 'best_val_loss.pt')
@@ -376,11 +415,14 @@ class Trainer:
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict(),
+            'scaler_state_dict': self.scaler.state_dict() if self.scaler else None,
             'best_val_loss': self.best_val_loss,
             'metrics': metrics,
             'history': history,
             'data_info': self.data_info,
-            'chart_stats_summary': self.chart_stats_summary
+            'chart_stats_summary': self.chart_stats_summary,
+            'use_amp': self.use_amp,
+            'accumulation_steps': self.accumulation_steps
         }
 
         path = os.path.join(self.checkpoint_dir, 'last.pt')
@@ -395,6 +437,10 @@ class Trainer:
         self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         self.best_val_loss = checkpoint['best_val_loss']
         self.current_epoch = checkpoint['epoch']
+
+        # Restore scaler state if available and using AMP
+        if self.scaler and checkpoint.get('scaler_state_dict'):
+            self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
 
         # Restore training history if available
         if 'history' in checkpoint and checkpoint['history'] is not None:

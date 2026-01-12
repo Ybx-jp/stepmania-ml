@@ -97,6 +97,16 @@ training:
   factor: 0.5
   monitor: "val_loss"
 
+  # I/O optimizations
+  cache_dir: "cache/samples"  # Directory for cached samples (set to null to disable)
+  num_workers: 4              # DataLoader worker processes
+  prefetch_factor: 4          # Batches to prefetch per worker
+  persistent_workers: true    # Keep workers alive between epochs
+
+  # Performance optimizations
+  use_amp: true               # Automatic mixed precision (CUDA only)
+  accumulation_steps: 1       # Gradient accumulation steps (increase for larger effective batch)
+
 # Contrastive learning settings
 contrastive:
   enabled: true  # Set to true to enable contrastive training

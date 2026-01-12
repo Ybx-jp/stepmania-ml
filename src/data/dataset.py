@@ -424,19 +424,74 @@ class StepManiaDataset(Dataset):
 
         return chart_padded, audio_padded, mask
 
-    # Cache methods - stubs for later implementation
+    # Cache methods for avoiding repeated audio feature extraction
     def _get_cache_path(self, idx: int) -> str:
-        """Get cache file path for sample - STUB"""
+        """Get cache file path for sample."""
         if self.cache_dir is None:
             return ""
-        return os.path.join(self.cache_dir, f"sample_{idx:06d}.pkl")
+        return os.path.join(self.cache_dir, f"sample_{idx:06d}.pt")
 
     def _load_from_cache(self, idx: int) -> Optional[Dict[str, torch.Tensor]]:
-        """Load cached sample if available - STUB"""
-        # TODO: Implement caching logic
+        """Load cached sample if available."""
+        cache_path = self._get_cache_path(idx)
+        if cache_path and os.path.exists(cache_path):
+            try:
+                return torch.load(cache_path, weights_only=False)
+            except Exception as e:
+                # Cache file corrupted, will regenerate
+                print(f"Warning: Failed to load cache {cache_path}: {e}")
+                return None
         return None
 
     def _save_to_cache(self, idx: int, sample: Dict[str, torch.Tensor]):
-        """Save sample to cache - STUB"""
-        # TODO: Implement caching logic
-        pass
+        """Save sample to cache for faster loading next time."""
+        if self.cache_dir is None:
+            return
+
+        try:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            cache_path = self._get_cache_path(idx)
+            torch.save(sample, cache_path)
+        except Exception as e:
+            # Non-fatal: just skip caching this sample
+            print(f"Warning: Failed to cache sample {idx}: {e}")
+
+    def warm_cache(self, show_progress: bool = True):
+        """
+        Pre-compute and cache all samples.
+
+        Call this once before training to avoid I/O bottleneck during training.
+        After warming, subsequent epochs load from cache (10-50x faster).
+
+        Args:
+            show_progress: Show progress bar during warming
+        """
+        if self.cache_dir is None:
+            print("Warning: cache_dir not set, cannot warm cache")
+            return
+
+        from tqdm import tqdm
+
+        print(f"Warming cache to {self.cache_dir}...")
+        os.makedirs(self.cache_dir, exist_ok=True)
+
+        iterator = range(len(self))
+        if show_progress:
+            iterator = tqdm(iterator, desc="Caching samples")
+
+        cached = 0
+        skipped = 0
+        for idx in iterator:
+            cache_path = self._get_cache_path(idx)
+            if os.path.exists(cache_path):
+                skipped += 1
+                continue
+
+            # This triggers full audio extraction and caches result
+            try:
+                _ = self[idx]
+                cached += 1
+            except Exception as e:
+                print(f"Warning: Failed to cache sample {idx}: {e}")
+
+        print(f"Cache warming complete: {cached} new, {skipped} existing")

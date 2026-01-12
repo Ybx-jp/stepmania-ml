@@ -102,17 +102,24 @@ def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers
         data_config=stepmania_config
     )
 
-    # Create data loaders
+    # Create data loaders with optimized settings
     batch_size = config['training']['batch_size']
-    # Auto-detect pin_memory based on CUDA availability
+    training_config = config.get('training', {})
+
+    # DataLoader optimization settings
     pin_memory = torch.cuda.is_available()
+    persistent_workers = training_config.get('persistent_workers', True) and num_workers > 0
+    prefetch_factor = training_config.get('prefetch_factor', 4) if num_workers > 0 else None
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=pin_memory
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+        prefetch_factor=prefetch_factor,
+        drop_last=True  # Consistent batch sizes for training
     )
 
     val_loader = DataLoader(
@@ -120,7 +127,9 @@ def create_data_loaders(data_dir: str, audio_dir: str, config: dict, num_workers
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=pin_memory
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+        prefetch_factor=prefetch_factor
     )
 
     return train_loader, val_loader

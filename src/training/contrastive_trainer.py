@@ -5,12 +5,15 @@ Extends the base Trainer to handle:
 - Triplet batches (anchor, positive, negative)
 - Multi-task loss: classification + contrastive
 - Groove radar-based adaptive margins
+- Mixed precision training (AMP) for faster training
+- Gradient accumulation for larger effective batch sizes
 """
 
 import os
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.cuda.amp import autocast, GradScaler
 from torchmetrics.classification import MulticlassAccuracy, MulticlassConfusionMatrix
 from typing import Dict, Optional
 from tqdm import tqdm
@@ -38,7 +41,9 @@ class ContrastiveTrainer:
                  optimizer: torch.optim.Optimizer,
                  config: Dict,
                  checkpoint_dir: str = "checkpoints",
-                 device: Optional[torch.device] = None):
+                 device: Optional[torch.device] = None,
+                 use_amp: Optional[bool] = None,
+                 accumulation_steps: int = 1):
         """
         Initialize contrastive trainer.
 
@@ -50,6 +55,8 @@ class ContrastiveTrainer:
             config: Training configuration with contrastive settings
             checkpoint_dir: Path to checkpoint directory
             device: Device to use for training
+            use_amp: Enable automatic mixed precision (default: True if CUDA available)
+            accumulation_steps: Number of batches to accumulate gradients over
         """
         # Device configuration
         if device is None:
@@ -57,6 +64,19 @@ class ContrastiveTrainer:
         else:
             self.device = device
         print(f"Using device: {self.device}")
+
+        # Mixed precision training (AMP)
+        if use_amp is None:
+            use_amp = config.get('use_amp', self.device.type == 'cuda')
+        self.use_amp = use_amp and self.device.type == 'cuda'
+        self.scaler = GradScaler() if self.use_amp else None
+        if self.use_amp:
+            print("Using mixed precision training (AMP)")
+
+        # Gradient accumulation
+        self.accumulation_steps = config.get('accumulation_steps', accumulation_steps)
+        if self.accumulation_steps > 1:
+            print(f"Using gradient accumulation: {self.accumulation_steps} steps")
 
         self.model = model.to(self.device)
         self.train_loader = train_loader
@@ -177,7 +197,7 @@ class ContrastiveTrainer:
         return result
 
     def train_epoch(self) -> Dict[str, float]:
-        """Train for one epoch with multi-task loss."""
+        """Train for one epoch with multi-task loss, AMP, and gradient accumulation."""
         self.model.train()
 
         total_loss = 0.0
@@ -188,60 +208,83 @@ class ContrastiveTrainer:
 
         progress_bar = tqdm(self.train_loader, desc=f"Train Epoch {self.current_epoch}")
 
-        for batch in progress_bar:
+        for batch_idx, batch in enumerate(progress_bar):
             # Extract triplet batch
             data = self._extract_triplet_batch(batch)
 
-            self.optimizer.zero_grad()
-
-            # Forward pass for all three samples
-            anchor_out = self.model(
-                data['anchor_audio'], data['anchor_chart'], data['anchor_mask'],
-                groove_radar=data['anchor_groove_radar'], return_embeddings=True
-            )
-            positive_out = self.model(
-                data['positive_audio'], data['positive_chart'], data['positive_mask'],
-                groove_radar=data['positive_groove_radar'], return_embeddings=True
-            )
-            negative_out = self.model(
-                data['negative_audio'], data['negative_chart'], data['negative_mask'],
-                groove_radar=data['negative_groove_radar'], return_embeddings=True
-            )
-
-            # Classification loss (on anchor only)
-            cls_loss = self.classification_criterion(
-                anchor_out['logits'], data['anchor_difficulty']
-            )
-
-            # Contrastive loss
-            contrastive_loss = self.contrastive_criterion(
-                anchor_out['embeddings'],
-                positive_out['embeddings'],
-                negative_out['embeddings'],
-                data['anchor_groove_radar'],
-                data['negative_groove_radar']
-            )
-
-            # Combined loss
-            loss = (self.classification_weight * cls_loss +
-                    self.contrastive_weight * contrastive_loss)
-
-            # Backward pass
-            loss.backward()
-
-            # Gradient clipping
-            if self.config.get('gradient_clip_norm'):
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(),
-                    self.config['gradient_clip_norm']
+            # Forward pass for all three samples with AMP
+            with autocast(enabled=self.use_amp):
+                anchor_out = self.model(
+                    data['anchor_audio'], data['anchor_chart'], data['anchor_mask'],
+                    groove_radar=data['anchor_groove_radar'], return_embeddings=True
+                )
+                positive_out = self.model(
+                    data['positive_audio'], data['positive_chart'], data['positive_mask'],
+                    groove_radar=data['positive_groove_radar'], return_embeddings=True
+                )
+                negative_out = self.model(
+                    data['negative_audio'], data['negative_chart'], data['negative_mask'],
+                    groove_radar=data['negative_groove_radar'], return_embeddings=True
                 )
 
-            self.optimizer.step()
+                # Classification loss (on anchor only)
+                cls_loss = self.classification_criterion(
+                    anchor_out['logits'], data['anchor_difficulty']
+                )
 
-            # Track metrics
-            total_loss += loss.item()
-            total_cls_loss += cls_loss.item()
-            total_contrastive_loss += contrastive_loss.item()
+                # Contrastive loss
+                contrastive_loss = self.contrastive_criterion(
+                    anchor_out['embeddings'],
+                    positive_out['embeddings'],
+                    negative_out['embeddings'],
+                    data['anchor_groove_radar'],
+                    data['negative_groove_radar']
+                )
+
+                # Combined loss
+                loss = (self.classification_weight * cls_loss +
+                        self.contrastive_weight * contrastive_loss)
+
+                # Scale loss for gradient accumulation
+                if self.accumulation_steps > 1:
+                    loss = loss / self.accumulation_steps
+
+            # Backward pass with AMP
+            if self.scaler:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
+
+            # Optimizer step (every accumulation_steps or at end of epoch)
+            if (batch_idx + 1) % self.accumulation_steps == 0 or (batch_idx + 1) == len(self.train_loader):
+                if self.scaler:
+                    # Unscale before clipping
+                    self.scaler.unscale_(self.optimizer)
+
+                # Gradient clipping
+                if self.config.get('gradient_clip_norm'):
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(),
+                        self.config['gradient_clip_norm']
+                    )
+
+                if self.scaler:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
+
+                self.optimizer.zero_grad()
+
+            # Track metrics (use unscaled loss for logging)
+            scale = self.accumulation_steps if self.accumulation_steps > 1 else 1
+            actual_loss = loss.item() * scale
+            actual_cls_loss = cls_loss.item()
+            actual_contrastive_loss = contrastive_loss.item()
+
+            total_loss += actual_loss
+            total_cls_loss += actual_cls_loss
+            total_contrastive_loss += actual_contrastive_loss
 
             predictions = self.model.predict_class_from_logits(anchor_out['logits'])
             correct += (predictions == data['anchor_difficulty']).sum().item()
@@ -249,9 +292,9 @@ class ContrastiveTrainer:
 
             # Update progress bar
             progress_bar.set_postfix({
-                'loss': f"{loss.item():.4f}",
-                'cls': f"{cls_loss.item():.4f}",
-                'ctr': f"{contrastive_loss.item():.4f}",
+                'loss': f"{actual_loss:.4f}",
+                'cls': f"{actual_cls_loss:.4f}",
+                'ctr': f"{actual_contrastive_loss:.4f}",
                 'acc': f"{correct/total:.4f}"
             })
 
@@ -264,7 +307,7 @@ class ContrastiveTrainer:
         }
 
     def validate_epoch(self) -> Dict[str, float]:
-        """Validate for one epoch (classification only, no triplets)."""
+        """Validate for one epoch (classification only, no triplets) with AMP."""
         self.model.eval()
         self.val_accuracy.reset()
         self.val_confusion.reset()
@@ -286,15 +329,16 @@ class ContrastiveTrainer:
                 if groove_radar is not None:
                     groove_radar = groove_radar.to(self.device)
 
-                # Forward pass (classification only)
-                logits = self.model(audio, chart, mask, groove_radar=groove_radar)
+                # Forward pass with AMP (classification only)
+                with autocast(enabled=self.use_amp):
+                    logits = self.model(audio, chart, mask, groove_radar=groove_radar)
 
-                # Handle dict output
-                if isinstance(logits, dict):
-                    logits = logits['logits']
+                    # Handle dict output
+                    if isinstance(logits, dict):
+                        logits = logits['logits']
 
-                # Compute loss
-                loss = self.classification_criterion(logits, targets)
+                    # Compute loss
+                    loss = self.classification_criterion(logits, targets)
 
                 # Track metrics
                 total_loss += loss.item()
@@ -371,16 +415,19 @@ class ContrastiveTrainer:
         return self.history
 
     def save_checkpoint(self, filename: str, metrics: Dict[str, float]):
-        """Save checkpoint."""
+        """Save checkpoint with scaler state for AMP."""
         checkpoint = {
             'epoch': self.current_epoch,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict(),
+            'scaler_state_dict': self.scaler.state_dict() if self.scaler else None,
             'best_val_loss': self.best_val_loss,
             'metrics': metrics,
             'history': self.history,
-            'config': self.config
+            'config': self.config,
+            'use_amp': self.use_amp,
+            'accumulation_steps': self.accumulation_steps
         }
 
         path = os.path.join(self.checkpoint_dir, filename)
@@ -395,6 +442,10 @@ class ContrastiveTrainer:
         self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         self.best_val_loss = checkpoint['best_val_loss']
         self.current_epoch = checkpoint['epoch']
+
+        # Restore scaler state if available and using AMP
+        if self.scaler and checkpoint.get('scaler_state_dict'):
+            self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
 
         if 'history' in checkpoint and checkpoint['history'] is not None:
             self.history = checkpoint['history']
