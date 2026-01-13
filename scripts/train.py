@@ -66,6 +66,10 @@ def parse_args():
                        help='Path to checkpoint to resume from')
     parser.add_argument('--num_workers', type=int, default=4,
                        help='Number of dataloader workers')
+    parser.add_argument('--pretrained', type=str, default=None,
+                       help='Path to pretrained checkpoint to load')
+    parser.add_argument('--freeze_backbone', action='store_true',
+                       help='Freeze encoder/fusion/backbone when loading pretrained')
 
     return parser.parse_args()
 
@@ -200,7 +204,38 @@ def main():
 
     # Create model and optimizer
     print("Creating model...")
-    model, optimizer = create_model_and_optimizer(config)
+    if args.pretrained:
+        print(f"Loading pretrained weights from {args.pretrained}")
+        model = LateFusionClassifier.from_pretrained(
+            checkpoint_path=args.pretrained,
+            config=config['classifier'],
+            freeze_backbone=args.freeze_backbone,
+            device='cpu'  # Will be moved to device by trainer
+        )
+        # Create optimizer for the model
+        optimizer_name = config['training']['optimizer'].lower()
+        if optimizer_name == 'adamw':
+            optimizer = optim.AdamW(
+                model.parameters(),
+                lr=config['training']['learning_rate'],
+                weight_decay=config['training']['weight_decay']
+            )
+        elif optimizer_name == 'adam':
+            optimizer = optim.Adam(
+                model.parameters(),
+                lr=config['training']['learning_rate']
+            )
+        elif optimizer_name == 'sgd':
+            optimizer = optim.SGD(
+                model.parameters(),
+                lr=config['training']['learning_rate'],
+                momentum=0.9,
+                weight_decay=config['training']['weight_decay']
+            )
+        else:
+            raise ValueError(f"Unknown optimizer: {optimizer_name}")
+    else:
+        model, optimizer = create_model_and_optimizer(config)
 
     # Print model info
     total_params = sum(p.numel() for p in model.parameters())

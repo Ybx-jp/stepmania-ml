@@ -10,15 +10,17 @@ Extends the base Trainer to handle:
 """
 
 import os
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.cuda.amp import autocast, GradScaler
 from torchmetrics.classification import MulticlassAccuracy, MulticlassConfusionMatrix
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from tqdm import tqdm
 
 from ..losses.contrastive import TripletMarginLossWithRadar, create_contrastive_loss
+from ..utils.diagnostics import TrainingDiagnostics
 
 
 # Difficulty name constants for display
@@ -43,7 +45,11 @@ class ContrastiveTrainer:
                  checkpoint_dir: str = "checkpoints",
                  device: Optional[torch.device] = None,
                  use_amp: Optional[bool] = None,
-                 accumulation_steps: int = 1):
+                 accumulation_steps: int = 1,
+                 warmup_epochs: int = 0,
+                 warmup_cls_weight: float = 0.0,
+                 finetune_cls_weight: Optional[float] = None,
+                 selective_unfreeze: Optional[List[str]] = None):
         """
         Initialize contrastive trainer.
 
@@ -57,6 +63,10 @@ class ContrastiveTrainer:
             device: Device to use for training
             use_amp: Enable automatic mixed precision (default: True if CUDA available)
             accumulation_steps: Number of batches to accumulate gradients over
+            warmup_epochs: Number of epochs to freeze classifier head (Experiment A)
+            warmup_cls_weight: Classification weight during warmup (typically 0)
+            finetune_cls_weight: Classification weight after warmup (if None, use config value)
+            selective_unfreeze: Module names to unfreeze (Experiment B) - others will be frozen
         """
         # Device configuration
         if device is None:
@@ -110,12 +120,28 @@ class ContrastiveTrainer:
             temperature=config.get('infonce_temperature', 0.07)
         )
 
-        # Loss weights
-        self.classification_weight = config.get('classification_weight', 1.0)
+        # Training schedule for warmup/finetune (Experiment A)
+        self.warmup_epochs = warmup_epochs
+        self.warmup_cls_weight = warmup_cls_weight
+        self.finetune_cls_weight = finetune_cls_weight if finetune_cls_weight is not None else config.get('classification_weight', 1.0)
+        self.base_classification_weight = config.get('classification_weight', 1.0)
+
+        # Loss weights (will be modified during warmup)
+        self.classification_weight = warmup_cls_weight if warmup_epochs > 0 else self.base_classification_weight
         self.contrastive_weight = config.get('contrastive_weight', 0.5)
+
+        # Selective unfreezing (Experiment B)
+        self.selective_unfreeze = selective_unfreeze
+        if selective_unfreeze:
+            print(f"Selective unfreezing enabled: {selective_unfreeze}")
+            self._apply_selective_freeze(selective_unfreeze)
 
         print(f"Using multi-task loss: {self.classification_weight}*classification + "
               f"{self.contrastive_weight}*contrastive ({contrastive_type})")
+
+        if warmup_epochs > 0:
+            print(f"Warmup schedule: {warmup_epochs} epochs with cls_weight={warmup_cls_weight}, "
+                  f"then finetune with cls_weight={self.finetune_cls_weight}")
 
         # Scheduler
         self.scheduler = ReduceLROnPlateau(
@@ -142,6 +168,16 @@ class ContrastiveTrainer:
         self.val_confusion = MulticlassConfusionMatrix(
             num_classes=self.num_classes
         ).to(self.device)
+
+        # Diagnostics
+        diagnostics_config = config.get('diagnostics', {})
+        self.diagnostics = TrainingDiagnostics(
+            save_dir=os.path.join(checkpoint_dir, 'diagnostics'),
+            enabled=diagnostics_config.get('enabled', False)
+        )
+        self.log_gradients = diagnostics_config.get('log_gradients', False)
+        self.track_embeddings = diagnostics_config.get('track_embeddings', False)
+        self.save_embeddings_every = diagnostics_config.get('save_embeddings_every', 5)
 
     def _compute_class_weights(self) -> Optional[torch.Tensor]:
         """Compute inverse-frequency class weights from training data."""
@@ -195,6 +231,98 @@ class ContrastiveTrainer:
         result['negative_groove_radar'] = batch['negative_groove_radar'].to(self.device)
 
         return result
+
+    def _apply_selective_freeze(self, module_names_to_unfreeze: List[str]):
+        """
+        Freeze all model parameters except specified modules.
+
+        Args:
+            module_names_to_unfreeze: List of module names to keep trainable
+        """
+        # First, freeze everything
+        for param in self.model.parameters():
+            param.requires_grad = False
+
+        # Then, unfreeze specified modules
+        for name, param in self.model.named_parameters():
+            for module_name in module_names_to_unfreeze:
+                if name.startswith(module_name):
+                    param.requires_grad = True
+                    break
+
+        # Count trainable parameters
+        trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in self.model.parameters())
+        print(f"  Selective freeze: {trainable:,} / {total:,} parameters trainable")
+
+    def _freeze_modules(self, module_names: List[str]):
+        """Freeze specified modules."""
+        for name, param in self.model.named_parameters():
+            for module_name in module_names:
+                if name.startswith(module_name):
+                    param.requires_grad = False
+
+    def _unfreeze_modules(self, module_names: List[str]):
+        """Unfreeze specified modules."""
+        for name, param in self.model.named_parameters():
+            for module_name in module_names:
+                if name.startswith(module_name):
+                    param.requires_grad = True
+
+    def _compute_gradient_norms(self) -> Dict[str, float]:
+        """Compute gradient norms for each major module."""
+        if not hasattr(self.model, 'get_gradient_norms_by_module'):
+            # Fallback implementation
+            modules = {
+                'audio_encoder': getattr(self.model, 'audio_encoder', None),
+                'chart_encoder': getattr(self.model, 'chart_encoder', None),
+                'fusion_module': getattr(self.model, 'fusion_module', None),
+                'backbone': getattr(self.model, 'backbone', None),
+                'pooling': getattr(self.model, 'pooling', None),
+                'classifier_head': getattr(self.model, 'classifier_head', None),
+                'projection_head': getattr(self.model, 'projection_head', None),
+                'radar_mlp': getattr(self.model, 'radar_mlp', None),
+            }
+
+            norms = {}
+            for name, module in modules.items():
+                if module is None:
+                    continue
+                grad_norm = 0.0
+                for p in module.parameters():
+                    if p.grad is not None:
+                        grad_norm += p.grad.norm().item() ** 2
+                norms[name] = grad_norm ** 0.5
+            return norms
+        else:
+            return self.model.get_gradient_norms_by_module()
+
+    def _handle_phase_transition(self):
+        """Handle warmup → finetune transition."""
+        if self.warmup_epochs > 0 and self.current_epoch == self.warmup_epochs:
+            # Transition from warmup to fine-tune
+            print(f"\n{'='*60}")
+            print(f"PHASE TRANSITION: Warmup → Fine-tune (Epoch {self.current_epoch + 1})")
+            print(f"{'='*60}")
+
+            # Unfreeze classifier head
+            self._unfreeze_modules(['classifier_head'])
+
+            # Update classification weight
+            self.classification_weight = self.finetune_cls_weight
+
+            # Log transition
+            self.diagnostics.log_training_phase(
+                self.current_epoch + 1,
+                'finetune',
+                f'Unfroze classifier_head, cls_weight: {self.warmup_cls_weight} → {self.finetune_cls_weight}'
+            )
+
+            trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in self.model.parameters())
+            print(f"  Trainable parameters: {trainable:,} / {total:,}")
+            print(f"  Classification weight: {self.classification_weight}")
+            print(f"{'='*60}\n")
 
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch with multi-task loss, AMP, and gradient accumulation."""
@@ -261,6 +389,11 @@ class ContrastiveTrainer:
                     # Unscale before clipping
                     self.scaler.unscale_(self.optimizer)
 
+                # Log gradient norms before clipping (first batch of epoch)
+                if self.log_gradients and batch_idx == 0:
+                    grad_norms = self._compute_gradient_norms()
+                    self.diagnostics.log_gradient_norms(self.current_epoch, grad_norms)
+
                 # Gradient clipping
                 if self.config.get('gradient_clip_norm'):
                     torch.nn.utils.clip_grad_norm_(
@@ -316,6 +449,11 @@ class ContrastiveTrainer:
         correct = 0
         total = 0
 
+        # Collect embeddings for drift analysis
+        all_embeddings = []
+        all_labels = []
+        collect_embeddings = self.track_embeddings and (self.current_epoch % self.save_embeddings_every == 0)
+
         with torch.no_grad():
             progress_bar = tqdm(self.val_loader, desc=f"Val Epoch {self.current_epoch}")
 
@@ -331,11 +469,18 @@ class ContrastiveTrainer:
 
                 # Forward pass with AMP (classification only)
                 with autocast(enabled=self.use_amp):
-                    logits = self.model(audio, chart, mask, groove_radar=groove_radar)
+                    # Get embeddings if tracking enabled
+                    return_embeddings = collect_embeddings and hasattr(self.model, 'use_projection_head') and self.model.use_projection_head
+                    output = self.model(audio, chart, mask, groove_radar=groove_radar, return_embeddings=return_embeddings)
 
                     # Handle dict output
-                    if isinstance(logits, dict):
-                        logits = logits['logits']
+                    if isinstance(output, dict):
+                        logits = output['logits']
+                        if collect_embeddings and 'embeddings' in output:
+                            all_embeddings.append(output['embeddings'].cpu().numpy())
+                            all_labels.append(targets.cpu().numpy())
+                    else:
+                        logits = output
 
                     # Compute loss
                     loss = self.classification_criterion(logits, targets)
@@ -354,10 +499,27 @@ class ContrastiveTrainer:
                 self.val_accuracy.update(predictions, targets)
                 self.val_confusion.update(predictions, targets)
 
+        # Compute and log embedding drift
+        drift_metrics = {}
+        if collect_embeddings and len(all_embeddings) > 0:
+            embeddings = np.concatenate(all_embeddings, axis=0)
+            labels = np.concatenate(all_labels, axis=0)
+
+            # Save embeddings
+            self.diagnostics.save_embeddings(self.current_epoch, embeddings, labels)
+
+            # Compute drift
+            drift_metrics = self.diagnostics.compute_embedding_drift(self.current_epoch, embeddings, labels)
+
+            if drift_metrics:
+                print(f"  Embedding drift: cosine_sim={drift_metrics['mean_cosine_similarity']:.4f}, "
+                      f"l2_dist={drift_metrics['mean_l2_distance']:.4f}")
+
         return {
             'val_loss': total_loss / len(self.val_loader),
             'val_acc': self.val_accuracy.compute().item(),
-            'confusion_matrix': self.val_confusion.compute().cpu()
+            'confusion_matrix': self.val_confusion.compute().cpu(),
+            **drift_metrics
         }
 
     def fit(self) -> Dict[str, list]:
@@ -368,13 +530,26 @@ class ContrastiveTrainer:
         print(f"Starting contrastive training for {num_epochs} epochs (from epoch {start_epoch + 1})")
         print(f"Checkpoints will be saved to: {self.checkpoint_dir}")
 
+        # Initialize warmup: freeze classifier_head if warmup_epochs > 0
+        if self.warmup_epochs > 0 and start_epoch == 0:
+            print(f"\nWARMUP PHASE: Freezing classifier_head for first {self.warmup_epochs} epochs")
+            self._freeze_modules(['classifier_head'])
+            self.diagnostics.log_training_phase(
+                0,
+                'warmup',
+                f'Froze classifier_head, cls_weight={self.warmup_cls_weight}'
+            )
+
         for epoch in range(start_epoch, num_epochs):
             self.current_epoch = epoch + 1
 
+            # Handle phase transitions (warmup → finetune)
+            self._handle_phase_transition()
+
             # Resample triplets if configured
-            if hasattr(self.train_loader.dataset, 'resample'):
-                if self.train_loader.dataset.resample_epoch and epoch > start_epoch:
-                    self.train_loader.dataset.resample()
+            # if hasattr(self.train_loader.dataset, 'resample'):
+            #     if self.train_loader.dataset.resample_epoch and epoch > start_epoch:
+            #         self.train_loader.dataset.resample()
 
             # Train epoch
             train_metrics = self.train_epoch()
@@ -412,6 +587,13 @@ class ContrastiveTrainer:
             self.save_checkpoint('last.pt', {**train_metrics, **val_metrics})
 
         print("Contrastive training completed!")
+
+        # Generate and save diagnostic plots
+        if self.diagnostics.enabled:
+            print("\nGenerating diagnostic plots...")
+            self.diagnostics.plot_training_curves()
+            self.diagnostics.export_summary()
+
         return self.history
 
     def save_checkpoint(self, filename: str, metrics: Dict[str, float]):

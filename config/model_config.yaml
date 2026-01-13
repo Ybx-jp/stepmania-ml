@@ -34,7 +34,7 @@ classifier:
   # Architecture options
   fusion_type: "late"  # late
   pooling_type: "mean_max"  # attention, mean_max
-  head_type: "classification"  # classification (reverted from ordinal)
+  head_type: "classification"  # classification
   classifier_hidden_dim: 64 # Add hidden layer before classification
 
   # Groove radar features for difficulty prediction and contrastive learning
@@ -44,7 +44,7 @@ classifier:
   radar_dropout: 0.3
 
   # Projection head for contrastive learning (optional)
-  use_projection_head: false  # Enable for contrastive training
+  use_projection_head: true  # Enable for contrastive training
   projection_dim: 128         # Embedding dimension for contrastive loss
 
 # Diffusion generative model
@@ -80,7 +80,7 @@ training:
   batch_size: 128
   learning_rate: 0.0001
   num_classes: 4  # Difficulty names: Beginner, Easy, Medium, Hard (Challenge folded into Hard)
-  num_epochs: 15
+  num_epochs: 5
   early_stopping_patience: 5
   gradient_clip_norm: 1.0
 

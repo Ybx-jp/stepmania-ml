@@ -11,7 +11,7 @@ Architecture:
 
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 
 from .components.encoders import AudioEncoder, ChartEncoder
 from .components.fusion import LateFusionModule
@@ -273,6 +273,37 @@ class LateFusionClassifier(nn.Module):
             'pooled_features': pooled_features
         }
 
+    def get_gradient_norms_by_module(self) -> Dict[str, float]:
+        """
+        Compute gradient norms for each major module.
+
+        Returns:
+            Dict mapping module name to gradient norm
+        """
+        modules = {
+            'audio_encoder': self.audio_encoder,
+            'chart_encoder': self.chart_encoder,
+            'fusion_module': self.fusion_module,
+            'backbone': self.backbone,
+            'pooling': self.pooling,
+            'classifier_head': self.classifier_head,
+        }
+
+        if self.use_projection_head:
+            modules['projection_head'] = self.projection_head
+        if self.use_groove_radar:
+            modules['radar_mlp'] = self.radar_mlp
+
+        norms = {}
+        for name, module in modules.items():
+            grad_norm = 0.0
+            for p in module.parameters():
+                if p.grad is not None:
+                    grad_norm += p.grad.norm().item() ** 2
+            norms[name] = grad_norm ** 0.5
+
+        return norms
+
     @classmethod
     def from_config_file(cls, config_path: str):
         """
@@ -291,3 +322,110 @@ class LateFusionClassifier(nn.Module):
         # Extract classifier config
         classifier_config = config.get('classifier', config)
         return cls(classifier_config)
+
+    @classmethod
+    def from_pretrained(cls, checkpoint_path: str, config: Dict,
+                       freeze_backbone: bool = False,
+                       selective_freeze: Optional[List[str]] = None,
+                       device: str = 'cpu'):
+        """
+        Load pretrained classifier weights for contrastive training.
+
+        This method:
+        1. Creates model with current config (may have projection head, etc.)
+        2. Loads compatible weights from pretrained checkpoint (strict=False)
+        3. Optionally freezes backbone for feature extraction
+        4. Returns model ready for contrastive training
+
+        Args:
+            checkpoint_path: Path to pretrained checkpoint (.pt file)
+            config: Current model config (may differ from pretrained)
+            freeze_backbone: If True, freeze encoder/fusion/backbone layers
+            selective_freeze: List of module names to freeze (if provided, overrides freeze_backbone)
+            device: Device to load model on
+
+        Returns:
+            LateFusionClassifier with pretrained weights loaded
+
+        Example:
+            >>> config = {...}  # With use_projection_head=True
+            >>> model = LateFusionClassifier.from_pretrained(
+            ...     'models/classifier/best.pt',
+            ...     config=config,
+            ...     freeze_backbone=False
+            ... )
+        """
+        # Load checkpoint
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+
+        # Create model with current config
+        model = cls(config)
+
+        # Load pretrained weights (strict=False allows missing params)
+        pretrained_state = checkpoint['model_state_dict']
+
+        # Filter out classifier_head if dimensions don't match
+        # (happens when groove radar is enabled in current but not in pretrained)
+        filtered_state = {}
+        skipped_keys = []
+        for key, value in pretrained_state.items():
+            # Skip classifier_head if dimensions mismatch
+            if key.startswith('classifier_head'):
+                if key in model.state_dict():
+                    current_shape = model.state_dict()[key].shape
+                    pretrained_shape = value.shape
+                    if current_shape != pretrained_shape:
+                        skipped_keys.append(f"{key} (shape: {pretrained_shape} → {current_shape})")
+                        continue
+            filtered_state[key] = value
+
+        missing_keys, unexpected_keys = model.load_state_dict(
+            filtered_state, strict=False
+        )
+
+        # Report what was loaded
+        print(f"Loaded pretrained weights from {checkpoint_path}")
+        print(f"  Loaded: {len(filtered_state)} parameters")
+        if skipped_keys:
+            print(f"  Skipped (dimension mismatch): {len(skipped_keys)} parameters")
+            for key in skipped_keys[:3]:
+                print(f"    {key}")
+        if missing_keys:
+            print(f"  Missing (randomly initialized): {len(missing_keys)} parameters")
+            print(f"    Examples: {missing_keys[:3]}")
+        if unexpected_keys:
+            print(f"  Unexpected (ignored): {len(unexpected_keys)} parameters")
+
+        # Optionally freeze modules
+        if selective_freeze:
+            # Selective freeze: freeze only specified modules
+            print(f"  Applying selective freeze: {selective_freeze}")
+            for name, param in model.named_parameters():
+                for module in selective_freeze:
+                    if name.startswith(module):
+                        param.requires_grad = False
+                        break
+
+            trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in model.parameters())
+            print(f"  Selectively frozen: {total - trainable:,} / {total:,} parameters")
+
+        elif freeze_backbone:
+            # Legacy freeze_backbone: freeze encoder/fusion/backbone/pooling
+            frozen_modules = [
+                'audio_encoder', 'chart_encoder', 'fusion_module',
+                'backbone', 'pooling'
+            ]
+            for name, param in model.named_parameters():
+                for module in frozen_modules:
+                    if name.startswith(module):
+                        param.requires_grad = False
+
+            trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in model.parameters())
+            print(f"  Frozen backbone: {total - trainable:,} / {total:,} parameters")
+
+        # Move model to device
+        model = model.to(device)
+
+        return model
