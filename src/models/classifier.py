@@ -67,30 +67,17 @@ class LateFusionClassifier(nn.Module):
             hidden_dim=config['chart_encoder']['hidden_dim']        )
 
         # Late fusion module
+        # Fusion module - only 'late' fusion is currently supported
         fusion_type = config.get('fusion_type', 'late')
-        if fusion_type == 'late':
-            self.fusion_module = LateFusionModule(
-                audio_dim=config['audio_encoder']['hidden_dim'],
-                chart_dim=config['chart_encoder']['hidden_dim'],
-                fusion_dim=config['fusion_dim'],
-                dropout=config.get('fusion_dropout', 0.1)
-            )
-        elif fusion_type == 'gated':
-            self.fusion_module = GatedFusionModule(
-                audio_dim=config['audio_encoder']['hidden_dim'],
-                chart_dim=config['chart_encoder']['hidden_dim'],
-                fusion_dim=config['fusion_dim'],
-                dropout=config.get('fusion_dropout', 0.1)
-            )
-        elif fusion_type == 'additive':
-            self.fusion_module = AdditiveFusionModule(
-                audio_dim=config['audio_encoder']['hidden_dim'],
-                chart_dim=config['chart_encoder']['hidden_dim'],
-                fusion_dim=config['fusion_dim'],
-                dropout=config.get('fusion_dropout', 0.1)
-            )
-        else:
-            raise ValueError(f"Unknown fusion type: {fusion_type}")
+        if fusion_type != 'late':
+            raise ValueError(f"Only 'late' fusion is supported, got: {fusion_type}")
+
+        self.fusion_module = LateFusionModule(
+            audio_dim=config['audio_encoder']['hidden_dim'],
+            chart_dim=config['chart_encoder']['hidden_dim'],
+            fusion_dim=config['fusion_dim'],
+            dropout=config.get('fusion_dropout', 0.1)
+        )
 
         # Conv backbone for temporal reasoning
         self.backbone = Conv1DBackbone(
