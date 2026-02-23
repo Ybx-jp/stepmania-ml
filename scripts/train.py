@@ -77,6 +77,8 @@ def parse_args():
                        help='Model type to train (default: classifier)')
     parser.add_argument('--seed', type=int, default=42,
                        help='Random seed for reproducibility')
+    parser.add_argument('--epochs', type=int, default=None,
+                       help='Number of training epochs (overrides config)')
 
     return parser.parse_args()
 
@@ -309,6 +311,11 @@ def main():
 
     print(f"Checkpoint directory: {checkpoint_dir}")
 
+    # Override num_epochs from CLI if provided
+    if args.epochs is not None:
+        config['training']['num_epochs'] = args.epochs
+        print(f"Overriding num_epochs to {args.epochs}")
+
     # Run training (optionally within MLflow context)
     def run_training():
         # Log params to MLflow
@@ -348,17 +355,20 @@ def main():
         print("Starting training...")
         history = trainer.fit()
 
+        # Get best val loss from checkpoint callback
+        best_val_loss = min(history['val_loss']) if history['val_loss'] else float('inf')
+
         # Log best model to MLflow
         if mlflow_available:
             best_checkpoint = os.path.join(checkpoint_dir, 'best_val_loss.pt')
             if os.path.exists(best_checkpoint):
                 mlflow.pytorch.log_model(model, "best_model")
             mlflow.log_metrics({
-                'best_val_loss': trainer.best_val_loss,
+                'best_val_loss': best_val_loss,
             })
 
         print("Training completed!")
-        print(f"Best validation loss: {trainer.best_val_loss:.4f}")
+        print(f"Best validation loss: {best_val_loss:.4f}")
         print(f"Checkpoints saved to: {checkpoint_dir}")
 
         return history

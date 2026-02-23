@@ -228,7 +228,7 @@ class Trainer(BaseTrainer):
             # Track metrics
             with torch.no_grad():
                 total_loss += loss.item()
-                predictions = self.model.predict_class_from_logits(logits)
+                predictions = self.model.predict_class_from_logits(logits) if hasattr(self.model, 'predict_class_from_logits') else logits.argmax(dim=1)
                 correct += (predictions == targets).sum().item()
                 total += targets.size(0)
 
@@ -282,7 +282,7 @@ class Trainer(BaseTrainer):
 
                 # Track metrics
                 total_loss += loss.item()
-                predictions = self.model.predict_class_from_logits(logits)
+                predictions = self.model.predict_class_from_logits(logits) if hasattr(self.model, 'predict_class_from_logits') else logits.argmax(dim=1)
 
                 # Update progress bar
                 progress_bar.set_postfix({
