@@ -44,7 +44,8 @@ class BaseTrainer:
                  use_amp: Optional[bool] = None,
                  accumulation_steps: int = 1,
                  max_grad_norm: float = 1.0,
-                 callbacks: Optional[List] = None):
+                 callbacks: Optional[List] = None,
+                 mlflow_logging: bool = False):
         """
         Initialize base trainer.
 
@@ -56,6 +57,7 @@ class BaseTrainer:
             accumulation_steps: Number of batches to accumulate gradients over
             max_grad_norm: Maximum gradient norm for clipping
             callbacks: List of callback objects for extensibility
+            mlflow_logging: If True, log epoch metrics to MLflow
         """
         # Device configuration
         if device is None:
@@ -84,6 +86,9 @@ class BaseTrainer:
 
         # Callbacks for extensibility
         self.callbacks = callbacks or []
+
+        # MLflow logging
+        self.mlflow_logging = mlflow_logging
 
         # Training history
         self.history = {
@@ -278,6 +283,19 @@ class BaseTrainer:
             self.history['train_acc'].append(train_metrics['accuracy'])
             self.history['val_loss'].append(val_metrics['loss'])
             self.history['val_acc'].append(val_metrics['accuracy'])
+
+            # Log to MLflow if enabled
+            if self.mlflow_logging:
+                try:
+                    import mlflow
+                    mlflow.log_metrics({
+                        'train_loss': train_metrics['loss'],
+                        'train_acc': train_metrics['accuracy'],
+                        'val_loss': val_metrics['loss'],
+                        'val_acc': val_metrics['accuracy'],
+                    }, step=epoch)
+                except Exception:
+                    pass  # Don't fail training if MLflow logging fails
 
             # Notify callbacks that epoch has ended
             self._call_callbacks('on_epoch_end', epoch=epoch,

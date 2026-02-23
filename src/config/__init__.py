@@ -9,6 +9,7 @@ from .paths import (
     get_checkpoint_path,
     list_experiments
 )
+from .experiment import ExperimentConfig
 
 __all__ = [
     'PROJECT_ROOT',
@@ -18,4 +19,5 @@ __all__ = [
     'CACHE_DIR',
     'get_checkpoint_path',
     'list_experiments',
+    'ExperimentConfig',
 ]

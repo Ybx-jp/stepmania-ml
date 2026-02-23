@@ -17,7 +17,8 @@ def create_data_splits(chart_files: List[str],
                       train_ratio: float = 0.7,
                       val_ratio: float = 0.15,
                       test_ratio: float = 0.15,
-                      random_state: int = 42) -> Tuple[List[str], List[str], List[str]]:
+                      random_state: int = 42,
+                      stratify_labels: Optional[List] = None) -> Tuple[List[str], List[str], List[str]]:
     """
     Create train/validation/test splits from chart files.
 
@@ -27,6 +28,9 @@ def create_data_splits(chart_files: List[str],
         val_ratio: Proportion for validation set
         test_ratio: Proportion for test set
         random_state: Random seed for reproducible splits
+        stratify_labels: Optional list of labels for stratified splitting.
+            Must be same length as chart_files. When provided, splits
+            maintain class proportions across train/val/test sets.
 
     Returns:
         Tuple of (train_files, val_files, test_files)
@@ -38,17 +42,27 @@ def create_data_splits(chart_files: List[str],
     train_files, temp_files = train_test_split(
         chart_files,
         test_size=(val_ratio + test_ratio),
-        random_state=random_state
+        random_state=random_state,
+        stratify=stratify_labels
     )
+
+    # For second split, extract corresponding stratify labels if provided
+    if stratify_labels is not None:
+        # Build index map to get labels for temp_files
+        file_to_label = dict(zip(chart_files, stratify_labels))
+        temp_labels = [file_to_label[f] for f in temp_files]
+    else:
+        temp_labels = None
 
     # Second split: val vs test
     val_files, test_files = train_test_split(
         temp_files,
         test_size=(test_ratio / (val_ratio + test_ratio)),
-        random_state=random_state
+        random_state=random_state,
+        stratify=temp_labels
     )
 
-    print(f"Data splits created:")
+    print(f"Data splits created{' (stratified)' if stratify_labels is not None else ''}:")
     print(f"  Train: {len(train_files)} files ({train_ratio:.1%})")
     print(f"  Val:   {len(val_files)} files ({val_ratio:.1%})")
     print(f"  Test:  {len(test_files)} files ({test_ratio:.1%})")

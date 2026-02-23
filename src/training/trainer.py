@@ -41,7 +41,8 @@ class Trainer(BaseTrainer):
                  device: Optional[torch.device] = None,
                  use_amp: Optional[bool] = None,
                  accumulation_steps: int = 1,
-                 callbacks: Optional[List] = None):
+                 callbacks: Optional[List] = None,
+                 mlflow_logging: bool = False):
         """
         Initialize trainer.
 
@@ -56,6 +57,7 @@ class Trainer(BaseTrainer):
             use_amp: Enable automatic mixed precision (default: True if CUDA available)
             accumulation_steps: Number of batches to accumulate gradients over
             callbacks: List of callback objects (if None, creates default callbacks)
+            mlflow_logging: If True, log epoch metrics to MLflow
         """
         # Get max grad norm from config
         max_grad_norm = config.get('gradient_clip_norm', 1.0)
@@ -68,7 +70,8 @@ class Trainer(BaseTrainer):
             use_amp=use_amp,
             accumulation_steps=accumulation_steps,
             max_grad_norm=max_grad_norm,
-            callbacks=callbacks
+            callbacks=callbacks,
+            mlflow_logging=mlflow_logging,
         )
 
         # Store data loaders
