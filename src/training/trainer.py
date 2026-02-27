@@ -18,6 +18,7 @@ from tqdm import tqdm
 
 from .base_trainer import BaseTrainer
 from .callbacks import CheckpointCallback, LRSchedulerCallback
+from src.losses.ordinal import encode_ordinal_targets
 
 # Difficulty name constants for display
 DIFFICULTY_NAMES = ['Beginner', 'Easy', 'Medium', 'Hard']
@@ -82,18 +83,27 @@ class Trainer(BaseTrainer):
 
         # Classification settings
         self.num_classes = config.get('num_classes', 4)  # 4 difficulty classes
-        self.head_type = 'classification'  # Always use classification head
+        self.head_type = getattr(model, 'head_type', 'classification')
+        self._encode_ordinal_targets = encode_ordinal_targets
 
-        # Compute class weights if enabled
-        class_weights = None
-        if config.get('use_class_weights', False):
-            class_weights = self._compute_class_weights(train_loader.dataset)
-            if class_weights is not None:
-                print(f"Using class weights: {class_weights.tolist()}")
-
-        # Loss function - CrossEntropy for classification
-        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
-        print(f"Using classification with CrossEntropyLoss ({self.num_classes} classes: {DIFFICULTY_NAMES})")
+        if self.head_type == 'ordinal':
+            # Ordinal regression: BCEWithLogitsLoss on cumulative logits
+            pos_weight = self._compute_ordinal_pos_weight(train_loader.dataset)
+            if pos_weight is not None:
+                pos_weight = pos_weight.to(self.device)
+            self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            print(f"Using ordinal regression with BCEWithLogitsLoss ({self.num_classes} classes: {DIFFICULTY_NAMES})")
+            if pos_weight is not None:
+                print(f"  pos_weight per threshold: {pos_weight.tolist()}")
+        else:
+            # Standard classification: CrossEntropyLoss
+            class_weights = None
+            if config.get('use_class_weights', False):
+                class_weights = self._compute_class_weights(train_loader.dataset)
+                if class_weights is not None:
+                    print(f"Using class weights: {class_weights.tolist()}")
+            self.criterion = nn.CrossEntropyLoss(weight=class_weights)
+            print(f"Using classification with CrossEntropyLoss ({self.num_classes} classes: {DIFFICULTY_NAMES})")
 
         # Scheduler - ReduceLROnPlateau monitoring val_loss
         scheduler = ReduceLROnPlateau(
@@ -126,6 +136,41 @@ class Trainer(BaseTrainer):
         # Collect data info from datasets for checkpoint logging
         self.data_info = self._collect_data_info()
         self.groove_radar_summary = self._compute_groove_radar_summary()
+
+    def _compute_ordinal_pos_weight(self, dataset) -> Optional[torch.Tensor]:
+        """
+        Compute per-threshold pos_weight for BCEWithLogitsLoss from class distribution.
+
+        For threshold k: pos_weight[k] = count(label <= k) / count(label > k)
+        This handles class imbalance analogously to class weights in CrossEntropyLoss.
+
+        Returns:
+            Tensor of shape (num_classes - 1,) with pos_weight per threshold, or None
+        """
+        try:
+            if hasattr(dataset, 'valid_samples'):
+                labels = [s['difficulty_class'] for s in dataset.valid_samples]
+            else:
+                return None
+
+            import numpy as np
+            labels = np.array(labels)
+            num_thresholds = self.num_classes - 1
+            pos_weights = []
+
+            for k in range(num_thresholds):
+                # For threshold k: positive means label > k
+                n_positive = (labels > k).sum()
+                n_negative = (labels <= k).sum()
+                if n_positive > 0:
+                    pos_weights.append(n_negative / n_positive)
+                else:
+                    pos_weights.append(1.0)
+
+            return torch.tensor(pos_weights, dtype=torch.float32)
+        except Exception as e:
+            print(f"Warning: Could not compute ordinal pos_weight: {e}")
+            return None
 
     def _compute_groove_radar_summary(self) -> Optional[Dict]:
         """Compute mean groove radar values per difficulty class."""
@@ -220,7 +265,11 @@ class Trainer(BaseTrainer):
             # Forward pass with AMP
             with autocast(enabled=self.use_amp):
                 logits = self.model(audio, chart, mask, groove_radar=groove_radar)
-                loss = self.criterion(logits, targets)
+                if self.head_type == 'ordinal':
+                    ordinal_targets = self._encode_ordinal_targets(targets, self.num_classes)
+                    loss = self.criterion(logits, ordinal_targets)
+                else:
+                    loss = self.criterion(logits, targets)
 
             # Backward pass (handled by BaseTrainer with gradient accumulation)
             self._optimizer_step(loss, batch_idx)
@@ -278,7 +327,11 @@ class Trainer(BaseTrainer):
                 # Forward pass with AMP
                 with autocast(enabled=self.use_amp):
                     logits = self.model(audio, chart, mask, groove_radar=groove_radar)
-                    loss = self.criterion(logits, targets)
+                    if self.head_type == 'ordinal':
+                        ordinal_targets = self._encode_ordinal_targets(targets, self.num_classes)
+                        loss = self.criterion(logits, ordinal_targets)
+                    else:
+                        loss = self.criterion(logits, targets)
 
                 # Track metrics
                 total_loss += loss.item()

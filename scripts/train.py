@@ -79,6 +79,9 @@ def parse_args():
                        help='Random seed for reproducibility')
     parser.add_argument('--epochs', type=int, default=None,
                        help='Number of training epochs (overrides config)')
+    parser.add_argument('--head_type', type=str, default=None,
+                       choices=['classification', 'ordinal'],
+                       help='Head type for classifier (default: from config)')
 
     return parser.parse_args()
 
@@ -275,6 +278,14 @@ def main():
         mlflow_available = False
         print("MLflow not installed, skipping experiment tracking")
 
+    # Override head_type from CLI if provided (must happen before model creation)
+    if args.head_type is not None:
+        if args.model_type != 'classifier':
+            print(f"Warning: --head_type is only applicable to classifier models, ignoring for {args.model_type}")
+        else:
+            config['classifier']['head_type'] = args.head_type
+            print(f"Overriding head_type to {args.head_type}")
+
     # Create datasets and data loaders
     print("Creating datasets...")
     train_loader, val_loader = create_data_loaders(
@@ -322,6 +333,7 @@ def main():
         if mlflow_available:
             mlflow.log_params({
                 'model_type': args.model_type,
+                'head_type': config['classifier'].get('head_type', 'classification'),
                 'seed': args.seed,
                 'batch_size': config['training']['batch_size'],
                 'learning_rate': config['training']['learning_rate'],

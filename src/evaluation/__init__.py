@@ -137,8 +137,18 @@ def load_and_evaluate(model: nn.Module,
             if isinstance(logits, dict):
                 logits = logits['logits']
 
-            probs = torch.softmax(logits, dim=1)
-            preds = logits.argmax(dim=1)
+            # Ordinal model: cumulative logits → class predictions & probabilities
+            if hasattr(model, 'head_type') and model.head_type == 'ordinal':
+                preds = model.predict_class_from_logits(logits)
+                # Convert cumulative logits to class probabilities via sigmoid + diff
+                cumulative_probs = torch.sigmoid(logits)  # P(Y > k)
+                ones = torch.ones(logits.shape[0], 1, device=logits.device)
+                zeros = torch.zeros(logits.shape[0], 1, device=logits.device)
+                extended = torch.cat([ones, cumulative_probs, zeros], dim=1)
+                probs = torch.clamp(extended[:, :-1] - extended[:, 1:], min=1e-8)
+            else:
+                probs = torch.softmax(logits, dim=1)
+                preds = logits.argmax(dim=1)
 
             all_preds.append(preds.cpu().numpy())
             all_targets.append(targets.cpu().numpy())

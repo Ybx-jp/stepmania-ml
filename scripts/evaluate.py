@@ -74,6 +74,9 @@ def parse_args():
                        help='Number of dataloader workers')
     parser.add_argument('--seed', type=int, default=42,
                        help='Random seed (must match training seed for same splits)')
+    parser.add_argument('--head_type', type=str, default=None,
+                       choices=['classification', 'ordinal'],
+                       help='Head type for classifier (default: from config)')
 
     return parser.parse_args()
 
@@ -112,6 +115,10 @@ def main():
     if os.path.exists(data_config_path):
         with open(data_config_path, 'r') as f:
             data_config = yaml.safe_load(f)
+
+    # Override head_type from CLI if provided
+    if args.head_type is not None:
+        config['classifier']['head_type'] = args.head_type
 
     # Create output directory
     output_dir = Path(args.output_dir)

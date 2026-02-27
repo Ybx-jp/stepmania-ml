@@ -34,7 +34,7 @@ classifier:
   # Architecture options
   fusion_type: "late"  # late
   pooling_type: "mean_max"  # attention, mean_max
-  head_type: "classification"  # classification
+  head_type: "classification"  # classification, ordinal
   classifier_hidden_dim: 64 # Add hidden layer before classification
 
   # Groove radar features for difficulty prediction and contrastive learning
