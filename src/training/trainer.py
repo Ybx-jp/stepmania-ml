@@ -88,13 +88,9 @@ class Trainer(BaseTrainer):
 
         if self.head_type == 'ordinal':
             # Ordinal regression: BCEWithLogitsLoss on cumulative logits
-            pos_weight = self._compute_ordinal_pos_weight(train_loader.dataset)
-            if pos_weight is not None:
-                pos_weight = pos_weight.to(self.device)
-            self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            # No pos_weight — asymmetric weighting causes middle-class collapse
+            self.criterion = nn.BCEWithLogitsLoss()
             print(f"Using ordinal regression with BCEWithLogitsLoss ({self.num_classes} classes: {DIFFICULTY_NAMES})")
-            if pos_weight is not None:
-                print(f"  pos_weight per threshold: {pos_weight.tolist()}")
         else:
             # Standard classification: CrossEntropyLoss
             class_weights = None

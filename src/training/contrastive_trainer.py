@@ -22,6 +22,7 @@ from .callbacks import (CheckpointCallback, LRSchedulerCallback,
                         WarmupScheduleCallback, SelectiveUnfreezeCallback,
                         DiagnosticsCallback)
 from ..losses.contrastive import create_contrastive_loss
+from ..losses.ordinal import encode_ordinal_targets
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 # Difficulty name constants for display
@@ -97,20 +98,27 @@ class ContrastiveTrainer(BaseTrainer):
 
         # Classification settings
         self.num_classes = config.get('num_classes', 4)
+        self.head_type = getattr(model, 'head_type', 'classification')
+        self._encode_ordinal_targets = encode_ordinal_targets
 
-        # Compute class weights if enabled
-        class_weights = None
-        if config.get('use_class_weights', False):
-            # Access base dataset through contrastive wrapper
-            dataset = train_loader.dataset
-            if hasattr(dataset, 'base_dataset'):
-                dataset = dataset.base_dataset
-            class_weights = self._compute_class_weights(dataset)
-            if class_weights is not None:
-                print(f"Using class weights: {class_weights.tolist()}")
+        # Access base dataset through contrastive wrapper
+        dataset = train_loader.dataset
+        if hasattr(dataset, 'base_dataset'):
+            dataset = dataset.base_dataset
 
-        # Classification loss
-        self.classification_criterion = nn.CrossEntropyLoss(weight=class_weights)
+        if self.head_type == 'ordinal':
+            # Ordinal regression: BCEWithLogitsLoss on cumulative logits
+            # No pos_weight — asymmetric weighting causes middle-class collapse
+            self.classification_criterion = nn.BCEWithLogitsLoss()
+            print(f"Using ordinal regression with BCEWithLogitsLoss ({self.num_classes} classes: {DIFFICULTY_NAMES})")
+        else:
+            # Standard classification: CrossEntropyLoss
+            class_weights = None
+            if config.get('use_class_weights', False):
+                class_weights = self._compute_class_weights(dataset)
+                if class_weights is not None:
+                    print(f"Using class weights: {class_weights.tolist()}")
+            self.classification_criterion = nn.CrossEntropyLoss(weight=class_weights)
 
         # Contrastive loss
         contrastive_type = config.get('contrastive_loss', 'triplet_radar')
@@ -196,6 +204,36 @@ class ContrastiveTrainer(BaseTrainer):
         self.history['train_cls_loss'] = []
         self.history['train_contrastive_loss'] = []
 
+    def _compute_ordinal_pos_weight(self, dataset) -> Optional[torch.Tensor]:
+        """
+        Compute per-threshold pos_weight for BCEWithLogitsLoss from class distribution.
+
+        For threshold k: pos_weight[k] = count(label <= k) / count(label > k)
+        """
+        try:
+            if hasattr(dataset, 'valid_samples'):
+                labels = [s['difficulty_class'] for s in dataset.valid_samples]
+            else:
+                return None
+
+            import numpy as np
+            labels = np.array(labels)
+            num_thresholds = self.num_classes - 1
+            pos_weights = []
+
+            for k in range(num_thresholds):
+                n_positive = (labels > k).sum()
+                n_negative = (labels <= k).sum()
+                if n_positive > 0:
+                    pos_weights.append(n_negative / n_positive)
+                else:
+                    pos_weights.append(1.0)
+
+            return torch.tensor(pos_weights, dtype=torch.float32)
+        except Exception as e:
+            print(f"Warning: Could not compute ordinal pos_weight: {e}")
+            return None
+
     def _extract_triplet_batch(self, batch: Dict) -> Dict[str, torch.Tensor]:
         """Extract and organize triplet batch data."""
         result = {}
@@ -262,9 +300,17 @@ class ContrastiveTrainer(BaseTrainer):
                 )
 
                 # Classification loss (on anchor only)
-                cls_loss = self.classification_criterion(
-                    anchor_out['logits'], data['anchor_difficulty']
-                )
+                if self.head_type == 'ordinal':
+                    ordinal_targets = self._encode_ordinal_targets(
+                        data['anchor_difficulty'], self.num_classes
+                    )
+                    cls_loss = self.classification_criterion(
+                        anchor_out['logits'], ordinal_targets
+                    )
+                else:
+                    cls_loss = self.classification_criterion(
+                        anchor_out['logits'], data['anchor_difficulty']
+                    )
 
                 # Contrastive loss
                 contrastive_loss = self.contrastive_criterion(
@@ -354,7 +400,11 @@ class ContrastiveTrainer(BaseTrainer):
                         logits = output
 
                     # Compute loss
-                    loss = self.classification_criterion(logits, targets)
+                    if self.head_type == 'ordinal':
+                        ordinal_targets = self._encode_ordinal_targets(targets, self.num_classes)
+                        loss = self.classification_criterion(logits, ordinal_targets)
+                    else:
+                        loss = self.classification_criterion(logits, targets)
 
                 # Track metrics
                 total_loss += loss.item()
