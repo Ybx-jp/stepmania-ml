@@ -6,11 +6,12 @@ Architecture:
 - Late fusion after temporal encoding
 - Mask-aware pooling for variable sequence lengths
 - Classification head for difficulty prediction
+- Optional projection head for contrastive learning
 """
 
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 
 from .components.encoders import AudioEncoder, ChartEncoder
 from .components.fusion import LateFusionModule
@@ -66,30 +67,17 @@ class LateFusionClassifier(nn.Module):
             hidden_dim=config['chart_encoder']['hidden_dim']        )
 
         # Late fusion module
+        # Fusion module - only 'late' fusion is currently supported
         fusion_type = config.get('fusion_type', 'late')
-        if fusion_type == 'late':
-            self.fusion_module = LateFusionModule(
-                audio_dim=config['audio_encoder']['hidden_dim'],
-                chart_dim=config['chart_encoder']['hidden_dim'],
-                fusion_dim=config['fusion_dim'],
-                dropout=config.get('fusion_dropout', 0.1)
-            )
-        elif fusion_type == 'gated':
-            self.fusion_module = GatedFusionModule(
-                audio_dim=config['audio_encoder']['hidden_dim'],
-                chart_dim=config['chart_encoder']['hidden_dim'],
-                fusion_dim=config['fusion_dim'],
-                dropout=config.get('fusion_dropout', 0.1)
-            )
-        elif fusion_type == 'additive':
-            self.fusion_module = AdditiveFusionModule(
-                audio_dim=config['audio_encoder']['hidden_dim'],
-                chart_dim=config['chart_encoder']['hidden_dim'],
-                fusion_dim=config['fusion_dim'],
-                dropout=config.get('fusion_dropout', 0.1)
-            )
-        else:
-            raise ValueError(f"Unknown fusion type: {fusion_type}")
+        if fusion_type != 'late':
+            raise ValueError(f"Only 'late' fusion is supported, got: {fusion_type}")
+
+        self.fusion_module = LateFusionModule(
+            audio_dim=config['audio_encoder']['hidden_dim'],
+            chart_dim=config['chart_encoder']['hidden_dim'],
+            fusion_dim=config['fusion_dim'],
+            dropout=config.get('fusion_dropout', 0.1)
+        )
 
         # Conv backbone for temporal reasoning
         self.backbone = Conv1DBackbone(
@@ -117,18 +105,32 @@ class LateFusionClassifier(nn.Module):
         else:
             raise ValueError(f"Unknown pooling type: {pooling_type}")
 
-        # Chart statistics branch (optional)
-        self.use_chart_stats = config.get('use_chart_stats', False)
-        if self.use_chart_stats:
-            stats_dim = config.get('chart_stats_dim', 5)
-            stats_hidden = config.get('stats_hidden_dim', 32)
-            self.stats_mlp = nn.Sequential(
-                nn.Linear(stats_dim, stats_hidden),
+        # Groove radar branch (optional, replaces chart_stats)
+        # Uses 5 groove radar values: stream, voltage, air, freeze, chaos
+        self.use_groove_radar = config.get('use_groove_radar', False)
+        if self.use_groove_radar:
+            radar_dim = 5  # Fixed: stream, voltage, air, freeze, chaos
+            radar_hidden = config.get('radar_hidden_dim', 32)
+            self.radar_mlp = nn.Sequential(
+                nn.Linear(radar_dim, radar_hidden),
                 nn.ReLU(),
-                nn.Linear(stats_hidden, stats_hidden),
-                nn.Dropout(p=config.get('stats_dropout', 0.5))
+                nn.Linear(radar_hidden, radar_hidden),
+                nn.Dropout(p=config.get('radar_dropout', 0.3))
             )
-            pooled_dim += stats_hidden  # Expand classifier input dim
+            pooled_dim += radar_hidden  # Expand classifier input dim
+
+        # Store pooled_dim for projection head
+        self._pooled_dim = pooled_dim
+
+        # Projection head for contrastive learning (optional)
+        self.use_projection_head = config.get('use_projection_head', False)
+        if self.use_projection_head:
+            projection_dim = config.get('projection_dim', 128)
+            self.projection_head = nn.Sequential(
+                nn.Linear(pooled_dim, projection_dim),
+                nn.ReLU(),
+                nn.Linear(projection_dim, projection_dim)
+            )
 
         # Classification/regression head (swappable)
         self.head_type = config.get('head_type', 'classification')
@@ -144,7 +146,8 @@ class LateFusionClassifier(nn.Module):
                 input_dim=pooled_dim,
                 num_classes=config['num_classes'],
                 hidden_dim=config.get('classifier_hidden_dim', None),
-                dropout=config['classifier_dropout']
+                dropout=config['classifier_dropout'],
+                multi_output=config.get('ordinal_multi_output', False),
             )
         else:
             raise ValueError(f"Unknown head_type: {self.head_type}")
@@ -153,7 +156,8 @@ class LateFusionClassifier(nn.Module):
                 audio: torch.Tensor,
                 chart: torch.Tensor,
                 mask: torch.Tensor,
-                chart_stats: Optional[torch.Tensor] = None) -> torch.Tensor:
+                groove_radar: Optional[torch.Tensor] = None,
+                return_embeddings: bool = False) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Forward pass through the complete model.
 
@@ -161,10 +165,12 @@ class LateFusionClassifier(nn.Module):
             audio: Audio features (B, L, audio_features_dim)
             chart: Chart sequences (B, L, chart_sequence_dim)
             mask: Attention mask (B, L) where 1 = valid, 0 = padding
-            chart_stats: Optional chart statistics (B, stats_dim) for difficulty features
+            groove_radar: Optional groove radar values (B, 5) for classification features
+            return_embeddings: If True, return dict with logits and embeddings for contrastive learning
 
         Returns:
-            Classification logits (B, num_classes)
+            If return_embeddings=False: Classification logits (B, num_classes)
+            If return_embeddings=True: Dict with 'logits' and 'embeddings' keys
         """
         # Separate encoding for each modality
         audio_encoded = self.audio_encoder(audio, mask)      # (B, L, audio_hidden_dim)
@@ -181,28 +187,39 @@ class LateFusionClassifier(nn.Module):
         # Mask-aware pooling to handle variable sequence lengths
         pooled_features = self.pooling(processed_features, mask)  # (B, pooled_dim)
 
-        # Concatenate chart statistics if enabled
-        if self.use_chart_stats and chart_stats is not None:
-            stats_features = self.stats_mlp(chart_stats)  # (B, stats_hidden)
-            pooled_features = torch.cat([pooled_features, stats_features], dim=-1)
+        # Concatenate groove radar features if enabled
+        if self.use_groove_radar and groove_radar is not None:
+            radar_features = self.radar_mlp(groove_radar)  # (B, radar_hidden)
+            pooled_features = torch.cat([pooled_features, radar_features], dim=-1)
 
         # Final classification/ordinal regression
         logits = self.classifier_head(pooled_features)
         # Note: For 'classification' head: (B, num_classes) class logits
         #       For 'ordinal' head: (B, num_classes-1) cumulative logits
 
+        if return_embeddings and self.use_projection_head:
+            embeddings = self.projection_head(pooled_features)
+            return {
+                'logits': logits,
+                'embeddings': embeddings
+            }
+
         return logits
 
-    def predict_class_from_logits(self, logits: torch.Tensor) -> torch.Tensor:
+    def predict_class_from_logits(self, logits: Union[torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
         """
         Get class predictions from forward() output.
 
         Args:
-            logits: Output from forward()
+            logits: Output from forward() - can be tensor or dict with 'logits' key
 
         Returns:
             Predicted class indices (B,) with values 0..num_classes-1
         """
+        # Handle dict output from contrastive mode
+        if isinstance(logits, dict):
+            logits = logits['logits']
+
         if self.head_type == 'ordinal':
             return OrdinalRegressionHead.logits_to_class(logits)
         else:
@@ -244,6 +261,37 @@ class LateFusionClassifier(nn.Module):
             'pooled_features': pooled_features
         }
 
+    def get_gradient_norms_by_module(self) -> Dict[str, float]:
+        """
+        Compute gradient norms for each major module.
+
+        Returns:
+            Dict mapping module name to gradient norm
+        """
+        modules = {
+            'audio_encoder': self.audio_encoder,
+            'chart_encoder': self.chart_encoder,
+            'fusion_module': self.fusion_module,
+            'backbone': self.backbone,
+            'pooling': self.pooling,
+            'classifier_head': self.classifier_head,
+        }
+
+        if self.use_projection_head:
+            modules['projection_head'] = self.projection_head
+        if self.use_groove_radar:
+            modules['radar_mlp'] = self.radar_mlp
+
+        norms = {}
+        for name, module in modules.items():
+            grad_norm = 0.0
+            for p in module.parameters():
+                if p.grad is not None:
+                    grad_norm += p.grad.norm().item() ** 2
+            norms[name] = grad_norm ** 0.5
+
+        return norms
+
     @classmethod
     def from_config_file(cls, config_path: str):
         """
@@ -262,3 +310,110 @@ class LateFusionClassifier(nn.Module):
         # Extract classifier config
         classifier_config = config.get('classifier', config)
         return cls(classifier_config)
+
+    @classmethod
+    def from_pretrained(cls, checkpoint_path: str, config: Dict,
+                       freeze_backbone: bool = False,
+                       selective_freeze: Optional[List[str]] = None,
+                       device: str = 'cpu'):
+        """
+        Load pretrained classifier weights for contrastive training.
+
+        This method:
+        1. Creates model with current config (may have projection head, etc.)
+        2. Loads compatible weights from pretrained checkpoint (strict=False)
+        3. Optionally freezes backbone for feature extraction
+        4. Returns model ready for contrastive training
+
+        Args:
+            checkpoint_path: Path to pretrained checkpoint (.pt file)
+            config: Current model config (may differ from pretrained)
+            freeze_backbone: If True, freeze encoder/fusion/backbone layers
+            selective_freeze: List of module names to freeze (if provided, overrides freeze_backbone)
+            device: Device to load model on
+
+        Returns:
+            LateFusionClassifier with pretrained weights loaded
+
+        Example:
+            >>> config = {...}  # With use_projection_head=True
+            >>> model = LateFusionClassifier.from_pretrained(
+            ...     'models/classifier/best.pt',
+            ...     config=config,
+            ...     freeze_backbone=False
+            ... )
+        """
+        # Load checkpoint
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+
+        # Create model with current config
+        model = cls(config)
+
+        # Load pretrained weights (strict=False allows missing params)
+        pretrained_state = checkpoint['model_state_dict']
+
+        # Filter out classifier_head if dimensions don't match
+        # (happens when groove radar is enabled in current but not in pretrained)
+        filtered_state = {}
+        skipped_keys = []
+        for key, value in pretrained_state.items():
+            # Skip classifier_head if dimensions mismatch
+            if key.startswith('classifier_head'):
+                if key in model.state_dict():
+                    current_shape = model.state_dict()[key].shape
+                    pretrained_shape = value.shape
+                    if current_shape != pretrained_shape:
+                        skipped_keys.append(f"{key} (shape: {pretrained_shape} → {current_shape})")
+                        continue
+            filtered_state[key] = value
+
+        missing_keys, unexpected_keys = model.load_state_dict(
+            filtered_state, strict=False
+        )
+
+        # Report what was loaded
+        print(f"Loaded pretrained weights from {checkpoint_path}")
+        print(f"  Loaded: {len(filtered_state)} parameters")
+        if skipped_keys:
+            print(f"  Skipped (dimension mismatch): {len(skipped_keys)} parameters")
+            for key in skipped_keys[:3]:
+                print(f"    {key}")
+        if missing_keys:
+            print(f"  Missing (randomly initialized): {len(missing_keys)} parameters")
+            print(f"    Examples: {missing_keys[:3]}")
+        if unexpected_keys:
+            print(f"  Unexpected (ignored): {len(unexpected_keys)} parameters")
+
+        # Optionally freeze modules
+        if selective_freeze:
+            # Selective freeze: freeze only specified modules
+            print(f"  Applying selective freeze: {selective_freeze}")
+            for name, param in model.named_parameters():
+                for module in selective_freeze:
+                    if name.startswith(module):
+                        param.requires_grad = False
+                        break
+
+            trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in model.parameters())
+            print(f"  Selectively frozen: {total - trainable:,} / {total:,} parameters")
+
+        elif freeze_backbone:
+            # Legacy freeze_backbone: freeze encoder/fusion/backbone/pooling
+            frozen_modules = [
+                'audio_encoder', 'chart_encoder', 'fusion_module',
+                'backbone', 'pooling'
+            ]
+            for name, param in model.named_parameters():
+                for module in frozen_modules:
+                    if name.startswith(module):
+                        param.requires_grad = False
+
+            trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in model.parameters())
+            print(f"  Frozen backbone: {total - trainable:,} / {total:,} parameters")
+
+        # Move model to device
+        model = model.to(device)
+
+        return model

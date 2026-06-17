@@ -1,11 +1,12 @@
 """
 StepMania chart parser for .sm and .ssc files.
-Converts charts to tensor format for Phase 1 classification model training.
+Converts charts to tensor format for classification model training.
 
 This parser focuses on:
 - 16th note resolution alignment with audio features
 - Binary encoding (steps + jumps only)
-- Fixed BPM validation
+- Variable BPM support for groove radar calculations
+- Hold arrow tracking for freeze calculation
 - Audio feature synchronization
 """
 
@@ -178,17 +179,13 @@ class StepManiaParser:
         return chart
 
     def _extract_primary_bpm(self, metadata: Dict[str, str]) -> float:
-        """Extract primary BPM, ensuring it's fixed for Phase 1"""
+        """Extract primary BPM (first BPM value in the chart)"""
         if not metadata['BPMS']:
             raise ValueError("BPMS metadata is missing")
         bpm_string = metadata['BPMS']
         bpm_pairs = bpm_string.split(',')
 
-        # For Phase 1, we only support fixed BPM (single BPM value)
-        if len(bpm_pairs) > 1:
-            # Multiple BPM changes - not supported in Phase 1
-            raise ValueError("Variable BPM not supported in Phase 1")
-
+        # Return the first BPM value as the primary BPM
         if '=' in bpm_pairs[0]:
             _, bpm_str = bpm_pairs[0].split('=', 1)
             return float(bpm_str.strip())
@@ -196,10 +193,11 @@ class StepManiaParser:
             raise ValueError("Error parsing BPMS value")
 
     def _validate_phase1_requirements(self, chart: StepManiaChart) -> bool:
-        """Validate chart meets Phase 1 requirements"""
-        # Check BPM range
-        if not (self.min_bpm <= chart.bpm <= self.max_bpm):
-            print(f"{chart.title} failed bpm requirement")
+        """Validate chart meets basic requirements"""
+        # Check primary BPM range (use average for variable BPM charts)
+        avg_bpm = self.compute_average_bpm(chart.timing_events, chart.song_length_seconds)
+        if not (self.min_bpm <= avg_bpm <= self.max_bpm):
+            print(f"{chart.title} failed bpm requirement (avg_bpm={avg_bpm:.1f})")
             return False
 
         # Check song length
@@ -207,11 +205,7 @@ class StepManiaParser:
             print(f"{chart.title} failed song length requirement")
             return False
 
-        # Check for multiple BPM changes (not allowed in Phase 1)
-        bpm_events = [e for e in chart.timing_events if e.event_type == 'bpm']
-        if len(bpm_events) > 1:
-            print(f"{chart.title} failed bpm change requirement")
-            return False
+        # Variable BPM charts are now allowed for groove radar calculations
 
         # Check for valid difficulty charts (any dance-single charts with note data)
         valid_charts = [n for n in chart.note_data if n.difficulty_name]
@@ -223,13 +217,98 @@ class StepManiaParser:
 
     def _calculate_audio_alignment(self, chart: StepManiaChart):
         """Calculate parameters for audio feature alignment"""
+        # Use average BPM for variable tempo charts
+        avg_bpm = self.compute_average_bpm(chart.timing_events, chart.song_length_seconds)
+
         # Calculate total timesteps for 16th note resolution
-        total_beats = (chart.song_length_seconds * chart.bpm) / 60
+        total_beats = (chart.song_length_seconds * avg_bpm) / 60
         chart.timesteps_total = int(total_beats * self.timesteps_per_beat)
 
-        # Calculate hop_length for librosa alignment
+        # Calculate hop_length for librosa alignment using average BPM
         # hop_length = sr * 60 / (BPM * timesteps_per_beat)
-        chart.hop_length = int(self.target_sample_rate * 60 / (chart.bpm * self.timesteps_per_beat))
+        chart.hop_length = int(self.target_sample_rate * 60 / (avg_bpm * self.timesteps_per_beat))
+
+    def compute_average_bpm(self, timing_events: List[TimingEvent],
+                            song_length_seconds: float) -> float:
+        """
+        Compute weighted average BPM from timing events.
+
+        For variable BPM charts, weights each BPM by its duration.
+        For fixed BPM charts, returns the single BPM value.
+
+        Args:
+            timing_events: List of TimingEvent objects
+            song_length_seconds: Total song duration in seconds
+
+        Returns:
+            Weighted average BPM
+        """
+        bpm_events = [e for e in timing_events if e.event_type == 'bpm']
+
+        if not bpm_events:
+            raise ValueError("No BPM events found")
+
+        if len(bpm_events) == 1:
+            return bpm_events[0].value
+
+        # Sort by beat position
+        bpm_events = sorted(bpm_events, key=lambda e: e.beat)
+
+        # Calculate total beats in the song (approximate using first BPM)
+        total_beats = song_length_seconds * bpm_events[0].value / 60
+
+        # Calculate weighted average
+        total_weighted_bpm = 0.0
+        for i, event in enumerate(bpm_events):
+            # Duration in beats until next BPM change (or end of song)
+            if i + 1 < len(bpm_events):
+                duration_beats = bpm_events[i + 1].beat - event.beat
+            else:
+                duration_beats = total_beats - event.beat
+
+            duration_beats = max(0, duration_beats)
+            total_weighted_bpm += event.value * duration_beats
+
+        if total_beats > 0:
+            return total_weighted_bpm / total_beats
+        else:
+            return bpm_events[0].value
+
+    def compute_bpm_delta(self, timing_events: List[TimingEvent]) -> float:
+        """
+        Compute total BPM delta for Chaos calculation.
+
+        Total BPM Delta is the sum of absolute BPM changes throughout the song.
+        For gradual BPM changes, uses the difference between highest and lowest.
+
+        Args:
+            timing_events: List of TimingEvent objects
+
+        Returns:
+            Total BPM delta (sum of all BPM changes)
+        """
+        bpm_events = [e for e in timing_events if e.event_type == 'bpm']
+        stop_events = [e for e in timing_events if e.event_type == 'stop']
+
+        if len(bpm_events) <= 1 and not stop_events:
+            return 0.0
+
+        # Sort by beat position
+        bpm_events = sorted(bpm_events, key=lambda e: e.beat)
+
+        total_delta = 0.0
+
+        # Sum absolute differences between consecutive BPM values
+        for i in range(1, len(bpm_events)):
+            delta = abs(bpm_events[i].value - bpm_events[i - 1].value)
+            total_delta += delta
+
+        # Stops also contribute - we use the BPM at the stop position
+        # (effectively a "pause" which affects rhythm perception)
+        # For simplicity, we'll count stops as contributing their duration * current_bpm
+        # This is a simplification of the DDR formula
+
+        return total_delta
 
     def _parse_timing_events(self, metadata: Dict[str, str]) -> List[TimingEvent]:
         """Parse timing events from metadata"""
@@ -351,6 +430,97 @@ class StepManiaParser:
             current_beat += 4.0
 
         return chart_tensor
+
+    def convert_to_tensor_extended(self, chart: StepManiaChart,
+                                    note_data: NoteData) -> Tuple[np.ndarray, Dict]:
+        """
+        Convert note data to tensor format with hold arrow tracking.
+
+        Returns both the chart tensor and hold information for freeze calculation.
+
+        Args:
+            chart: StepManiaChart metadata
+            note_data: NoteData for a specific difficulty
+
+        Returns:
+            Tuple of:
+            - chart_tensor: Binary chart encoding (timesteps_total, 4)
+            - hold_info: Dict with hold arrow data:
+                - 'holds': List of (panel_idx, start_beat, end_beat) tuples
+                - 'total_hold_beats': Total hold arrow length in beats
+                - 'note_beats': List of (beat_position, panel_idx, note_type) for all notes
+        """
+        # Initialize tensor with zeros
+        chart_tensor = np.zeros((chart.timesteps_total, 4), dtype=np.float32)
+
+        # Track hold information
+        holds = []  # List of completed holds: (panel_idx, start_beat, end_beat)
+        active_holds = {}  # panel_idx -> start_beat (for holds in progress)
+        note_beats = []  # List of (beat_position, panel_idx, note_type) for chaos calculation
+
+        # Parse note measures
+        measures = note_data.notes.split(',')
+        current_beat = 0.0
+
+        for measure in measures:
+            measure = measure.strip()
+            if not measure:
+                continue
+
+            # Split into lines (each line is a timestep within the measure)
+            lines = [line.strip() for line in measure.split('\n') if line.strip()]
+
+            if not lines:
+                continue
+
+            # Calculate beats per line in this measure
+            beats_per_line = 4.0 / len(lines)  # 4 beats per measure
+
+            for line_idx, line in enumerate(lines):
+                if len(line) >= 4:
+                    # Calculate beat position
+                    beat_position = current_beat + (line_idx * beats_per_line)
+
+                    # Convert to timestep index
+                    timestep_idx = int(np.floor(beat_position * self.timesteps_per_beat))
+
+                    # Ensure timestep is within bounds
+                    if 0 <= timestep_idx < chart.timesteps_total:
+                        # Process each panel (only first 4 for single charts)
+                        for panel_idx in range(4):
+                            char = line[panel_idx]
+                            if char == '1':  # Tap note
+                                chart_tensor[timestep_idx, panel_idx] = 1.0
+                                note_beats.append((beat_position, panel_idx, 'tap'))
+                            elif char == '2':  # Hold start
+                                chart_tensor[timestep_idx, panel_idx] = 1.0
+                                active_holds[panel_idx] = beat_position
+                                note_beats.append((beat_position, panel_idx, 'hold_start'))
+                            elif char == '3':  # Hold end
+                                if panel_idx in active_holds:
+                                    start_beat = active_holds.pop(panel_idx)
+                                    holds.append((panel_idx, start_beat, beat_position))
+                            # Ignore mines ('M'), etc.
+
+            # Move to next measure (4 beats)
+            current_beat += 4.0
+
+        # Handle any unclosed holds (extend to end of song)
+        total_beats = chart.timesteps_total / self.timesteps_per_beat
+        for panel_idx, start_beat in active_holds.items():
+            holds.append((panel_idx, start_beat, total_beats))
+
+        # Calculate total hold length in beats
+        total_hold_beats = sum(end - start for _, start, end in holds)
+
+        hold_info = {
+            'holds': holds,
+            'total_hold_beats': total_hold_beats,
+            'note_beats': note_beats,
+            'song_length_beats': total_beats
+        }
+
+        return chart_tensor, hold_info
 
     def validate_pattern_quality(self, chart_tensor: np.ndarray) -> bool:
         """

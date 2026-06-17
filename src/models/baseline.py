@@ -83,7 +83,8 @@ class MLPBaseline(nn.Module):
     def forward(self,
                 audio: torch.Tensor,
                 chart: torch.Tensor,
-                mask: torch.Tensor) -> torch.Tensor:
+                mask: torch.Tensor,
+                **kwargs) -> torch.Tensor:
         """
         Forward pass through MLP baseline.
 
@@ -91,6 +92,7 @@ class MLPBaseline(nn.Module):
             audio: Audio features (B, L, audio_features_dim)
             chart: Chart sequences (B, L, chart_sequence_dim)
             mask: Attention mask (B, L) where 1 = valid, 0 = padding
+            **kwargs: Ignored (allows groove_radar etc. for Trainer compatibility)
 
         Returns:
             Classification logits (B, num_classes)
@@ -166,7 +168,8 @@ class SimpleConcatBaseline(nn.Module):
     def forward(self,
                 audio: torch.Tensor,
                 chart: torch.Tensor,
-                mask: torch.Tensor) -> torch.Tensor:
+                mask: torch.Tensor,
+                **kwargs) -> torch.Tensor:
         """
         Forward pass with simple concatenation + flattening.
 
@@ -174,6 +177,7 @@ class SimpleConcatBaseline(nn.Module):
             audio: Audio features (B, L, audio_features_dim)
             chart: Chart sequences (B, L, chart_sequence_dim)
             mask: Attention mask (B, L) - ignored in this simple baseline
+            **kwargs: Ignored (allows groove_radar etc. for Trainer compatibility)
 
         Returns:
             Classification logits (B, num_classes)
@@ -230,7 +234,8 @@ class PooledFeatureBaseline(nn.Module):
     def forward(self,
                 audio: torch.Tensor,
                 chart: torch.Tensor,
-                mask: torch.Tensor) -> torch.Tensor:
+                mask: torch.Tensor,
+                **kwargs) -> torch.Tensor:
         """
         Forward pass using statistical features.
 
@@ -238,6 +243,7 @@ class PooledFeatureBaseline(nn.Module):
             audio: Audio features (B, L, audio_features_dim)
             chart: Chart sequences (B, L, chart_sequence_dim)
             mask: Attention mask (B, L)
+            **kwargs: Ignored (allows groove_radar etc. for Trainer compatibility)
 
         Returns:
             Classification logits (B, num_classes)

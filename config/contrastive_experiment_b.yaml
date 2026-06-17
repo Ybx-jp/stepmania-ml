@@ -1,0 +1,121 @@
+# Contrastive Training - Experiment B (Conservative)
+#
+# Strategy: Freeze low-level encoders, train high-level reasoning
+# Expected: Stable val acc 78-80%, slower but safer adaptation
+
+# Model architecture configuration
+classifier:
+  # Input dimensions
+  audio_features_dim: 23
+  chart_sequence_dim: 4
+  max_sequence_length: 1440
+
+  # Audio encoder
+  audio_encoder:
+    hidden_dim: 128
+    num_layers: 2
+    dropout: 0.3
+
+  # Chart encoder
+  chart_encoder:
+    embedding_dim: 64
+    hidden_dim: 128
+    num_layers: 2
+    dropout: 0.3
+
+  # Fusion and classification
+  fusion_dim: 256
+  num_classes: 4
+  classifier_dropout: 0.2
+
+  # Backbone temporal reasoning
+  backbone_blocks: 4
+  backbone_dropout: 0.4
+
+  # Architecture options
+  fusion_type: "late"
+  pooling_type: "mean_max"
+  head_type: "classification"
+  classifier_hidden_dim: 64
+
+  # Groove radar features
+  use_groove_radar: true
+  radar_hidden_dim: 32
+  radar_dropout: 0.3
+
+  # Projection head for contrastive learning
+  use_projection_head: true
+  projection_dim: 128
+
+# Training hyperparameters
+training:
+  batch_size: 128
+  learning_rate: 0.0001
+  num_classes: 4
+  num_epochs: 20
+  early_stopping_patience: 10
+  gradient_clip_norm: 1.0
+
+  # Class weighting
+  use_class_weights: true
+
+  # Optimizer
+  optimizer: "adamw"
+  weight_decay: 0.01
+
+  # Scheduler
+  scheduler: "reduce_on_plateau"
+  patience: 5
+  factor: 0.5
+  monitor: "val_loss"
+
+  # I/O optimizations
+  cache_dir: "cache/samples"
+  num_workers: 4
+  prefetch_factor: 4
+  persistent_workers: true
+
+  # Performance optimizations
+  use_amp: true
+  accumulation_steps: 2
+
+  # ===== EXPERIMENT B: SELECTIVE UNFREEZING =====
+  # Freeze audio_encoder and chart_encoder (low-level features)
+  # Unfreeze fusion, backbone, pooling, heads (high-level reasoning)
+  selective_unfreeze: ['fusion_module', 'backbone', 'pooling',
+                       'classifier_head', 'projection_head', 'radar_mlp']
+
+# Contrastive learning settings - CONSERVATIVE
+contrastive:
+  enabled: true
+  contrastive_loss: 'triplet_radar'
+
+  # ===== BOOSTED MARGINS (same as Experiment A) =====
+  triplet_margin: 2.0              # ↑ from 1.0
+  margin_scale: 1.0                # ↑ from 0.5
+
+  # InfoNCE settings (unused with triplet_radar)
+  infonce_temperature: 0.07
+
+  # ===== LOSS WEIGHTS (keep original classification weight) =====
+  classification_weight: 0.8       # Keep original (more conservative)
+  contrastive_weight: 2.0          # ↑ from 1.0 (boost contrastive pressure)
+
+  # ===== HARDER TRIPLET MINING (same as Experiment A) =====
+  positive_percentile: 15.0        # ↓ from 20.0
+  negative_percentile: 85.0        # ↑ from 80.0
+  same_difficulty_only: true
+
+  # Groove radar weights
+  radar_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
+
+  # Dataset settings
+  precompute_triplets: true
+  resample_epoch: false
+
+# ===== DIAGNOSTICS ENABLED =====
+diagnostics:
+  enabled: true
+  log_gradients: true
+  track_embeddings: true
+  save_embeddings_every: 5

@@ -61,16 +61,24 @@ class AudioFeatures:
 
         Total: 23 features (if all enabled)
         """
-        features = [self.mfcc.T]  # (n_frames, 13)
+        # Normalize MFCC features (z-score per feature, then clip)
+        mfcc_normalized = self._safe_normalize(self.mfcc.T)
+        features = [mfcc_normalized]  # (n_frames, 13)
 
         if self.onset_env is not None:
             # Normalize onset envelope to 0-1 range and reshape
-            onset_normalized = self.onset_env / (np.max(self.onset_env) + 1e-8)
-            features.append(onset_normalized.reshape(-1, 1))  # (n_frames, 1)
+            onset_max = np.max(self.onset_env)
+            if onset_max > 1e-8:
+                onset_normalized = self.onset_env / onset_max
+            else:
+                onset_normalized = np.zeros_like(self.onset_env)
+            onset_normalized = self._safe_clip(onset_normalized.reshape(-1, 1))
+            features.append(onset_normalized)  # (n_frames, 1)
 
         if self.onset_rate is not None:
             # Onset rate is already normalized during computation
-            features.append(self.onset_rate.reshape(-1, 1))  # (n_frames, 1)
+            onset_rate_safe = self._safe_clip(self.onset_rate.reshape(-1, 1))
+            features.append(onset_rate_safe)  # (n_frames, 1)
 
         if self.tempo is not None:
             # Normalize tempo to 0-1 range (assume 60-240 BPM range)
@@ -80,9 +88,38 @@ class AudioFeatures:
             features.append(tempo_feature)  # (n_frames, 1)
 
         if self.spectral_contrast is not None:
-            features.append(self.spectral_contrast.T)  # (n_frames, 7)
+            # Normalize spectral contrast
+            contrast_normalized = self._safe_normalize(self.spectral_contrast.T)
+            features.append(contrast_normalized)  # (n_frames, 7)
 
-        return np.concatenate(features, axis=1)
+        result = np.concatenate(features, axis=1)
+
+        # Final safety check for NaN/Inf
+        result = self._safe_clip(result)
+
+        return result
+
+    def _safe_normalize(self, arr: np.ndarray, clip_range: float = 10.0) -> np.ndarray:
+        """Safely normalize array with NaN/Inf handling."""
+        # Replace NaN/Inf with zeros first
+        arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Z-score normalization per feature (column)
+        mean = np.mean(arr, axis=0, keepdims=True)
+        std = np.std(arr, axis=0, keepdims=True)
+        std = np.where(std < 1e-8, 1.0, std)  # Avoid division by zero
+
+        normalized = (arr - mean) / std
+
+        # Clip to reasonable range
+        normalized = np.clip(normalized, -clip_range, clip_range)
+
+        return normalized
+
+    def _safe_clip(self, arr: np.ndarray, min_val: float = -100.0, max_val: float = 100.0) -> np.ndarray:
+        """Clip array and replace NaN/Inf values."""
+        arr = np.nan_to_num(arr, nan=0.0, posinf=max_val, neginf=min_val)
+        return np.clip(arr, min_val, max_val)
 
 
 class AudioFeatureExtractor:
@@ -210,7 +247,8 @@ class AudioFeatureExtractor:
             )
 
         except Exception as e:
-            raise RuntimeError(f"Error extracting features from {audio_file_path}: {e}") from e
+            print(f"Warning: Error extracting features from {audio_file_path}: {e}")
+            return None
 
     def extract_standalone(self,
                           audio_file_path: str,
@@ -255,7 +293,8 @@ class AudioFeatureExtractor:
             )
 
         except Exception as e:
-            raise RuntimeError(f"Error extracting features from {audio_file_path}: {e}") from e
+            print(f"Warning: Error extracting features from {audio_file_path}: {e}")
+            return None
 
     def _align_features(self, features: np.ndarray, target_frames: int) -> np.ndarray:
         """Align 2D feature dimensions to target frame count"""

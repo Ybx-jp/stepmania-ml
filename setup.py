@@ -11,6 +11,7 @@ setup(
     install_requires=[
         # Phase 1 Core Dependencies
         "torch>=2.1.0",
+        "torchmetrics>=1.0.0",  # For trainer metrics
         "numpy>=1.24.0",
         "librosa>=0.10.0",
         "soundfile>=0.12.0",
@@ -18,6 +19,7 @@ setup(
         "scikit-learn>=1.3.0",
         "tqdm>=4.65.0",
         "matplotlib>=3.7.0",
+        "seaborn>=0.12.0",  # For visualization
         "PyYAML>=6.0",
     ],
     extras_require={
