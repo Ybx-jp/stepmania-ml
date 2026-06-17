@@ -17,6 +17,7 @@ from src.generation.tokenizer import (
     VOCAB_SIZE,
 )
 from src.generation.sm_writer import tensor_to_sm, ROWS_PER_MEASURE
+from src.generation.evaluation import onset_density_metrics
 from src.data.stepmania_parser import StepManiaParser, StepManiaChart, NoteData
 
 
@@ -121,3 +122,45 @@ def test_writer_produces_parseable_header():
         assert field in content, f"missing {field!r}"
     assert content.count("#NOTES:") == 1
     assert content.rstrip().endswith(";")
+
+
+# ---- onset / density metrics ----------------------------------------------------
+
+def test_onset_metrics_perfect_match():
+    chart = _random_chart(64, seed=6)
+    m = onset_density_metrics(chart, reference=chart)
+    assert m["onset_f1"] == 1.0
+    assert m["onset_precision"] == 1.0
+    assert m["onset_recall"] == 1.0
+    assert m["panel_accuracy_on_onset"] == 1.0
+    assert m["density_ratio"] == 1.0
+
+
+def test_onset_metrics_no_reference():
+    chart = np.zeros((32, 4), dtype=np.float32)
+    chart[::4, 0] = 1.0  # a step every 4th timestep on Left
+    m = onset_density_metrics(chart)
+    assert "onset_f1" not in m  # no reference -> density-only
+    assert abs(m["gen_density"] - 0.25) < 1e-6
+    assert m["n_timesteps"] == 32
+
+
+def test_onset_metrics_partial_and_panels():
+    ref = np.zeros((4, 4), dtype=np.float32)
+    gen = np.zeros((4, 4), dtype=np.float32)
+    ref[0, 0] = 1; ref[1, 1] = 1; ref[2, 2] = 1            # 3 onsets
+    gen[0, 0] = 1; gen[1, 3] = 1; gen[3, 0] = 1            # onsets at 0,1,3
+    m = onset_density_metrics(gen, reference=ref)
+    # shared onsets at t=0 (match panels) and t=1 (wrong panel); fp at t=3; fn at t=2
+    assert m["onset_precision"] == 2 / 3  # tp=2 (t0,t1), fp=1 (t3)
+    assert m["onset_recall"] == 2 / 3     # tp=2, fn=1 (t2)
+    assert abs(m["panel_accuracy_on_onset"] - 0.5) < 1e-6  # t0 right, t1 wrong
+
+
+def test_onset_metrics_mask_applied():
+    gen = _random_chart(20, seed=7)
+    ref = _random_chart(20, seed=8)
+    mask = np.zeros(20, dtype=bool)
+    mask[:10] = True
+    m = onset_density_metrics(gen, reference=ref, mask=mask)
+    assert m["n_timesteps"] == 10

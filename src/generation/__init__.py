@@ -17,6 +17,11 @@ from .tokenizer import (
     VOCAB_SIZE,
 )
 from .sm_writer import tensor_to_sm, write_sm
+from .evaluation import (
+    onset_density_metrics,
+    chart_groove_radar_vector,
+    DifficultyCritic,
+)
 
 __all__ = [
     "ChartTokenizer",
@@ -27,4 +32,7 @@ __all__ = [
     "VOCAB_SIZE",
     "tensor_to_sm",
     "write_sm",
+    "onset_density_metrics",
+    "chart_groove_radar_vector",
+    "DifficultyCritic",
 ]
