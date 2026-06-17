@@ -1,7 +1,7 @@
 """
 Experiment configuration for ordinal vs classification head comparison.
 
-4-way comparison: {standard, contrastive} x {classification, ordinal}
+6-way comparison: {standard, contrastive} x {classification, ordinal, ordinal_multi}
 
 Hypothesis: switching head_type from classification to ordinal will improve
 adjacent-class accuracy because difficulty levels are ordered.
@@ -20,13 +20,14 @@ class VariantConfig:
     head_type: str  # "classification" or "ordinal"
     use_contrastive: bool
     experiment_tag: str  # MLflow run name
+    ordinal_multi_output: bool = False  # Use multi-output ordinal head
 
     @property
     def checkpoint_subdir(self) -> str:
         return f"ordinal_exp/{self.name}"
 
 
-# The 4 experiment variants
+# The 6 experiment variants
 VARIANTS: List[VariantConfig] = [
     VariantConfig(
         name="standard_classification",
@@ -41,6 +42,13 @@ VARIANTS: List[VariantConfig] = [
         experiment_tag="ordinal-exp/std-ord",
     ),
     VariantConfig(
+        name="standard_ordinal_multi",
+        head_type="ordinal",
+        use_contrastive=False,
+        ordinal_multi_output=True,
+        experiment_tag="ordinal-exp/std-ord-multi",
+    ),
+    VariantConfig(
         name="contrastive_classification",
         head_type="classification",
         use_contrastive=True,
@@ -51,6 +59,13 @@ VARIANTS: List[VariantConfig] = [
         head_type="ordinal",
         use_contrastive=True,
         experiment_tag="ordinal-exp/ctr-ord",
+    ),
+    VariantConfig(
+        name="contrastive_ordinal_multi",
+        head_type="ordinal",
+        use_contrastive=True,
+        ordinal_multi_output=True,
+        experiment_tag="ordinal-exp/ctr-ord-multi",
     ),
 ]
 

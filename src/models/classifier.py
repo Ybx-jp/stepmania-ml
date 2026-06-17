@@ -146,7 +146,8 @@ class LateFusionClassifier(nn.Module):
                 input_dim=pooled_dim,
                 num_classes=config['num_classes'],
                 hidden_dim=config.get('classifier_hidden_dim', None),
-                dropout=config['classifier_dropout']
+                dropout=config['classifier_dropout'],
+                multi_output=config.get('ordinal_multi_output', False),
             )
         else:
             raise ValueError(f"Unknown head_type: {self.head_type}")

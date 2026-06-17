@@ -52,6 +52,7 @@ class ContrastiveTrainer(BaseTrainer):
                  use_amp: Optional[bool] = None,
                  accumulation_steps: int = 1,
                  callbacks: Optional[List] = None,
+                 mlflow_logging: bool = False,
                  # Legacy parameters for backwards compatibility
                  warmup_epochs: int = 0,
                  warmup_cls_weight: float = 0.0,
@@ -71,6 +72,7 @@ class ContrastiveTrainer(BaseTrainer):
             use_amp: Enable automatic mixed precision (default: True if CUDA available)
             accumulation_steps: Number of batches to accumulate gradients over
             callbacks: List of callback objects (if None, creates default callbacks)
+            mlflow_logging: If True, log epoch metrics to MLflow
             warmup_epochs: (Legacy) Number of epochs for warmup phase
             warmup_cls_weight: (Legacy) Classification weight during warmup
             finetune_cls_weight: (Legacy) Classification weight after warmup
@@ -87,7 +89,8 @@ class ContrastiveTrainer(BaseTrainer):
             use_amp=use_amp,
             accumulation_steps=accumulation_steps,
             max_grad_norm=max_grad_norm,
-            callbacks=callbacks
+            callbacks=callbacks,
+            mlflow_logging=mlflow_logging,
         )
 
         # Store data loaders

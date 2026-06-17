@@ -15,6 +15,10 @@ Usage:
     # Custom output directory
     python experiments/ordinal_vs_classification/compare.py \
         --data_dir data/ --audio_dir data/ --output_dir outputs/ordinal_exp
+
+    # Multi-seed aggregation (mean +/- std across seeds)
+    python experiments/ordinal_vs_classification/compare.py \
+        --data_dir data/ --audio_dir data/ --seeds 42,123,456
 """
 
 import warnings
@@ -53,13 +57,16 @@ def parse_args():
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--audio_dir', type=str, required=True)
     parser.add_argument('--output_dir', type=str, default='outputs/ordinal_experiment')
-    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--seed', type=int, default=42,
+                        help='Random seed (used when --seeds is not set)')
+    parser.add_argument('--seeds', type=str, default=None,
+                        help='Comma-separated seeds for multi-seed aggregation (e.g. 42,123,456)')
     return parser.parse_args()
 
 
-def load_variant_model(variant, model_config, exp_config):
+def load_variant_model(variant, model_config, exp_config, seed_suffix=""):
     """Load best checkpoint for a variant, falling back to last.pt."""
-    checkpoint_dir = PROJECT_ROOT / exp_config.checkpoint_base / variant.checkpoint_subdir
+    checkpoint_dir = PROJECT_ROOT / exp_config.checkpoint_base / (variant.checkpoint_subdir + seed_suffix)
     checkpoint_path = checkpoint_dir / "best_val_loss.pt"
 
     if not checkpoint_path.exists():
@@ -70,9 +77,10 @@ def load_variant_model(variant, model_config, exp_config):
         print(f"  WARNING: No checkpoint found in {checkpoint_dir}")
         return None
 
-    # Set head_type before creating model
+    # Set head_type and ordinal mode before creating model
     classifier_config = dict(model_config['classifier'])
     classifier_config['head_type'] = variant.head_type
+    classifier_config['ordinal_multi_output'] = variant.ordinal_multi_output
 
     model = LateFusionClassifier(classifier_config)
     checkpoint = torch.load(checkpoint_path, map_location='cpu')
@@ -158,23 +166,37 @@ def plot_comparison(all_results, all_y_true, all_y_pred, output_dir):
 
     variant_names = list(all_results.keys())
 
-    # --- 1. Confusion matrix grid (2x2) ---
-    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
-    fig.suptitle('Confusion Matrices: Ordinal vs Classification', fontsize=14, fontweight='bold')
-
-    # Layout: rows = {standard, contrastive}, cols = {classification, ordinal}
+    # --- 1. Confusion matrix grid (2x3) ---
+    # Layout: rows = {standard, contrastive}, cols = {classification, ordinal, ordinal_multi}
     layout = [
         ('standard_classification', 'Standard + Classification'),
         ('standard_ordinal', 'Standard + Ordinal'),
+        ('standard_ordinal_multi', 'Standard + Ordinal Multi'),
         ('contrastive_classification', 'Contrastive + Classification'),
         ('contrastive_ordinal', 'Contrastive + Ordinal'),
+        ('contrastive_ordinal_multi', 'Contrastive + Ordinal Multi'),
     ]
 
+    # Filter to only variants that have results
+    present_layout = [(v, t) for v, t in layout if v in all_y_true]
+    n_present = len(present_layout)
+
+    if n_present <= 4:
+        nrows, ncols = 2, 2
+    else:
+        nrows, ncols = 2, 3
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(7 * ncols, 6 * nrows))
+    fig.suptitle('Confusion Matrices: Ordinal vs Classification', fontsize=14, fontweight='bold')
+    axes_flat = axes.flatten()
+
     for idx, (vname, title) in enumerate(layout):
-        ax = axes[idx // 2, idx % 2]
+        if idx >= len(axes_flat):
+            break
+        ax = axes_flat[idx]
         if vname in all_y_true:
             cm = confusion_matrix(all_y_true[vname], all_y_pred[vname], normalize='true')
-            im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, vmin=0, vmax=1)
+            ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, vmin=0, vmax=1)
             ax.set_title(title, fontsize=11)
             ax.set_xlabel('Predicted')
             ax.set_ylabel('True')
@@ -192,6 +214,10 @@ def plot_comparison(all_results, all_y_true, all_y_pred, output_dir):
                     transform=ax.transAxes, fontsize=12, color='gray')
             ax.set_title(title, fontsize=11, color='gray')
 
+    # Hide unused axes
+    for idx in range(len(layout), len(axes_flat)):
+        axes_flat[idx].set_visible(False)
+
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(output_dir / 'confusion_matrices_2x2.png', dpi=150, bbox_inches='tight')
     plt.close(fig)
@@ -204,8 +230,8 @@ def plot_comparison(all_results, all_y_true, all_y_pred, output_dir):
     colors = []
     threshold = 0.15
 
-    for vname in ['standard_classification', 'standard_ordinal',
-                  'contrastive_classification', 'contrastive_ordinal']:
+    for vname in ['standard_classification', 'standard_ordinal', 'standard_ordinal_multi',
+                  'contrastive_classification', 'contrastive_ordinal', 'contrastive_ordinal_multi']:
         if vname in all_results:
             rate = all_results[vname]['primary']['adjacent_misclass_rate']
             names.append(vname.replace('_', '\n'))
@@ -254,102 +280,250 @@ def plot_comparison(all_results, all_y_true, all_y_pred, output_dir):
     print(f"Plots saved to {output_dir}/")
 
 
-def main():
-    args = parse_args()
-    set_seed(args.seed)
-    exp_config = ExperimentConfig(seed=args.seed)
+def aggregate_multi_seed(per_seed_results):
+    """Aggregate metrics across seeds: compute mean and std.
 
-    # Load model config
-    config_path = PROJECT_ROOT / "config" / "model_config.yaml"
-    with open(config_path, 'r') as f:
-        model_config = yaml.safe_load(f)
+    Args:
+        per_seed_results: dict of seed -> {variant_name -> ordinal_metrics}
 
-    # Create test loader
-    print("Creating test dataset...")
-    test_loader = create_test_loader(model_config, args.data_dir, args.audio_dir, args.seed)
+    Returns:
+        Dict of variant_name -> {metric: {'mean': ..., 'std': ...}}
+    """
+    from collections import defaultdict
 
-    # Evaluate each variant
-    print("\nLoading and evaluating checkpoints...")
-    all_results = {}
-    all_y_true = {}
-    all_y_pred = {}
+    # Collect metric values per variant across seeds
+    variant_metrics = defaultdict(lambda: defaultdict(list))
+
+    for seed, results in per_seed_results.items():
+        for vname, metrics in results.items():
+            variant_metrics[vname]['adjacent_misclass_rate'].append(
+                metrics['primary']['adjacent_misclass_rate'])
+            variant_metrics[vname]['accuracy'].append(
+                metrics['business']['accuracy'])
+            variant_metrics[vname]['macro_f1'].append(
+                metrics['secondary']['macro_f1'])
+            variant_metrics[vname]['mean_absolute_error'].append(
+                metrics['business']['mean_absolute_error'])
+
+    # Compute mean/std
+    aggregated = {}
+    for vname, metrics_dict in variant_metrics.items():
+        aggregated[vname] = {}
+        for metric_name, values in metrics_dict.items():
+            arr = np.array(values)
+            aggregated[vname][metric_name] = {
+                'mean': float(arr.mean()),
+                'std': float(arr.std()),
+                'values': values,
+            }
+
+    return aggregated
+
+
+def format_multi_seed_table(aggregated):
+    """Format aggregated multi-seed results as a readable table."""
+    header = (
+        f"{'Variant':<30s} | {'Adj.Misclass%':>13s} | {'Accuracy':>13s} | "
+        f"{'Macro F1':>13s} | {'MAE':>13s}"
+    )
+    separator = "-" * len(header)
+
+    lines = [separator, header, separator]
+
+    for vname, metrics in aggregated.items():
+        adj = metrics['adjacent_misclass_rate']
+        acc = metrics['accuracy']
+        f1 = metrics['macro_f1']
+        mae = metrics['mean_absolute_error']
+
+        lines.append(
+            f"{vname:<30s} | "
+            f"{adj['mean']:>5.1%} +/- {adj['std']:>4.1%} | "
+            f"{acc['mean']:>5.4f} +/- {acc['std']:.4f} | "
+            f"{f1['mean']:>5.4f} +/- {f1['std']:.4f} | "
+            f"{mae['mean']:>5.3f} +/- {mae['std']:.3f}"
+        )
+
+    lines.append(separator)
+    return "\n".join(lines)
+
+
+def run_single_seed_comparison(seed, model_config, args):
+    """Evaluate all variants for a single seed. Returns (results, y_true, y_pred)."""
+    exp_config = ExperimentConfig(seed=seed)
+    set_seed(seed)
+
+    multi_seed = args.seeds is not None
+    seed_suffix = f"/seed_{seed}" if multi_seed else ""
+
+    # Create test loader with this seed's splits
+    test_loader = create_test_loader(model_config, args.data_dir, args.audio_dir, seed)
+
+    results = {}
+    y_true_all = {}
+    y_pred_all = {}
 
     for variant in VARIANTS:
-        print(f"\n--- {variant.name} ---")
-        model = load_variant_model(variant, model_config, exp_config)
+        print(f"  {variant.name} (seed={seed})...")
+        model = load_variant_model(variant, model_config, exp_config, seed_suffix)
         if model is None:
             continue
 
         _, y_true, y_pred, _ = load_and_evaluate(model, test_loader)
         ordinal_metrics = compute_ordinal_metrics(y_true, y_pred)
 
-        all_results[variant.name] = ordinal_metrics
-        all_y_true[variant.name] = y_true
-        all_y_pred[variant.name] = y_pred
+        results[variant.name] = ordinal_metrics
+        y_true_all[variant.name] = y_true
+        y_pred_all[variant.name] = y_pred
 
-    if not all_results:
-        print("\nNo checkpoints found. Run run_experiment.py first.")
-        return
+    return results, y_true_all, y_pred_all
 
-    # Print comparison table
-    print("\n" + "=" * 80)
-    print("  EXPERIMENT RESULTS: Ordinal vs Classification Head")
-    print("=" * 80)
-    print(format_results_table(all_results))
 
-    # Hypothesis verdict
-    print("\n  HYPOTHESIS VERDICT")
-    print("  " + "-" * 40)
-    threshold = exp_config.adjacent_misclass_threshold
+def main():
+    args = parse_args()
 
-    for vname, metrics in all_results.items():
-        rate = metrics['primary']['adjacent_misclass_rate']
-        passed = rate < threshold
-        status = "PASS" if passed else "FAIL"
-        print(f"  {vname:<35s} {rate:.1%} [{status}]")
+    # Determine seed list
+    if args.seeds:
+        seeds = [int(s.strip()) for s in args.seeds.split(',')]
+    else:
+        seeds = [args.seed]
 
-    # Compare ordinal vs classification (standard training)
-    std_cls = all_results.get('standard_classification')
-    std_ord = all_results.get('standard_ordinal')
-    if std_cls and std_ord:
-        cls_rate = std_cls['primary']['adjacent_misclass_rate']
-        ord_rate = std_ord['primary']['adjacent_misclass_rate']
-        delta = cls_rate - ord_rate
-        print(f"\n  Standard training delta (cls - ord): {delta:+.1%}")
-        if delta > 0:
-            print(f"  -> Ordinal head REDUCES adjacent errors by {delta:.1%} (absolute)")
-        else:
-            print(f"  -> Classification head has FEWER adjacent errors by {-delta:.1%}")
+    multi_seed = len(seeds) > 1
 
-    # Compare ordinal vs classification (contrastive training)
-    ctr_cls = all_results.get('contrastive_classification')
-    ctr_ord = all_results.get('contrastive_ordinal')
-    if ctr_cls and ctr_ord:
-        cls_rate = ctr_cls['primary']['adjacent_misclass_rate']
-        ord_rate = ctr_ord['primary']['adjacent_misclass_rate']
-        delta = cls_rate - ord_rate
-        print(f"  Contrastive training delta (cls - ord): {delta:+.1%}")
-        if delta > 0:
-            print(f"  -> Ordinal head REDUCES adjacent errors by {delta:.1%} (absolute)")
-        else:
-            print(f"  -> Classification head has FEWER adjacent errors by {-delta:.1%}")
+    # Load model config
+    config_path = PROJECT_ROOT / "config" / "model_config.yaml"
+    with open(config_path, 'r') as f:
+        model_config = yaml.safe_load(f)
 
-    # Generate plots
-    print("\nGenerating comparison plots...")
-    plot_comparison(all_results, all_y_true, all_y_pred, args.output_dir)
+    print("Loading and evaluating checkpoints...")
+
+    if multi_seed:
+        # --- Multi-seed mode: aggregate across seeds ---
+        print(f"Multi-seed comparison: {seeds}\n")
+        per_seed_results = {}
+
+        for seed in seeds:
+            print(f"\n--- Seed {seed} ---")
+            results, _, _ = run_single_seed_comparison(seed, model_config, args)
+            if results:
+                per_seed_results[seed] = results
+
+        if not per_seed_results:
+            print("\nNo checkpoints found. Run run_experiment.py --seeds ... first.")
+            return
+
+        aggregated = aggregate_multi_seed(per_seed_results)
+
+        print("\n" + "=" * 95)
+        print(f"  EXPERIMENT RESULTS: Ordinal vs Classification (aggregated over {len(per_seed_results)} seeds)")
+        print("=" * 95)
+        print(format_multi_seed_table(aggregated))
+
+        # Hypothesis verdict with uncertainty
+        exp_config = ExperimentConfig()
+        threshold = exp_config.adjacent_misclass_threshold
+
+        print("\n  HYPOTHESIS VERDICT (mean +/- std)")
+        print("  " + "-" * 55)
+        for vname, metrics in aggregated.items():
+            adj = metrics['adjacent_misclass_rate']
+            passed = adj['mean'] < threshold
+            status = "PASS" if passed else "FAIL"
+            print(f"  {vname:<35s} {adj['mean']:.1%} +/- {adj['std']:.1%}  [{status}]")
+
+        # Compare ordinal vs classification
+        for prefix, label in [('standard', 'Standard'), ('contrastive', 'Contrastive')]:
+            cls_key = f'{prefix}_classification'
+            ord_key = f'{prefix}_ordinal'
+            if cls_key in aggregated and ord_key in aggregated:
+                cls_mean = aggregated[cls_key]['adjacent_misclass_rate']['mean']
+                ord_mean = aggregated[ord_key]['adjacent_misclass_rate']['mean']
+                delta = cls_mean - ord_mean
+                print(f"\n  {label} delta (cls - ord): {delta:+.1%}")
+                if delta > 0:
+                    print(f"  -> Ordinal head REDUCES adjacent errors by {delta:.1%}")
+                else:
+                    print(f"  -> Classification head has FEWER adjacent errors by {-delta:.1%}")
+
+        # Use the last seed's predictions for confusion matrix plots
+        last_seed = seeds[-1]
+        _, last_y_true, last_y_pred = run_single_seed_comparison(last_seed, model_config, args)
+        print(f"\nGenerating plots (confusion matrices from seed {last_seed})...")
+        # Build single-seed results for plot_comparison
+        plot_results = per_seed_results.get(last_seed, {})
+        plot_comparison(plot_results, last_y_true, last_y_pred, args.output_dir)
+
+    else:
+        # --- Single-seed mode: original behavior ---
+        seed = seeds[0]
+        print(f"\nCreating test dataset (seed={seed})...")
+        all_results, all_y_true, all_y_pred = run_single_seed_comparison(
+            seed, model_config, args)
+
+        if not all_results:
+            print("\nNo checkpoints found. Run run_experiment.py first.")
+            return
+
+        print("\n" + "=" * 80)
+        print("  EXPERIMENT RESULTS: Ordinal vs Classification Head")
+        print("=" * 80)
+        print(format_results_table(all_results))
+
+        # Hypothesis verdict
+        exp_config = ExperimentConfig(seed=seed)
+        threshold = exp_config.adjacent_misclass_threshold
+
+        print("\n  HYPOTHESIS VERDICT")
+        print("  " + "-" * 40)
+        for vname, metrics in all_results.items():
+            rate = metrics['primary']['adjacent_misclass_rate']
+            passed = rate < threshold
+            status = "PASS" if passed else "FAIL"
+            print(f"  {vname:<35s} {rate:.1%} [{status}]")
+
+        # Compare ordinal vs classification
+        for prefix, label in [('standard', 'Standard'), ('contrastive', 'Contrastive')]:
+            cls_key = f'{prefix}_classification'
+            ord_key = f'{prefix}_ordinal'
+            cls_m = all_results.get(cls_key)
+            ord_m = all_results.get(ord_key)
+            if cls_m and ord_m:
+                cls_rate = cls_m['primary']['adjacent_misclass_rate']
+                ord_rate = ord_m['primary']['adjacent_misclass_rate']
+                delta = cls_rate - ord_rate
+                print(f"\n  {label} training delta (cls - ord): {delta:+.1%}")
+                if delta > 0:
+                    print(f"  -> Ordinal head REDUCES adjacent errors by {delta:.1%} (absolute)")
+                else:
+                    print(f"  -> Classification head has FEWER adjacent errors by {-delta:.1%}")
+
+        print("\nGenerating comparison plots...")
+        plot_comparison(all_results, all_y_true, all_y_pred, args.output_dir)
 
     # Log to MLflow
     try:
         import mlflow
         mlflow.set_experiment("ordinal-vs-classification")
-        with mlflow.start_run(run_name="comparison"):
-            for vname, metrics in all_results.items():
-                mlflow.log_metrics({
-                    f'{vname}/adj_misclass_rate': metrics['primary']['adjacent_misclass_rate'],
-                    f'{vname}/accuracy': metrics['business']['accuracy'],
-                    f'{vname}/macro_f1': metrics['secondary']['macro_f1'],
-                    f'{vname}/mae': metrics['business']['mean_absolute_error'],
-                })
+        run_name = f"comparison-{len(seeds)}seeds" if multi_seed else "comparison"
+        with mlflow.start_run(run_name=run_name):
+            if multi_seed:
+                for vname, metrics in aggregated.items():
+                    mlflow.log_metrics({
+                        f'{vname}/adj_misclass_mean': metrics['adjacent_misclass_rate']['mean'],
+                        f'{vname}/adj_misclass_std': metrics['adjacent_misclass_rate']['std'],
+                        f'{vname}/accuracy_mean': metrics['accuracy']['mean'],
+                        f'{vname}/accuracy_std': metrics['accuracy']['std'],
+                        f'{vname}/macro_f1_mean': metrics['macro_f1']['mean'],
+                        f'{vname}/macro_f1_std': metrics['macro_f1']['std'],
+                    })
+            else:
+                for vname, metrics in all_results.items():
+                    mlflow.log_metrics({
+                        f'{vname}/adj_misclass_rate': metrics['primary']['adjacent_misclass_rate'],
+                        f'{vname}/accuracy': metrics['business']['accuracy'],
+                        f'{vname}/macro_f1': metrics['secondary']['macro_f1'],
+                        f'{vname}/mae': metrics['business']['mean_absolute_error'],
+                    })
             for png_file in Path(args.output_dir).glob('*.png'):
                 mlflow.log_artifact(str(png_file))
     except ImportError:

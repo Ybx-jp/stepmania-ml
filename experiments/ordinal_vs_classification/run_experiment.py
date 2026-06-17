@@ -17,6 +17,10 @@ Usage:
     # Override epochs
     python experiments/ordinal_vs_classification/run_experiment.py \
         --data_dir data/ --audio_dir data/ --epochs 10
+
+    # Multi-seed runs for statistical significance
+    python experiments/ordinal_vs_classification/run_experiment.py \
+        --data_dir data/ --audio_dir data/ --seeds 42,123,456
 """
 
 import warnings
@@ -63,7 +67,9 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=None,
                         help='Override number of epochs')
     parser.add_argument('--seed', type=int, default=42,
-                        help='Random seed')
+                        help='Random seed (used when --seeds is not set)')
+    parser.add_argument('--seeds', type=str, default=None,
+                        help='Comma-separated seeds for multi-seed runs (e.g. 42,123,456)')
     return parser.parse_args()
 
 
@@ -183,19 +189,26 @@ def create_data_loaders(train_dataset, val_dataset, exp_config, is_contrastive=F
 
 
 def run_variant(variant: VariantConfig, model_config: dict,
-                train_dataset, val_dataset, exp_config: ExperimentConfig):
-    """Run a single experiment variant."""
+                train_dataset, val_dataset, exp_config: ExperimentConfig,
+                seed_suffix: str = ""):
+    """Run a single experiment variant.
+
+    Args:
+        seed_suffix: Optional suffix for checkpoint dir (e.g. "/seed_123")
+                     to keep multi-seed checkpoints separate.
+    """
     print(f"\n{'='*70}")
-    print(f"  VARIANT: {variant.name}")
+    print(f"  VARIANT: {variant.name}  (seed={exp_config.seed})")
     print(f"  head_type={variant.head_type}, contrastive={variant.use_contrastive}")
     print(f"{'='*70}\n")
 
     # Reset seed for each variant
     set_seed(exp_config.seed)
 
-    # Set head_type in model config
+    # Set head_type and ordinal mode in model config
     classifier_config = dict(model_config['classifier'])
     classifier_config['head_type'] = variant.head_type
+    classifier_config['ordinal_multi_output'] = variant.ordinal_multi_output
 
     # Create model
     model = LateFusionClassifier(classifier_config)
@@ -208,8 +221,8 @@ def run_variant(variant: VariantConfig, model_config: dict,
         is_contrastive=variant.use_contrastive
     )
 
-    # Checkpoint directory
-    checkpoint_dir = str(PROJECT_ROOT / exp_config.checkpoint_base / variant.checkpoint_subdir)
+    # Checkpoint directory (append seed suffix for multi-seed runs)
+    checkpoint_dir = str(PROJECT_ROOT / exp_config.checkpoint_base / (variant.checkpoint_subdir + seed_suffix))
 
     # Create optimizer
     optimizer = optim.AdamW(
@@ -266,6 +279,7 @@ def run_variant(variant: VariantConfig, model_config: dict,
                 config=training_config,
                 checkpoint_dir=checkpoint_dir,
                 callbacks=callbacks,
+                mlflow_logging=mlflow_available,
             )
         else:
             trainer = Trainer(
@@ -298,9 +312,10 @@ def run_variant(variant: VariantConfig, model_config: dict,
 
         return history
 
+    run_name = f"{variant.experiment_tag}/seed_{exp_config.seed}"
     if mlflow_available:
         import mlflow
-        with mlflow.start_run(run_name=variant.experiment_tag):
+        with mlflow.start_run(run_name=run_name):
             return train()
     else:
         return train()
@@ -309,11 +324,11 @@ def run_variant(variant: VariantConfig, model_config: dict,
 def main():
     args = parse_args()
 
-    exp_config = ExperimentConfig(seed=args.seed)
-    if args.epochs is not None:
-        exp_config.num_epochs = args.epochs
-
-    set_seed(exp_config.seed)
+    # Determine seed list
+    if args.seeds:
+        seeds = [int(s.strip()) for s in args.seeds.split(',')]
+    else:
+        seeds = [args.seed]
 
     model_config = load_model_config()
 
@@ -322,28 +337,57 @@ def main():
     if args.variant:
         variants = [v for v in VARIANTS if v.name == args.variant]
 
-    # Set up data once (shared across all variants)
-    print("Setting up shared data...")
-    train_dataset, val_dataset, test_dataset = setup_data(
-        model_config, args.data_dir, args.audio_dir, exp_config
-    )
+    multi_seed = len(seeds) > 1
+    if multi_seed:
+        print(f"Multi-seed run: {seeds}")
 
-    # Run each variant
-    results = {}
-    for variant in variants:
-        history = run_variant(
-            variant, model_config,
-            train_dataset, val_dataset, exp_config
+    for seed_idx, seed in enumerate(seeds):
+        exp_config = ExperimentConfig(seed=seed)
+        if args.epochs is not None:
+            exp_config.num_epochs = args.epochs
+
+        set_seed(seed)
+
+        # Seed suffix for checkpoint dirs (only needed for multi-seed)
+        seed_suffix = f"/seed_{seed}" if multi_seed else ""
+
+        if multi_seed:
+            print(f"\n{'#'*70}")
+            print(f"  SEED {seed_idx+1}/{len(seeds)}: {seed}")
+            print(f"{'#'*70}")
+
+        # Re-create data splits per seed (different seed = different splits)
+        print("Setting up data...")
+        train_dataset, val_dataset, test_dataset = setup_data(
+            model_config, args.data_dir, args.audio_dir, exp_config
         )
-        results[variant.name] = history
 
+        # Run each variant
+        for variant in variants:
+            run_variant(
+                variant, model_config,
+                train_dataset, val_dataset, exp_config,
+                seed_suffix=seed_suffix,
+            )
+
+    # Summary
     print(f"\n{'='*70}")
     print("  ALL VARIANTS COMPLETE")
     print(f"{'='*70}")
-    print("\nNext: run compare.py to evaluate and compare all checkpoints.")
+    if multi_seed:
+        print(f"\nSeeds: {seeds}")
+        print("Next: run compare.py --seeds ... to aggregate results.")
+    else:
+        print("\nNext: run compare.py to evaluate and compare all checkpoints.")
+
     for variant in variants:
-        ckpt = PROJECT_ROOT / exp_config.checkpoint_base / variant.checkpoint_subdir
-        print(f"  {variant.name}: {ckpt}")
+        if multi_seed:
+            for seed in seeds:
+                ckpt = PROJECT_ROOT / exp_config.checkpoint_base / (variant.checkpoint_subdir + f"/seed_{seed}")
+                print(f"  {variant.name} (seed={seed}): {ckpt}")
+        else:
+            ckpt = PROJECT_ROOT / exp_config.checkpoint_base / variant.checkpoint_subdir
+            print(f"  {variant.name}: {ckpt}")
 
 
 if __name__ == '__main__':
