@@ -115,6 +115,22 @@ def test_writer_pads_partial_final_measure():
     assert reparsed[T:].sum() == 0  # padding rows are empty
 
 
+def test_kv_cache_matches_noncached():
+    # Cached generation must be bit-identical to non-cached (greedy, fixed onset).
+    import torch
+    from src.generation.factorized import FactorizedChartGenerator
+    torch.manual_seed(0)
+    m = FactorizedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 96
+    audio = torch.randn(B, T, 23)
+    diff = torch.tensor([0, 3])
+    torch.manual_seed(1)
+    override = torch.rand(B, T) > 0.7
+    slow = m.generate(audio, diff, onset_override=override, panel_greedy=True)
+    fast = m.generate_cached(audio, diff, onset_override=override, panel_greedy=True)
+    assert torch.equal(slow, fast), f"{(slow != fast).any(-1).sum().item()} timesteps differ"
+
+
 def test_writer_produces_parseable_header():
     chart = _random_chart(16, seed=5)
     content = tensor_to_sm(chart, bpm=128.0, title="T", artist="A", music="song.ogg")
