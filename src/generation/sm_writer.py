@@ -23,9 +23,16 @@ ROWS_PER_MEASURE = 16  # 4 beats * timesteps_per_beat(4); 16th-note resolution
 NUM_PANELS = 4
 
 
-def _chart_to_measures(chart: np.ndarray) -> str:
-    """Convert a (T, 4) binary array into the .sm measure block (no trailing ';')."""
-    bits = (chart > 0.5).astype(np.int64)
+def _chart_to_measures(chart: np.ndarray, typed: bool = False) -> str:
+    """Convert a (T, 4) chart array into the .sm measure block (no trailing ';').
+
+    typed=False: binary taps (cell > 0.5 -> '1'). typed=True: keep symbols
+    0..4 (none/tap/hold-head/tail/roll-head) verbatim.
+    """
+    if typed:
+        bits = np.clip(np.rint(np.asarray(chart)), 0, 4).astype(np.int64)
+    else:
+        bits = (chart > 0.5).astype(np.int64)
     T = bits.shape[0]
     num_measures = max(1, math.ceil(T / ROWS_PER_MEASURE))
     padded = num_measures * ROWS_PER_MEASURE
@@ -53,11 +60,13 @@ def tensor_to_sm(
     difficulty_value: int = 5,
     offset: float = 0.0,
     author: str = "phase2-generator",
+    typed: bool = False,
 ) -> str:
     """Render a (T, 4) chart tensor to a complete .sm file as a string.
 
     Args:
-        chart: (T, 4) binary tensor/array, panels [Left, Down, Up, Right].
+        chart: (T, 4) tensor/array, panels [Left, Down, Up, Right]. Binary taps by
+            default; if typed=True, cells are symbols 0..4 (none/tap/hold-head/tail/roll-head).
         bpm: fixed BPM for the chart (Phase 1 scope).
         title/artist/music/offset: simfile header metadata.
         difficulty_name: one of Beginner/Easy/Medium/Hard/Challenge.
@@ -68,7 +77,7 @@ def tensor_to_sm(
         The full .sm file contents as a string.
     """
     return _sm_header(bpm, title, artist, music, offset) + _notes_block(
-        chart, difficulty_name, difficulty_value, author
+        chart, difficulty_name, difficulty_value, author, typed=typed
     )
 
 
@@ -85,7 +94,7 @@ def _sm_header(bpm, title, artist, music, offset) -> str:
     )
 
 
-def _notes_block(chart, difficulty_name, difficulty_value, author) -> str:
+def _notes_block(chart, difficulty_name, difficulty_value, author, typed: bool = False) -> str:
     """One #NOTES section. #NOTES 5-line header: style:author:difficulty:meter:radar:."""
     if isinstance(chart, torch.Tensor):
         arr = chart.detach().cpu().numpy()
@@ -93,7 +102,7 @@ def _notes_block(chart, difficulty_name, difficulty_value, author) -> str:
         arr = np.asarray(chart)
     if arr.ndim != 2 or arr.shape[1] != NUM_PANELS:
         raise ValueError(f"chart must be (T, {NUM_PANELS}), got {arr.shape}")
-    measures = _chart_to_measures(arr)
+    measures = _chart_to_measures(arr, typed=typed)
     return (
         "#NOTES:\n"
         "     dance-single:\n"
@@ -107,17 +116,19 @@ def _notes_block(chart, difficulty_name, difficulty_value, author) -> str:
 
 
 def charts_to_sm(charts, bpm, title="Generated Chart",
-                 artist="stepmania-chart-generator", music="audio.ogg", offset=0.0) -> str:
+                 artist="stepmania-chart-generator", music="audio.ogg", offset=0.0,
+                 typed: bool = False) -> str:
     """Render multiple difficulty charts into one .sm file (e.g. generated + original).
 
     Args:
         charts: list of dicts, each {chart, difficulty_name, difficulty_value, author?}.
+        typed: if True, charts carry symbols 0..4 (taps/holds/rolls) instead of binary.
     Returns the full .sm contents.
     """
     out = _sm_header(bpm, title, artist, music, offset)
     for c in charts:
         out += _notes_block(c["chart"], c["difficulty_name"], c["difficulty_value"],
-                            c.get("author", "phase2-generator"))
+                            c.get("author", "phase2-generator"), typed=typed)
     return out
 
 
