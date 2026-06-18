@@ -34,6 +34,8 @@ Onset **ROC-AUC 0.950, PR-AUC 0.825** (single-head probe: 0.813 / 0.469). Target
 
 Fix: **per-difficulty thresholds** (calibrate τ separately per class to that class's empirical density), or decode onsets by [[Bernoulli sampling]] from the difficulty-conditioned onset head instead of a single global cutoff. Cheap to try on the trained checkpoint — no retraining.
 
+**Resolved** (see `per_difficulty_threshold.md`): per-difficulty thresholds lift crit_adj 0.77→0.80 / exact 0.28→0.41 at no onset cost; Bernoulli sampling goes further (crit_adj 0.92) but over-places due to onset pos_weight miscalibration. Next: recalibrate the onset head, then per-difficulty Bernoulli for best-of-both.
+
 ## Reproduce
 
 `python experiments/generation_factorized/train_factorized.py --data_dir data/ --audio_dir data/ --epochs 20 --warmup_freeze 3 --batch_size 8`
