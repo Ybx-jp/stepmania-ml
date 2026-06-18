@@ -133,6 +133,7 @@ class FactorizedChartGenerator(nn.Module):
         onset_sample: bool = False,
         onset_logit_scale: float = 1.0,
         onset_logit_bias: float = 0.0,
+        onset_override: Optional[torch.Tensor] = None,
         panel_greedy: bool = True,
         panel_temperature: float = 1.0,
         panel_top_k: Optional[int] = None,
@@ -147,6 +148,10 @@ class FactorizedChartGenerator(nn.Module):
 
         `onset_logit_scale`/`onset_logit_bias` apply post-hoc Platt calibration to
         the onset logits: p = sigmoid(scale * logit + bias). Defaults are a no-op.
+
+        `onset_override` (B, T) bool, if given, is used directly as the onset
+        decision — letting the caller implement any policy (threshold, Bernoulli,
+        hybrid) from the precomputed non-AR onset posteriors. Bypasses the args above.
         """
         self.eval()
         device = audio.device
@@ -154,11 +159,11 @@ class FactorizedChartGenerator(nn.Module):
         from .tokenizer import BOS_TOKEN
 
         memory = self.encode_audio(audio)
-        p_onset = torch.sigmoid(onset_logit_scale * self.onset_logits(memory, difficulty) + onset_logit_bias)  # (B, T)
-        if onset_sample:
-            onset = torch.bernoulli(p_onset).bool()
+        if onset_override is not None:
+            onset = onset_override.bool().to(device)
         else:
-            onset = p_onset > onset_threshold
+            p_onset = torch.sigmoid(onset_logit_scale * self.onset_logits(memory, difficulty) + onset_logit_bias)
+            onset = torch.bernoulli(p_onset).bool() if onset_sample else (p_onset > onset_threshold)
 
         gen = torch.zeros(B, T, dtype=torch.long, device=device)
         cur = torch.full((B, 1), BOS_TOKEN, dtype=torch.long, device=device)
