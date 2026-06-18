@@ -284,13 +284,19 @@ class LayeredTypedChartGenerator(nn.Module):
     def generate(self, audio, difficulty, lengths=None, onset_threshold=0.5,
                  onset_sample=False, onset_logit_scale=1.0, onset_logit_bias=0.0,
                  onset_override=None, greedy=True, temperature=1.0,
-                 type_sample=False, type_temperature=1.0):
+                 type_sample=False, type_temperature=1.0, hold_aware=False):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
         `type_sample` samples the per-panel TYPE (so rare holds appear at ~their predicted
         rate) while keeping the pattern (which-panels) greedy — holds never beat tap under
-        greedy argmax, so sampling the type is how they surface."""
+        greedy argmax, so sampling the type is how they surface.
+
+        `hold_aware` runs a per-panel hold automaton: a hold/roll-head OPENS a hold and the
+        panel is then occupied; the hold CLOSES (emits a tail) at the next frame the model
+        places a note on that panel — so holds span a musically coherent, audio-aligned
+        duration (head -> next note) and are always valid (no orphans), like a human author.
+        Frames between head and tail emit nothing on the held panel."""
         self.eval()
         device = audio.device
         B, T, _ = audio.shape
@@ -309,6 +315,7 @@ class LayeredTypedChartGenerator(nn.Module):
         diff_emb = self.diff_embedding(difficulty).unsqueeze(1)
         gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = self.bos.expand(B, 1, -1)
+        held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
 
         for t in range(T):
             x = prev_emb + self.pos_encoding.pe[:, t:t + 1] + diff_emb
@@ -326,9 +333,20 @@ class LayeredTypedChartGenerator(nn.Module):
                 typ = torch.multinomial(torch.softmax(typ_logits / tt, -1).view(-1, NUM_TYPES), 1).view(B, NUM_PANELS)
             else:
                 typ = typ_logits.argmax(-1)
-            active = panel_bits[pat]                                           # (B,4) which panels
-            sym = torch.where(active.bool(), typ + 1, torch.zeros_like(typ))   # type idx -> symbol 1..4
-            state = torch.where(onset[:, t].unsqueeze(1), sym, torch.zeros_like(sym))
+            active = panel_bits[pat].bool() & onset[:, t].unsqueeze(1)         # panels the model notes this frame
+
+            if hold_aware:
+                proposed = typ + 1                                            # symbol 1..4
+                close = held & active                                         # model notes a held panel -> close it
+                free_act = (~held) & active                                   # fresh note on a free panel
+                prop = torch.where(proposed == 3, torch.ones_like(proposed), proposed)  # tail-on-free -> tap
+                state = torch.zeros(B, NUM_PANELS, dtype=torch.long, device=device)
+                state = torch.where(close, torch.full_like(state, 3), state)  # tail closes the hold
+                state = torch.where(free_act, prop, state)                    # tap/head/roll on free panels
+                held = (held & ~close) | (free_act & ((prop == 2) | (prop == 4)))
+            else:
+                state = torch.where(active, typ + 1, torch.zeros_like(typ))   # stateless per-panel symbol
+
             gen[:, t] = state
             prev_emb = self._state_emb(state.unsqueeze(1))
 

@@ -177,6 +177,31 @@ def test_pair_holds():
         assert heads == tails, f"panel {p}: {heads} heads vs {tails} tails"
 
 
+def test_hold_aware_decoding_valid():
+    # Hold-aware decoding's automaton guarantees no orphan tails (a tail only ever
+    # closes an open head) and at most one open hold per panel at a time.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 128
+    audio = torch.randn(B, T, 23)
+    diff = torch.tensor([1, 2])
+    ov = torch.ones(B, T, dtype=torch.bool)  # force onsets so panels receive notes
+    g = m.generate(audio, diff, onset_override=ov, greedy=True, type_sample=True,
+                   type_temperature=0.5, hold_aware=True).numpy()
+    for b in range(B):
+        for p in range(4):
+            open_ = False
+            for s in g[b, :, p]:
+                if s in (2, 4):
+                    assert not open_, "new head opened while a hold was still open"
+                    open_ = True
+                elif s == 3:
+                    assert open_, "orphan tail (closed a panel with no open head)"
+                    open_ = False
+
+
 def test_kv_cache_matches_noncached():
     # Cached generation must be bit-identical to non-cached (greedy, fixed onset).
     import torch
