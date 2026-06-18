@@ -52,6 +52,11 @@ def parse_args():
     p.add_argument('--num_layers', type=int, default=4)
     p.add_argument('--onset_layers', type=int, default=2)
     p.add_argument('--panel_loss_weight', type=float, default=1.0)
+    p.add_argument('--onset_loss', choices=['bce', 'focal'], default='bce',
+                   help='bce = BCE+pos_weight (over-confident); focal = focal loss (better calibrated)')
+    p.add_argument('--focal_gamma', type=float, default=2.0)
+    p.add_argument('--focal_alpha', type=float, default=0.25,
+                   help='focal positive-class weight in [0,1]; -1 to disable')
     p.add_argument('--eval_songs', type=int, default=64)
     p.add_argument('--max_gen_len', type=int, default=768)
     p.add_argument('--checkpoint_dir', default='checkpoints/gen_factorized')
@@ -114,7 +119,23 @@ def main():
     model.freeze_audio_encoder(True)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    onset_crit = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    bce_onset = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+    def focal_onset(logits, targets):
+        # binary focal loss: down-weight easy/confident frames (factor (1-p_t)^gamma)
+        bce = nn.functional.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+        p = torch.sigmoid(logits)
+        p_t = p * targets + (1 - p) * (1 - targets)  # prob of the true class
+        loss = (1 - p_t) ** args.focal_gamma * bce
+        if args.focal_alpha >= 0:
+            alpha_t = args.focal_alpha * targets + (1 - args.focal_alpha) * (1 - targets)
+            loss = alpha_t * loss
+        return loss.mean()
+
+    onset_crit = focal_onset if args.onset_loss == 'focal' else \
+        (lambda lg, tg: bce_onset(lg, tg))
+    print(f"onset loss: {args.onset_loss}" + (f" (gamma={args.focal_gamma}, alpha={args.focal_alpha})"
+                                              if args.onset_loss == 'focal' else ""))
     panel_crit = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
