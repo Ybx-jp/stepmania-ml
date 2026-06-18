@@ -23,7 +23,7 @@ import torch.nn.functional as F
 from src.models.components.encoders import AudioEncoder
 from .transformer import PositionalEncoding, _causal_mask
 from .factorized import _project, _attend, _LayerCache
-from .typed import NUM_SYMBOLS, NUM_PANELS  # 5 symbols, 4 panels
+from .typed import NUM_SYMBOLS, NUM_PANELS, NUM_PATTERNS, NUM_TYPES  # 5 symbols, 4 panels, 15 patterns, 4 types
 
 
 class TypedChartGenerator(nn.Module):
@@ -179,6 +179,158 @@ class TypedChartGenerator(nn.Module):
             state = torch.where(onset[:, t].unsqueeze(1), sym, torch.zeros_like(sym))
             gen[:, t] = state
             prev_emb = self._state_emb(state.unsqueeze(1))  # (B,1,d) for next step
+
+        if lengths is not None:
+            valid = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)
+            gen = gen * valid.unsqueeze(-1)
+        return gen
+
+
+class LayeredTypedChartGenerator(nn.Module):
+    """Layered factorization: onset (frame has a step) -> pattern (WHICH panels are active,
+    15-way — the binary model's proven head) -> type (per active panel: tap/hold-head/tail/roll,
+    4-way). Decouples is-panel-active from what-type, avoiding the none/active conflation that
+    made the flat per-panel 5-way head none-biased.
+    """
+
+    def __init__(self, audio_dim: int = 23, d_model: int = 128, nhead: int = 8,
+                 num_layers: int = 4, onset_layers: int = 2, dim_feedforward: int = 512,
+                 dropout: float = 0.1, num_difficulties: int = 4, max_len: int = 2048):
+        super().__init__()
+        self.d_model = d_model
+        self.audio_encoder = AudioEncoder(input_dim=audio_dim, hidden_dim=d_model)
+        self.diff_embedding = nn.Embedding(num_difficulties, d_model)
+        self.pos_encoding = PositionalEncoding(d_model, max_len=max_len)
+        self.dropout = nn.Dropout(dropout)
+        enc_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead,
+                                               dim_feedforward=dim_feedforward,
+                                               dropout=dropout, batch_first=True)
+        self.onset_encoder = nn.TransformerEncoder(enc_layer, num_layers=onset_layers)
+        self.onset_head = nn.Linear(d_model, 1)
+        self.symbol_embedding = nn.Embedding(NUM_SYMBOLS, d_model)
+        self.panel_pos = nn.Parameter(torch.randn(NUM_PANELS, d_model) * 0.02)
+        self.bos = nn.Parameter(torch.randn(d_model) * 0.02)
+        dec_layer = nn.TransformerDecoderLayer(d_model=d_model, nhead=nhead,
+                                               dim_feedforward=dim_feedforward,
+                                               dropout=dropout, batch_first=True)
+        self.decoder = nn.TransformerDecoder(dec_layer, num_layers=num_layers)
+        self.pattern_head = nn.Linear(d_model, NUM_PATTERNS)          # which panels (15-way)
+        self.type_head = nn.Linear(d_model, NUM_PANELS * NUM_TYPES)   # per-panel type (4-way)
+
+    def load_from_factorized(self, sd: dict) -> int:
+        """Warm-start: name+shape matches (audio enc, onset branch, decoder, diff emb) PLUS
+        map the binary panel_head (Linear d->15) onto the pattern_head (same shape, same job)."""
+        own = self.state_dict()
+        load = {k: v for k, v in sd.items() if k in own and own[k].shape == v.shape}
+        for src, dst in [("panel_head.weight", "pattern_head.weight"),
+                         ("panel_head.bias", "pattern_head.bias")]:
+            if src in sd and own[dst].shape == sd[src].shape:
+                load[dst] = sd[src]
+        own.update(load); self.load_state_dict(own)
+        return len(load)
+
+    def freeze_audio_encoder(self, freeze: bool = True):
+        for p in self.audio_encoder.parameters():
+            p.requires_grad = not freeze
+
+    def encode_audio(self, audio):
+        return self.audio_encoder(audio)
+
+    def onset_logits(self, memory, difficulty, mask=None):
+        B, T, _ = memory.shape
+        diff = self.diff_embedding(difficulty).unsqueeze(1).expand(B, T, -1)
+        x = self.dropout(self.pos_encoding(memory) + diff)
+        pad = (~mask.bool()) if mask is not None else None
+        return self.onset_head(self.onset_encoder(x, src_key_padding_mask=pad)).squeeze(-1)
+
+    def _state_emb(self, states):
+        return (self.symbol_embedding(states.long()) + self.panel_pos).sum(dim=2)
+
+    def _decoder_input(self, states):
+        B = states.shape[0]
+        e = self._state_emb(states)
+        return torch.cat([self.bos.expand(B, 1, -1), e[:, :-1]], dim=1)
+
+    def _decode(self, memory, states, difficulty, mask=None):
+        B, T, _ = states.shape
+        diff = self.diff_embedding(difficulty).unsqueeze(1).expand(B, T, -1)
+        tgt = self.dropout(self.pos_encoding(self._decoder_input(states)) + diff)
+        causal = _causal_mask(T, states.device)
+        pad = (~mask.bool()) if mask is not None else None
+        h = self.decoder(tgt=tgt, memory=memory, tgt_mask=causal,
+                         tgt_key_padding_mask=pad, memory_key_padding_mask=pad)
+        return self.pattern_head(h), self.type_head(h).view(B, T, NUM_PANELS, NUM_TYPES)
+
+    def forward(self, audio, states, difficulty, mask=None):
+        """Returns (onset_logits (B,T), pattern_logits (B,T,15), type_logits (B,T,4,4))."""
+        memory = self.encode_audio(audio)
+        ol = self.onset_logits(memory, difficulty, mask)
+        pat, typ = self._decode(memory, states, difficulty, mask)
+        return ol, pat, typ
+
+    def _decoder_step_cached(self, x, caches):
+        for layer, cache in zip(self.decoder.layers, caches):
+            q = _project(layer.self_attn, x, 'q')
+            kn = _project(layer.self_attn, x, 'k'); vn = _project(layer.self_attn, x, 'v')
+            cache.k = kn if cache.k is None else torch.cat([cache.k, kn], dim=1)
+            cache.v = vn if cache.v is None else torch.cat([cache.v, vn], dim=1)
+            x = layer.norm1(x + _attend(layer.self_attn, q, cache.k, cache.v))
+            cq = _project(layer.multihead_attn, x, 'q')
+            x = layer.norm2(x + _attend(layer.multihead_attn, cq, cache.mem_k, cache.mem_v))
+            x = layer.norm3(x + layer.linear2(F.relu(layer.linear1(x))))
+        return x
+
+    @torch.no_grad()
+    def generate(self, audio, difficulty, lengths=None, onset_threshold=0.5,
+                 onset_sample=False, onset_logit_scale=1.0, onset_logit_bias=0.0,
+                 onset_override=None, greedy=True, temperature=1.0,
+                 type_sample=False, type_temperature=1.0):
+        """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
+        -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
+
+        `type_sample` samples the per-panel TYPE (so rare holds appear at ~their predicted
+        rate) while keeping the pattern (which-panels) greedy — holds never beat tap under
+        greedy argmax, so sampling the type is how they surface."""
+        self.eval()
+        device = audio.device
+        B, T, _ = audio.shape
+        memory = self.encode_audio(audio)
+        if onset_override is not None:
+            onset = onset_override.bool().to(device)
+        else:
+            p = torch.sigmoid(onset_logit_scale * self.onset_logits(memory, difficulty) + onset_logit_bias)
+            onset = torch.bernoulli(p).bool() if onset_sample else (p > onset_threshold)
+
+        # precompute which-panel bit table for the 15 patterns: (15,4)
+        states_tab = torch.arange(1, NUM_PATTERNS + 1, device=device)
+        panel_bits = ((states_tab.unsqueeze(-1) >> torch.arange(NUM_PANELS, device=device)) & 1)  # (15,4)
+
+        caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
+        diff_emb = self.diff_embedding(difficulty).unsqueeze(1)
+        gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
+        prev_emb = self.bos.expand(B, 1, -1)
+
+        for t in range(T):
+            x = prev_emb + self.pos_encoding.pe[:, t:t + 1] + diff_emb
+            h = self._decoder_step_cached(x, caches)[:, -1]
+            pat_logits = self.pattern_head(h)                                  # (B,15)
+            typ_logits = self.type_head(h).view(B, NUM_PANELS, NUM_TYPES)      # (B,4,4)
+            # pattern (which panels): greedy unless globally sampling
+            if greedy:
+                pat = pat_logits.argmax(-1)
+            else:
+                pat = torch.multinomial(torch.softmax(pat_logits / temperature, -1), 1).squeeze(-1)
+            # type (per panel): sample if requested (lets rare holds surface), else greedy
+            if type_sample or not greedy:
+                tt = type_temperature if type_sample else temperature
+                typ = torch.multinomial(torch.softmax(typ_logits / tt, -1).view(-1, NUM_TYPES), 1).view(B, NUM_PANELS)
+            else:
+                typ = typ_logits.argmax(-1)
+            active = panel_bits[pat]                                           # (B,4) which panels
+            sym = torch.where(active.bool(), typ + 1, torch.zeros_like(typ))   # type idx -> symbol 1..4
+            state = torch.where(onset[:, t].unsqueeze(1), sym, torch.zeros_like(sym))
+            gen[:, t] = state
+            prev_emb = self._state_emb(state.unsqueeze(1))
 
         if lengths is not None:
             valid = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)

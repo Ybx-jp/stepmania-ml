@@ -86,3 +86,38 @@ proven structure:
 Decode: onset (frame has a step) → pattern (which panels) → per-active-panel type. This keeps the
 "which panels" decision at the binary model's quality and layers types on top, instead of
 re-introducing the none/active imbalance into the panel head. This is the principled fix.
+
+## Fix attempt 2 result: layered head (SUCCESS)
+
+`LayeredTypedChartGenerator` (onset → 15-way pattern, warm-started from the binary panel_head →
+4-way type per active panel). Trained 10 epochs (iterating at 10-epoch granularity to save time).
+The "which panels" pattern head removes the none/active conflation; difficulty fidelity recovers.
+
+Decode knobs explored (the type head decides tap-vs-hold among active panels; holds are rare +
+intrinsically ambiguous with taps at the head frame, teacher-forced hold-head recall ~0.1):
+
+| config | crit_adj | tap:hold | note |
+|---|---|---|---|
+| no type weight, greedy | 0.766 | →0 (no holds) | greedy never picks a ~5% hold |
+| inv_sqrt type weight, sampled | 0.672 | 1.7:1 | weight inflates + sampling → too many |
+| **no type weight, sampled** | **0.844** | 3.5:1 | calibrated; best fidelity |
+
+Then `type_temperature` sweep on the no-weight checkpoint (decode-only, no retrain), real 20.2:1:
+
+| type_temp | onset_F1 | tap:hold | crit_adj |
+|---|---|---|---|
+| 1.0 | 0.744 | 3.3:1 | 0.750 |
+| 0.5 | 0.751 | 6.2:1 | 0.797 |
+| 0.35 | 0.766 | 27.5:1 | 0.781 |
+
+**Conclusion / recommended config:** layered head, **no type-head class weighting** (calibrated focal),
+**sample the type** at generation with **type_temperature ≈ 0.4** → holds at ~the real rate (≈20:1),
+onset_F1 ≈ 0.76, crit_adj ≈ 0.79. Charts are playable (`pair_holds` cleans orphan heads/tails).
+
+Journey: broken weighted-CE per-panel (crit 0.53) → flat focal (0.69) → **layered head (0.79–0.84)**.
+The layered factorization (which-panels vs type) was the fix; the type sampling temperature is the
+hold-rate knob. Adding holds costs ~0.1 crit_adj vs the hold-free model (0.93) — expected, since
+holds are rare and hold-head/tap is ambiguous; ~0.79 with real-rate holds is the working result.
+
+Roll never fires (no training data), as expected. Remaining polish (optional): 20-epoch train for
+a sharper type head; hold-state-aware decoding to cut the raw orphan rate before pairing.
