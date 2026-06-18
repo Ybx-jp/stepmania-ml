@@ -16,7 +16,7 @@ from src.generation.tokenizer import (
     EOS_TOKEN,
     VOCAB_SIZE,
 )
-from src.generation.sm_writer import tensor_to_sm, ROWS_PER_MEASURE
+from src.generation.sm_writer import tensor_to_sm, charts_to_sm, ROWS_PER_MEASURE
 from src.generation.evaluation import onset_density_metrics
 from src.data.stepmania_parser import StepManiaParser, StepManiaChart, NoteData
 
@@ -122,6 +122,31 @@ def test_writer_produces_parseable_header():
         assert field in content, f"missing {field!r}"
     assert content.count("#NOTES:") == 1
     assert content.rstrip().endswith(";")
+
+
+def test_charts_to_sm_two_charts_roundtrip():
+    # Two charts in one .sm -> parser sees both, each round-trips exactly.
+    T = ROWS_PER_MEASURE * 4
+    gen = _random_chart(T, seed=10)
+    orig = _random_chart(T, seed=11)
+    content = charts_to_sm(
+        charts=[
+            {"chart": gen, "difficulty_name": "Challenge", "difficulty_value": 9, "author": "generated"},
+            {"chart": orig, "difficulty_name": "Hard", "difficulty_value": 7, "author": "original"},
+        ],
+        bpm=140.0, title="AB", music="song.ogg",
+    )
+    assert content.count("#NOTES:") == 2
+    parser = StepManiaParser()
+    notes = parser._parse_notes_sm(content)
+    assert len(notes) == 2
+    chart_meta = StepManiaChart(
+        title="", artist="", audio_file="", bpm=140.0, offset=0.0, sample_start=0.0,
+        sample_length=0.0, timing_events=[], note_data=notes, song_length_seconds=0.0,
+        timesteps_total=T, hop_length=0,
+    )
+    np.testing.assert_array_equal(parser.convert_to_tensor(chart_meta, notes[0]), gen)
+    np.testing.assert_array_equal(parser.convert_to_tensor(chart_meta, notes[1]), orig)
 
 
 # ---- onset / density metrics ----------------------------------------------------

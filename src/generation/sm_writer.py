@@ -67,16 +67,13 @@ def tensor_to_sm(
     Returns:
         The full .sm file contents as a string.
     """
-    if isinstance(chart, torch.Tensor):
-        arr = chart.detach().cpu().numpy()
-    else:
-        arr = np.asarray(chart)
-    if arr.ndim != 2 or arr.shape[1] != NUM_PANELS:
-        raise ValueError(f"chart must be (T, {NUM_PANELS}), got {arr.shape}")
+    return _sm_header(bpm, title, artist, music, offset) + _notes_block(
+        chart, difficulty_name, difficulty_value, author
+    )
 
-    measures = _chart_to_measures(arr)
 
-    header = (
+def _sm_header(bpm, title, artist, music, offset) -> str:
+    return (
         f"#TITLE:{title};\n"
         f"#ARTIST:{artist};\n"
         f"#MUSIC:{music};\n"
@@ -87,8 +84,17 @@ def tensor_to_sm(
         f"#BPMS:0.000={float(bpm)};\n"
     )
 
-    # #NOTES 5-line header: <style>:<author>:<difficulty>:<meter>:<radar>:
-    notes = (
+
+def _notes_block(chart, difficulty_name, difficulty_value, author) -> str:
+    """One #NOTES section. #NOTES 5-line header: style:author:difficulty:meter:radar:."""
+    if isinstance(chart, torch.Tensor):
+        arr = chart.detach().cpu().numpy()
+    else:
+        arr = np.asarray(chart)
+    if arr.ndim != 2 or arr.shape[1] != NUM_PANELS:
+        raise ValueError(f"chart must be (T, {NUM_PANELS}), got {arr.shape}")
+    measures = _chart_to_measures(arr)
+    return (
         "#NOTES:\n"
         "     dance-single:\n"
         f"     {author}:\n"
@@ -99,7 +105,20 @@ def tensor_to_sm(
         ";\n"
     )
 
-    return header + notes
+
+def charts_to_sm(charts, bpm, title="Generated Chart",
+                 artist="stepmania-chart-generator", music="audio.ogg", offset=0.0) -> str:
+    """Render multiple difficulty charts into one .sm file (e.g. generated + original).
+
+    Args:
+        charts: list of dicts, each {chart, difficulty_name, difficulty_value, author?}.
+    Returns the full .sm contents.
+    """
+    out = _sm_header(bpm, title, artist, music, offset)
+    for c in charts:
+        out += _notes_block(c["chart"], c["difficulty_name"], c["difficulty_value"],
+                            c.get("author", "phase2-generator"))
+    return out
 
 
 def write_sm(chart: Union[np.ndarray, torch.Tensor], path: str, bpm: float, **kwargs) -> str:

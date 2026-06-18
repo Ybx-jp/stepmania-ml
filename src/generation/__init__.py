@@ -16,7 +16,7 @@ from .tokenizer import (
     EOS_TOKEN,
     VOCAB_SIZE,
 )
-from .sm_writer import tensor_to_sm, write_sm
+from .sm_writer import tensor_to_sm, write_sm, charts_to_sm
 from .evaluation import (
     onset_density_metrics,
     chart_groove_radar_vector,
@@ -32,6 +32,7 @@ __all__ = [
     "VOCAB_SIZE",
     "tensor_to_sm",
     "write_sm",
+    "charts_to_sm",
     "onset_density_metrics",
     "chart_groove_radar_vector",
     "DifficultyCritic",

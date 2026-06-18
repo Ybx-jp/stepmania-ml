@@ -5462,3 +5462,6 @@ out.txt
 /cache/samples/val/sample_000785.pt
 /tests/fixtures/test_audio.wav
 outputs/**/run.log
+
+# Generated sample song folders (contain copied audio)
+outputs/samples/
