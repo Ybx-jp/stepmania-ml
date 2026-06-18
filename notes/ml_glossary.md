@@ -31,3 +31,11 @@ Format per entry: **term** — plain meaning *(how it shows up here)*.
 - **warm-start / freeze / fine-tune** — warm-start = initialize part of a new model with weights from an already-trained one; freeze = hold those weights fixed for a while; fine-tune = later let them keep learning.
 - **self-attention / cross-attention / causal mask** — attention = each position looks at other positions and pulls in relevant info. Self-attention = within one sequence; cross-attention = one sequence (the chart) attends to another (the audio); causal mask = forbids looking at future positions so generation stays left-to-right.
 - **KV-cache** — a speed trick for autoregressive generation: store each step's attention keys/values so you don't recompute the whole prefix every new token (turns O(T²) decoding into O(T)).
+
+## Added 2026-06-18
+
+- **BCE / binary cross-entropy** — cross-entropy for a yes/no (binary) target; the loss for a single probability like "is there a step here or not."
+- **pos_weight** — a multiplier on the positive class in BCE that offsets a lopsided yes/no split (here ~4×, since only ~20% of frames have a step), so the rare "yes" isn't ignored.
+- **Bernoulli sampling** — deciding a yes/no outcome by flipping a weighted coin: emit "yes" with probability equal to the model's predicted probability for that frame.
+- **non-causal** — attention/processing allowed to look at the whole sequence (past and future), not just earlier positions; valid here for the onset head because the full song audio is known up front (opposite of a [[causal mask]]).
+- **factorized head** — splitting one combined prediction into two simpler sub-predictions trained separately (here: onset = "is there a step?" then panel = "which arrows?"), so each can be controlled and calibrated on its own.
