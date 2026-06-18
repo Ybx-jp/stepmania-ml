@@ -25,12 +25,48 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from src.models.components.encoders import AudioEncoder
 from .tokenizer import VOCAB_SIZE, NUM_PANEL_STATES
 from .transformer import PositionalEncoding, _causal_mask
 
 NUM_NONEMPTY = NUM_PANEL_STATES - 1  # 15 panel patterns excluding the empty state
+
+
+def _project(mha: nn.MultiheadAttention, x: torch.Tensor, which: str) -> torch.Tensor:
+    """Apply one of nn.MultiheadAttention's packed in-projections (q/k/v) to x."""
+    E = mha.embed_dim
+    w = mha.in_proj_weight
+    b = mha.in_proj_bias
+    sl = {'q': slice(0, E), 'k': slice(E, 2 * E), 'v': slice(2 * E, 3 * E)}[which]
+    return F.linear(x, w[sl], b[sl] if b is not None else None)
+
+
+def _attend(mha: nn.MultiheadAttention, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    """Multi-head scaled-dot-product attention with pre-projected q/k/v, then out_proj.
+
+    q: (B, Lq, E); k/v: (B, Lk, E). No causal mask needed — for incremental self-attn
+    the key cache only holds past+current tokens.
+    """
+    B, Lq, E = q.shape
+    H = mha.num_heads
+    hd = E // H
+    qh = q.view(B, Lq, H, hd).transpose(1, 2)            # (B,H,Lq,hd)
+    kh = k.view(B, -1, H, hd).transpose(1, 2)
+    vh = v.view(B, -1, H, hd).transpose(1, 2)
+    out = F.scaled_dot_product_attention(qh, kh, vh)      # (B,H,Lq,hd)
+    out = out.transpose(1, 2).reshape(B, Lq, E)
+    return mha.out_proj(out)
+
+
+class _LayerCache:
+    """Per-decoder-layer cache: growing self-attn K/V + fixed cross-attn K/V from memory."""
+    def __init__(self, layer: nn.TransformerDecoderLayer, memory: torch.Tensor):
+        self.k = None  # (B, t, E) self-attention keys so far
+        self.v = None
+        self.mem_k = _project(layer.multihead_attn, memory, 'k')  # cross-attn K (computed once)
+        self.mem_v = _project(layer.multihead_attn, memory, 'v')
 
 
 class FactorizedChartGenerator(nn.Module):
@@ -187,6 +223,92 @@ class FactorizedChartGenerator(nn.Module):
             state = torch.where(onset[:, t], panel, torch.zeros_like(panel))
             gen[:, t] = state
             cur = torch.cat([cur, state.unsqueeze(1)], dim=1)
+
+        bits = ((gen.unsqueeze(-1) >> torch.arange(4, device=device)) & 1).float()
+        if lengths is not None:
+            valid = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)
+            bits = bits * valid.unsqueeze(-1)
+        return bits
+
+    def _decoder_step_cached(self, x: torch.Tensor, caches) -> torch.Tensor:
+        """One post-norm decoder step for the new token x (B,1,d), using per-layer caches.
+
+        Mirrors nn.TransformerDecoderLayer (norm_first=False, relu): self-attn over
+        cached K/V (append new), cross-attn to fixed memory K/V, then FFN.
+        """
+        for layer, cache in zip(self.decoder.layers, caches):
+            # --- self-attention (incremental) ---
+            q = _project(layer.self_attn, x, 'q')
+            k_new = _project(layer.self_attn, x, 'k')
+            v_new = _project(layer.self_attn, x, 'v')
+            cache.k = k_new if cache.k is None else torch.cat([cache.k, k_new], dim=1)
+            cache.v = v_new if cache.v is None else torch.cat([cache.v, v_new], dim=1)
+            sa = _attend(layer.self_attn, q, cache.k, cache.v)
+            x = layer.norm1(x + sa)
+            # --- cross-attention to fixed audio memory ---
+            cq = _project(layer.multihead_attn, x, 'q')
+            ca = _attend(layer.multihead_attn, cq, cache.mem_k, cache.mem_v)
+            x = layer.norm2(x + ca)
+            # --- feed-forward ---
+            ff = layer.linear2(F.relu(layer.linear1(x)))
+            x = layer.norm3(x + ff)
+        return x
+
+    @torch.no_grad()
+    def generate_cached(
+        self,
+        audio: torch.Tensor,
+        difficulty: torch.Tensor,
+        lengths: Optional[torch.Tensor] = None,
+        onset_threshold: float = 0.5,
+        onset_sample: bool = False,
+        onset_logit_scale: float = 1.0,
+        onset_logit_bias: float = 0.0,
+        onset_override: Optional[torch.Tensor] = None,
+        panel_greedy: bool = True,
+        panel_temperature: float = 1.0,
+        panel_top_k: Optional[int] = None,
+    ) -> torch.Tensor:
+        """KV-cached equivalent of generate(): O(T) instead of O(T^2) decoding.
+
+        Same arguments and (for greedy) same output as generate(), but each step
+        processes only the new token against cached keys/values — enabling
+        full-length (1440-frame) generation at reasonable cost.
+        """
+        self.eval()
+        device = audio.device
+        B, T, _ = audio.shape
+        from .tokenizer import BOS_TOKEN
+
+        memory = self.encode_audio(audio)
+        if onset_override is not None:
+            onset = onset_override.bool().to(device)
+        else:
+            p_onset = torch.sigmoid(onset_logit_scale * self.onset_logits(memory, difficulty) + onset_logit_bias)
+            onset = torch.bernoulli(p_onset).bool() if onset_sample else (p_onset > onset_threshold)
+
+        caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
+        diff_emb = self.diff_embedding(difficulty).unsqueeze(1)  # (B,1,d)
+        gen = torch.zeros(B, T, dtype=torch.long, device=device)
+        tok = torch.full((B,), BOS_TOKEN, dtype=torch.long, device=device)
+
+        for t in range(T):
+            # embed the current token at position t (matches non-cached pos encoding)
+            x = self.token_embedding(tok).unsqueeze(1)  # (B,1,d)
+            x = x + self.pos_encoding.pe[:, t:t + 1] + diff_emb
+            h = self._decoder_step_cached(x, caches)
+            logits = self.panel_head(h[:, -1])  # (B, 15)
+            if panel_greedy:
+                panel = logits.argmax(dim=-1) + 1
+            else:
+                logits = logits / max(panel_temperature, 1e-6)
+                if panel_top_k is not None:
+                    kth = torch.topk(logits, panel_top_k, dim=-1).values[:, -1:]
+                    logits = logits.masked_fill(logits < kth, float("-inf"))
+                panel = torch.multinomial(torch.softmax(logits, dim=-1), 1).squeeze(-1) + 1
+            state = torch.where(onset[:, t], panel, torch.zeros_like(panel))
+            gen[:, t] = state
+            tok = state  # next step's input token
 
         bits = ((gen.unsqueeze(-1) >> torch.arange(4, device=device)) & 1).float()
         if lengths is not None:
