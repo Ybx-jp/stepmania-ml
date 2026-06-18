@@ -131,6 +131,8 @@ class FactorizedChartGenerator(nn.Module):
         lengths: Optional[torch.Tensor] = None,
         onset_threshold: float = 0.5,
         onset_sample: bool = False,
+        onset_logit_scale: float = 1.0,
+        onset_logit_bias: float = 0.0,
         panel_greedy: bool = True,
         panel_temperature: float = 1.0,
         panel_top_k: Optional[int] = None,
@@ -142,6 +144,9 @@ class FactorizedChartGenerator(nn.Module):
         sampling — flip each frame's coin at its predicted probability — if
         `onset_sample`). Only the panel pattern is decoded autoregressively, and
         only where an onset fired.
+
+        `onset_logit_scale`/`onset_logit_bias` apply post-hoc Platt calibration to
+        the onset logits: p = sigmoid(scale * logit + bias). Defaults are a no-op.
         """
         self.eval()
         device = audio.device
@@ -149,7 +154,7 @@ class FactorizedChartGenerator(nn.Module):
         from .tokenizer import BOS_TOKEN
 
         memory = self.encode_audio(audio)
-        p_onset = torch.sigmoid(self.onset_logits(memory, difficulty))  # (B, T)
+        p_onset = torch.sigmoid(onset_logit_scale * self.onset_logits(memory, difficulty) + onset_logit_bias)  # (B, T)
         if onset_sample:
             onset = torch.bernoulli(p_onset).bool()
         else:
