@@ -115,6 +115,45 @@ def test_writer_pads_partial_final_measure():
     assert reparsed[T:].sum() == 0  # padding rows are empty
 
 
+def test_typed_writer_parser_roundtrip():
+    # Typed chart with taps, a hold (2..3), a roll (4..3), and a jump must round-trip
+    # exactly through the typed writer -> parser convert_to_tensor_typed.
+    from src.generation.sm_writer import charts_to_sm
+    T = ROWS_PER_MEASURE * 2  # 32
+    chart = np.zeros((T, 4), dtype=np.int64)
+    chart[0, 0] = 1               # tap, Left
+    chart[4, 1] = 2               # hold head, Down
+    chart[8, 1] = 3               # hold tail, Down
+    chart[12, 2] = 4              # roll head, Up
+    chart[16, 2] = 3              # roll tail, Up
+    chart[20, 0] = 1; chart[20, 3] = 1   # jump (Left+Right)
+    chart[24, 3] = 2; chart[28, 3] = 3   # another hold, Right
+
+    content = tensor_to_sm(chart, bpm=130.0, typed=True, difficulty_name="Hard", difficulty_value=8)
+    parser = StepManiaParser()
+    notes = parser._parse_notes_sm(content)
+    assert len(notes) == 1
+    meta = StepManiaChart(
+        title="", artist="", audio_file="", bpm=130.0, offset=0.0, sample_start=0.0,
+        sample_length=0.0, timing_events=[], note_data=notes, song_length_seconds=0.0,
+        timesteps_total=T, hop_length=0,
+    )
+    reparsed = parser.convert_to_tensor_typed(meta, notes[0])
+    np.testing.assert_array_equal(reparsed, chart)
+    # all four non-empty symbols present and preserved
+    assert set(np.unique(reparsed)) == {0, 1, 2, 3, 4}
+
+
+def test_typed_helpers():
+    from src.generation.typed import onset_mask, symbol_histogram, NUM_SYMBOLS
+    assert NUM_SYMBOLS == 5
+    chart = np.zeros((5, 4), dtype=np.int64)
+    chart[1, 0] = 2; chart[3, 2] = 1
+    np.testing.assert_array_equal(onset_mask(chart), [False, True, False, True, False])
+    h = symbol_histogram(chart)
+    assert h["tap"] == 1 and h["hold_head"] == 1 and h["none"] == 18
+
+
 def test_kv_cache_matches_noncached():
     # Cached generation must be bit-identical to non-cached (greedy, fixed onset).
     import torch

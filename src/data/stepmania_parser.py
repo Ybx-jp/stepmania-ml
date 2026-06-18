@@ -522,6 +522,36 @@ class StepManiaParser:
 
         return chart_tensor, hold_info
 
+    # StepMania note chars -> typed symbol id. Mines ('M') and others -> 0 (excluded).
+    TYPED_SYMBOLS = {'1': 1, '2': 2, '3': 3, '4': 4}  # tap, hold-head, tail, roll-head
+
+    def convert_to_tensor_typed(self, chart: StepManiaChart, note_data: NoteData) -> np.ndarray:
+        """Convert note data to a TYPED tensor: (timesteps_total, 4), int8.
+
+        Each cell is a symbol: 0=none, 1=tap, 2=hold-head, 3=hold/roll-tail, 4=roll-head.
+        Lossless for taps/holds/rolls (the rows between a hold head and its tail are 0
+        in .sm; the bar is implied). Mines and unknown chars map to 0.
+
+        Additive alternative to convert_to_tensor (binary) — the frozen classifier path
+        is unchanged; this feeds the typed generator.
+        """
+        arr = np.zeros((chart.timesteps_total, 4), dtype=np.int8)
+        current_beat = 0.0
+        for measure in note_data.notes.split(','):
+            lines = [line.strip() for line in measure.strip().split('\n') if line.strip()]
+            if not lines:
+                continue
+            beats_per_line = 4.0 / len(lines)
+            for line_idx, line in enumerate(lines):
+                if len(line) >= 4:
+                    beat_position = current_beat + (line_idx * beats_per_line)
+                    ts = int(np.floor(beat_position * self.timesteps_per_beat))
+                    if 0 <= ts < chart.timesteps_total:
+                        for panel_idx in range(4):
+                            arr[ts, panel_idx] = self.TYPED_SYMBOLS.get(line[panel_idx], 0)
+            current_beat += 4.0
+        return arr
+
     def validate_pattern_quality(self, chart_tensor: np.ndarray) -> bool:
         """
         Validate chart meets Phase 1 quality requirements:
