@@ -144,6 +144,26 @@ class ChartGenerator(nn.Module):
         )
         return self.output_head(out)
 
+    # ---- diagnostics ------------------------------------------------------------
+
+    @torch.no_grad()
+    def onset_posteriors(
+        self,
+        audio: torch.Tensor,
+        in_tokens: torch.Tensor,
+        difficulty: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Teacher-forced per-frame P(onset) = 1 - P(empty panel-state). Shape (B, T).
+
+        Decoupled from autoregressive sampling and density: a clean "does the model
+        know where notes go, given clean context" signal.
+        """
+        self.eval()
+        logits = self.forward(audio, in_tokens, difficulty, mask)  # (B, T, VOCAB)
+        probs = torch.softmax(logits[..., :NUM_PANEL_STATES], dim=-1)  # over panel-states
+        return 1.0 - probs[..., 0]  # state 0 = empty (0b0000)
+
     # ---- generation -------------------------------------------------------------
 
     @torch.no_grad()
@@ -155,12 +175,18 @@ class ChartGenerator(nn.Module):
         temperature: float = 1.0,
         top_k: Optional[int] = None,
         greedy: bool = True,
+        onset_threshold: Optional[float] = None,
     ) -> torch.Tensor:
         """Batched autoregressive decode. Returns (B, T, 4) binary charts.
 
         Steps are sampled only over the 16 panel-states (specials are masked out).
         `lengths` (B,) optionally caps each song's valid length; frames beyond it
         are emitted as empty.
+
+        If `onset_threshold` is set, decoding is density-controlled: a frame gets a
+        step iff P(onset) = 1 - P(empty) > threshold, and the panel pattern is the
+        argmax over the 15 non-empty states. This decouples "how many" (threshold)
+        from "which arrows" (panel argmax), bypassing temperature.
         """
         self.eval()
         device = audio.device
@@ -178,7 +204,14 @@ class ChartGenerator(nn.Module):
             logits = self.output_head(out[:, -1])  # (B, VOCAB)
             logits = logits[:, :NUM_PANEL_STATES]  # restrict to panel-states
 
-            if greedy:
+            if onset_threshold is not None:
+                probs = torch.softmax(logits, dim=-1)  # (B, 16)
+                p_onset = 1.0 - probs[:, 0]
+                # best non-empty panel pattern (states 1..15)
+                panel = probs[:, 1:].argmax(dim=-1) + 1
+                nxt = torch.where(p_onset > onset_threshold, panel,
+                                  torch.zeros_like(panel))
+            elif greedy:
                 nxt = logits.argmax(dim=-1)
             else:
                 logits = logits / max(temperature, 1e-6)
