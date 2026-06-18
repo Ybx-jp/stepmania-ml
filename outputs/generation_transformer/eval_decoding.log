@@ -1,0 +1,466 @@
+Data splits created:
+  Train: 4452 files (70.0%)
+  Val:   954 files (15.0%)
+  Test:  954 files (15.0%)
+Parsing 0 chart files...
+
+Dataset initialized with 0 valid samples
+Cache: 0/0 samples (0.0% hit rate)
+Parsing 954 chart files...
+  Parsing file 0/954...See Me Now failed song length requirement
+永遠なる絆と想いのキセキ failed bpm requirement (avg_bpm=270.8)
+扉ひらいて、ふたり未来へ-Fantom Euro Mix- failed song length requirement
+恋ひ恋ふ縁 Ex failed valid chart requirement (no dance-single charts)
+Natsuzora failed song length requirement
+Beat your Heart failed bpm requirement (avg_bpm=220.0)
+SUPER SUMMER DIVE!! failed song length requirement
+Error processing data/community/remi/âcü[âfâBü[üÜ/âcü[âfâBü[üÜ.ssc: Audio file not found: data/community/remi/âcü[âfâBü[üÜ/c[fB[.mp3
+Error processing data/community/remi/GHOSTü~GRADUATION/GHOSTü~GRADUATION.ssc: Audio file not found: data/community/remi/GHOSTü~GRADUATION/GHOST~GRADUATION.mp3
+Crazy Baby failed bpm requirement (avg_bpm=441.1)
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+Pure My Voices failed song length requirement
+Little bravery failed song length requirement
+Imaginary affair failed song length requirement
+G e n g a o z o failed song length requirement
+PEACE BREAKER failed song length requirement
+T.S ： Terminal Strike failed song length requirement
+Error processing data/community/Gochamaze Greatest Gigapack 2/(RION)Fatima/Fatima.sm: Audio file not found: data/community/Gochamaze Greatest Gigapack 2/(RION)Fatima/fatima.ogg
+NEVER ENDING LIGHT failed song length requirement
+More Selfish failed song length requirement
+Dreht Sich！ failed song length requirement
+Odin failed song length requirement
+ラズワルド failed song length requirement
+the sorrow of the islands failed song length requirement
+  Parsing file 50/954...Lyrith -Meikyuu Lyrith- failed song length requirement
+トラウマ催眠少女さとり！ failed bpm requirement (avg_bpm=210.0)
+Quon failed song length requirement
+Error processing data/community/remi/è¬Äqé╠âpü[âtâFâNâgâGâîâKâôâgï│Ä║/è¬Äqé╠âpü[âtâFâNâgâGâîâKâôâgï│Ä║.sm: Audio file not found: data/community/remi/è¬Äqé╠âpü[âtâFâNâgâGâîâKâôâgï│Ä║/q̃p[tFNgGKg.mp3
+Lambda Driver failed song length requirement
+Scarlet Double Dance failed song length requirement
+ロストワンの号哭 failed song length requirement
+Error processing data/community/remi/ë╘é╤éτé╞éΦé┌é±/ë╘é╤éτé╞éΦé┌é±.ssc: Audio file not found: data/community/remi/ë╘é╤éτé╞éΦé┌é±/ԂтƂڂ.mp3
+Edge of glory failed song length requirement
+幽雅に咲かせ、墨染の桜 failed song length requirement
+memoria ficta failed bpm requirement (avg_bpm=250.0)
+しぇる☆どっきんぐ ～だめ！このままじゃ溢れちゃう！～ failed song length requirement
+F failed song length requirement
+  Parsing file 100/954...[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+Memories of Sky -CoolDownMIX- failed song length requirement
+Go↓Go↑Girls&Boys! failed song length requirement
+RA music select Medley failed song length requirement
+Error processing data/community/remi/natsuno_owari/basic.ssc: Audio file not found: data/community/remi/natsuno_owari/Ă̏I_short.mp3
+カサネテク (1.4x) failed song length requirement
+恋のスターライト☆ユーロ failed song length requirement
+Error processing data/community/remi/öwÉàöVÉw/öwÉàöVÉw.sm: Audio file not found: data/community/remi/öwÉàöVÉw/wVw.mp3
+星の器 ～STAR OF ANDROMEDA～ failed song length requirement
+Comfort BLAST failed bpm requirement (avg_bpm=289.9)
+Love's Rebirth '06 failed song length requirement
+Realize Maze failed song length requirement
+Rendezvous failed song length requirement
+Ereshkigal failed song length requirement
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+Free failed song length requirement
+夜に駆ける failed song length requirement
+Fire In The Sky failed song length requirement
+LUVディテクター failed song length requirement
+Icarus failed song length requirement
+終焉り紡ぎし者 failed bpm requirement (avg_bpm=250.0)
+Death By Glamour failed song length requirement
+  Parsing file 150/954...[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+FANTASTIC ILLUSION failed song length requirement
+K Lobelia failed song length requirement
+カ・ラ・ク・リ failed song length requirement
+Error processing data/community/remi/é¿îZé┐éßé±üAëEÄΦé╠Ägùpé≡ï╓Ä~é╡é▄é╖Ex/é¿îZé┐éßé±üAëEÄΦé╠Ägùpé≡ï╓Ä~é╡é▄é╖.ssc: Audio file not found: data/community/remi/é¿îZé┐éßé±üAëEÄΦé╠Ägùpé≡ï╓Ä~é╡é▄é╖Ex/ZAE̎gp֎~܂.mp3
+エガオノキミヘ(FX) failed song length requirement
+モリオンの姫 failed song length requirement
+GIN TONIC FLAVOR failed song length requirement
+Jinsei Reset Button failed bpm requirement (avg_bpm=206.5)
+Ismail failed song length requirement
+少女さとり-3rd.eye-Trance.edt failed song length requirement
+Error processing data/community/-Silenttype01's DDR Edits-/V (for EXTREME)/V (for EXTREME).sm: Audio file not found: data/community/-Silenttype01's DDR Edits-/V (for EXTREME)/V(for EXTREME).mp3
+Acid Pumper failed valid chart requirement (no dance-single charts)
+凍傷ヒステリア failed bpm requirement (avg_bpm=300.0)
+Error processing data/community/Areicia Favorite Song Pack 1st Volume/Yggdrasill/Yggdrasill.sm: Audio file not found: data/community/Areicia Favorite Song Pack 1st Volume/Yggdrasill/�@Yggdrasill�@- song by ���c�J.mp3
+カーニバル failed bpm requirement (avg_bpm=262.0)
+Angelic Tears failed song length requirement
+お願いSweetheart(Full) failed song length requirement
+Lantern failed song length requirement
+Total Eclipse of the Sun failed song length requirement
+Error processing data/community/sabo/óªRed and Whiteóª Remix/óªRed and Whiteóª  Remix.sm: Audio file not found: data/community/sabo/óªRed and Whiteóª Remix/Red and White Remix.mp3
+Error processing data/community/sabo/1111 (27)/111.sm: Audio file not found: data/community/sabo/1111 (27)/09 NgK[`.mp3
+  Parsing file 200/954...energy night failed song length requirement
+Evangelize (Radio Edit) failed song length requirement
+いけないボーダーライン failed song length requirement
+君の銀の庭 failed song length requirement
+MarginalLink failed song length requirement
+Error processing data/community/remi/Åté╠ùz/Åté╠ùz.sm: Audio file not found: data/community/remi/Åté╠ùz/t̗z.ogg
+MAX 300 failed bpm requirement (avg_bpm=298.6)
+カラフルボイス failed bpm requirement (avg_bpm=240.0)
+Ophelia failed song length requirement
+繧､繧ｫ縺｡繧＞縺九■繧う繧ｫ繝√Ε縺°繝√Ε繧､縺九■繧＞繧ｫ繝√Ε繧､繧ｫ縺｡繧ｓ蜿ｯ諢帙＞ｼ failed song length requirement
+Error processing data/community/remi/mottoüÖöhÄΦé╔é╦!/mottoüÖöhÄΦé╔é╦!.sm: Audio file not found: data/community/remi/mottoüÖöhÄΦé╔é╦!/mottohɂ!.mp3
+Error processing data/community/sabo/Yabari/Yabari.sm: Audio file not found: data/community/sabo/Yabari/Ղ񂿂ςρ[S(ḰK)m (RYU Remix).mp3
+THE BIND SEEKER failed bpm requirement (avg_bpm=268.0)
+dreaming failed song length requirement
+Don't be Afraid 2012 failed song length requirement
+Error processing data/community/sabo/Hyangi/Hyangi.sm: Audio file not found: data/community/sabo/Hyangi/06 t.mp3
+Truth and Light failed song length requirement
+Error processing data/community/remi/öΘûºÄdè_é»é╠Apple/öΘûºÄdè_é»é╠Apple.ssc: Audio file not found: data/community/remi/öΘûºÄdè_é»é╠Apple/閧d|Apple.mp3
+  Parsing file 250/954...東方走破抄 2nd Stage failed song length requirement
+T.Y.H.Y. failed song length requirement
+みっつ数えて大集合!(FULL) failed song length requirement
+Error processing data/community/Sanatenshin/Reboot oNÅ´ÇO/Reboot oNÅ´0.sm: Audio file not found: data/community/Sanatenshin/Reboot oNÅ´ÇO/Reboot oN↓0.mp3
+特者生存ワンダラダー!! failed bpm requirement (avg_bpm=216.0)
+Dot EXE failed bpm requirement (avg_bpm=276.4)
+Clover Day's failed song length requirement
+Muse failed bpm requirement (avg_bpm=205.0)
+Be a Hero! failed song length requirement
+Error processing data/community/sabo/KakuChie/KakuChie.sm: Audio file not found: data/community/sabo/KakuChie/֐_.mp3
+リリリリ★バーニングナイト failed song length requirement
+Into the world failed song length requirement
+Sweet Love failed valid chart requirement (no dance-single charts)
+Blaze of Reunion -Full ver- failed song length requirement
+放課後革命 failed bpm requirement (avg_bpm=205.0)
+TIME LIMIT(bms edit) failed song length requirement
+Strawberry Crisis!! failed song length requirement
+STEEL NEEDLE failed bpm requirement (avg_bpm=205.0)
+220 - Kumano failed bpm requirement (avg_bpm=200.0)
+Cross breed failed song length requirement
+The Everlasting Guilty Crown(pocotan Remix) failed song length requirement
+線路は続くよどこまでも-POP MIX- failed song length requirement
+Error processing data/community/remi/welcomeüÖberry's/welcomeüÖberry's.ssc: Audio file not found: data/community/remi/welcomeüÖberry's/welcomeberry's.mp3
+縺上☆縺ｶ繧稀eart縺ｫ轣ｫ繧偵▽縺代ｍｼ failed bpm requirement (avg_bpm=240.0)
+Timepiece phaseⅡ failed bpm requirement (avg_bpm=287.0)
+Tuk Tuk Boshi failed song length requirement
+Another　Justice failed song length requirement
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+Elemental Creation failed bpm requirement (avg_bpm=212.0)
+  Parsing file 300/954...桜 failed bpm requirement (avg_bpm=253.6)
+FAITH failed song length requirement
+Realize Maze failed song length requirement
+Comme avant failed bpm requirement (avg_bpm=220.6)
+Error processing data/community/sabo/1111 (34)/-NORMAL-.sm: Audio file not found: data/community/sabo/1111 (34)/c17 gZ ''匢̃c''-NORMAL-.mp3
+Blacksphere failed song length requirement
+Error processing data/community/sabo/1111 (39)/111.sm: Audio file not found: data/community/sabo/1111 (39)/2-06 X𕢂e -|̒-.mp3
+疾騒！痛快！正義のアヤパカガール failed song length requirement
+Avenger failed bpm requirement (avg_bpm=247.4)
+Error processing data/community/remi/O.SHI.E.TE.âgâDâïü[üÖé═éƒé╞/O.SHI.E.TE.âgâDâïü[üÖé═éƒé╞.sm: Audio file not found: data/community/remi/O.SHI.E.TE.âgâDâïü[üÖé═éƒé╞/O.SHI.E.TE.トゥルー☆はぁと.mp3
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+Error processing data/community/remi/ÅεöMé╠âöâHâuâï/ÅεöMé╠âöâHâuâï.ssc: Audio file not found: data/community/remi/ÅεöMé╠âöâHâuâï/M̃Hu.mp3
+Error processing data/community/remi/ié≡ë≡é½é╚é│éó/ié≡ë≡é½é╚é│éó.sm: Audio file not found: data/community/remi/ié≡ë≡é½é╚é│éó/iȂ.mp3
+Жаз failed song length requirement
+Girl's spirit failed valid chart requirement (no dance-single charts)
+Cinderella Story failed song length requirement
+Error processing data/community/sabo/1111 (40)/Cosmic Mind.sm: Audio file not found: data/community/sabo/1111 (40)/13. ̖VO@` Cosmic Mind.mp3
+kiss me kiss to you failed valid chart requirement (no dance-single charts)
+Don't let you down failed song length requirement
+Romantic Loneliness failed song length requirement
+エガオノキミヘ failed song length requirement
+あの娘にドロップキック failed bpm requirement (avg_bpm=221.2)
+Imperishable Night 2006 failed song length requirement
+Sway failed song length requirement
+Together As One failed song length requirement
+Baby Fantastic! failed valid chart requirement (no dance-single charts)
+Error processing data/community/sabo/sfdafsda/111.sm: Audio file not found: data/community/sabo/sfdafsda/2-04 JSmg`󎮁`.mp3
+NONSTOP H failed song length requirement
+初音ミクの あたまのたいそう failed bpm requirement (avg_bpm=208.7)
+Fake! failed song length requirement
+  Parsing file 350/954...The Other Side (radio mix) failed valid chart requirement (no dance-single charts)
+aliceblue (Radio Edit) failed song length requirement
+Everlasting Blue failed song length requirement
+Dragon Blade failed bpm requirement (avg_bpm=240.0)
+Over The “Period” failed bpm requirement (avg_bpm=1431.2)
+Error processing data/community/sabo/1111 (38)/111.sm: Audio file not found: data/community/sabo/1111 (38)/1-05 X𕢂e.mp3
+Artificial Rose failed song length requirement
+midnight lightning bolt failed song length requirement
+君とつくるもうひとつの未来 failed valid chart requirement (no dance-single charts)
+A Fool Moon Night failed song length requirement
+Weekly Shounen Bye Bye failed song length requirement
+Error processing data/community/Violent Violet/Violent Violet - Rain Deception (185)/Violent Violet - Rain Deception (185).sm: Audio file not found: data/community/Violent Violet/Violent Violet - Rain Deception (185)/Violent Violet - Rain Deception (185).mp3
+Error processing data/community/sabo/Turii _Panta rhei_/Turii _Panta rhei_.sm: Audio file not found: data/community/sabo/Turii _Panta rhei_/Turii `Panta rhei`.mp3
+The Divinity failed song length requirement
+kindly breeze failed song length requirement
+airlock failed song length requirement
+HOOKER failed song length requirement
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+DROP OUT failed bpm requirement (avg_bpm=260.0)
+cold planet failed song length requirement
+Plastic Mind failed song length requirement
+  Parsing file 400/954...Error processing data/community/-Silenttype01's DDR Edits-/PEACE (^^)v/PEACE (^^)v.sm: Audio file not found: data/community/-Silenttype01's DDR Edits-/PEACE (^^)v/PEACE(^^)v.mp3
+Error processing data/community/sabo/1111 (55)/111.sm: Audio file not found: data/community/sabo/1111 (55)/V]Ԓ@.mp3
+KANATA failed song length requirement
+Hard Knock Days failed song length requirement
+Answer failed song length requirement
+START failed valid chart requirement (no dance-single charts)
+いにしえの風 failed bpm requirement (avg_bpm=210.0)
+feelin' me(spiritual web edit) failed song length requirement
+Aihana(Love+ Edit) failed song length requirement
+Central DELAY failed song length requirement
+Error processing data/community/remi/â^âCâêâEâpâëâ_âCâXEx/â^âCâêâEâpâëâ_âCâX.sm: Audio file not found: data/community/remi/â^âCâêâEâpâëâ_âCâXEx/^CEp_CX.mp3
+The Island of Albatross failed song length requirement
+Scorpion Dance failed song length requirement
+For Life failed song length requirement
+Lyrith -迷宮リリス- failed song length requirement
+Vision～雪の季節～ failed song length requirement
+  Parsing file 450/954...Dreaming in library failed song length requirement
+エンバディメント ～2010 flynation mix～ failed song length requirement
+READY!! failed song length requirement
+カラフルストーリー Full ver failed song length requirement
+Air failed song length requirement
+Error processing data/community/-Silenttype01's DDR Edits-/CELEBRATE NITE (EURO TRANCE STYLE)/CELEBRATE NITE (EURO TRANCE STYLE).sm: Audio file not found: data/community/-Silenttype01's DDR Edits-/CELEBRATE NITE (EURO TRANCE STYLE)/CELEBRATE NITE(EURO TRANCE STYLE).mp3
+Jam & Marmalade failed song length requirement
+春風センセーション! failed song length requirement
+Cherry Blossom Shower failed song length requirement
+Rising Water failed song length requirement
+good high school failed valid chart requirement (no dance-single charts)
+OOPS!...I DID IT AGAIN (Fired Up MIX) failed song length requirement
+Zip it failed song length requirement
+The Noisy Tricksy Night failed song length requirement
+e-motion failed song length requirement
+Error processing data/community/remi/âRâCâmânâi/âRâCâmânâi.sm: Audio file not found: data/community/remi/âRâCâmânâi/RCmni.mp3
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+チルノのパーフェクトさんすう教室(EDM REMIX) failed song length requirement
+Utauyo!!MIRACLE (Eurobeat Mix) failed song length requirement
+こぉのしｗなｗやｗかｗなｗぼでぃｗｗｗ failed song length requirement
+Verflucht failed valid chart requirement (no dance-single charts)
+Error processing data/community/sabo/1111 (9)/111.sm: Audio file not found: data/community/sabo/1111 (9)/IṼX.mp3
+は！か！た！の！しお！ failed song length requirement
+?知???信仰～Nuclear Fusion failed song length requirement
+Error processing data/community/remi/ÅIûûé≡Æ╟éñÄ╥/ÅIûûé≡Æ╟éñÄ╥.sm: Audio file not found: data/community/remi/ÅIûûé≡Æ╟éñÄ╥/Iǂ.mp3
+Stars Biscuit failed song length requirement
+  Parsing file 500/954...永遠なる絆と想いのキセキ failed song length requirement
+プリズマティックプリンセス☆ユニゾンスターズ failed valid chart requirement (no dance-single charts)
+Girl meets Love Ex failed valid chart requirement (no dance-single charts)
+ΔMAX failed bpm requirement (avg_bpm=769.2)
+Lunatic of the Full-Moon failed song length requirement
+物凄いライヴでチルノがそこはかとなく物凄いうた failed bpm requirement (avg_bpm=220.0)
+KHAMEN BREAK failed bpm requirement (avg_bpm=235.2)
+聖絶の煉獄 failed song length requirement
+HAVOX failed bpm requirement (avg_bpm=210.0)
+Error processing data/community/remi/üÖô°ÉFâìâbâNâôâìü[âïü⌠/üÖô°ÉFâìâbâNâôâìü[âïü⌠.ssc: Audio file not found: data/community/remi/üÖô°ÉFâìâbâNâôâìü[âïü⌠/FbN[.mp3
+Little "Sister" Bitch failed song length requirement
+Ageless Love failed song length requirement
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+BlythE：ExtenD failed song length requirement
+HERA failed song length requirement
+灼熱 Pt.2 Long Train Running failed valid chart requirement (no dance-single charts)
+Error processing data/community/remi/âRâRâìücÉ░éΩ/âRâRâìücÉ░éΩ.sm: Audio file not found: data/community/remi/âRâRâìücÉ░éΩ/RRc.mp3
+Go Reimu! failed song length requirement
+?後の? failed song length requirement
+STYX HELIX [MAMA PURITY REMIX] failed song length requirement
+Error processing data/community/sabo/1111 (41)/111.sm: Audio file not found: data/community/sabo/1111 (41)/t܃C{[.mp3
+After The Rain failed song length requirement
+Do You Want To failed valid chart requirement (no dance-single charts)
+Harvest failed song length requirement
+Wonderナンダ？片思い failed song length requirement
+  Parsing file 550/954...ダーリンダンス failed song length requirement
+アイーシャの剣-Forcing breakthrough- failed song length requirement
+Kaleidoscope failed valid chart requirement (no dance-single charts)
+SHINY DAYS failed bpm requirement (avg_bpm=220.0)
+天空のグリニッジ～神アレンジBGM～ failed bpm requirement (avg_bpm=240.0)
+Error processing data/community/sabo/Touch/îÄé▄é┼ô═é»üAòsé╠ëî.sm: Audio file not found: data/community/sabo/Touch/18 ܂œ͂As̉.mp3
+星天奏 -砂漠の月に想うもの- failed song length requirement
+ひつぎとふたご failed song length requirement
+最小三倍完全数 failed bpm requirement (avg_bpm=256.9)
+AXION failed song length requirement
+Broken failed song length requirement
+Error processing data/community/remi/âlâKâeâBâuüEâ[âìüEâpâëâ_âCâXüI/âlâKâeâBâuüEâ[âìüEâpâëâ_âCâXüI.sm: Audio file not found: data/community/remi/âlâKâeâBâuüEâ[âìüEâpâëâ_âCâXüI/lKeBuE[Ep_CXI.mp3
+Ether Strike failed song length requirement
+もういちど教えてほしい failed song length requirement
+Error processing data/community/sabo/1111 (23)/111.sm: Audio file not found: data/community/sabo/1111 (23)/10 vX`bN}Ch.mp3
+NESARIA failed song length requirement
+ロスト failed song length requirement
+G e n g a o z o failed song length requirement
+風の塔 failed bpm requirement (avg_bpm=202.0)
+squartatrice failed song length requirement
+Error processing data/community/Areicia Favorite Song Pack 1st Volume/片翼のイカロス 秋葉工房ユーロビートVer/片翼のイカロス 秋葉工房ユーロビートVer.sm: Audio file not found: data/community/Areicia Favorite Song Pack 1st Volume/片翼のイカロス 秋葉工房ユーロビートVer/З̃CJX HtH[[r[gVer.mp3
+Dolize failed song length requirement
+last word failed song length requirement
+  Parsing file 600/954...ネ！コ！ failed song length requirement
+ずっと未来も！ failed song length requirement
+Error processing data/community/remi/âAâIâ]âëâtâ@âCâeâBâôâO/âAâIâ]âëâtâ@âCâeâBâôâO.sm: Audio file not found: data/community/remi/âAâIâ]âëâtâ@âCâeâBâôâO/AEIE]EӂĂ (mp3cut.net).mp3
+DRAGONLADY_(SUPER_FIRE_PROWREST_REMIX) failed song length requirement
+Ordeal failed song length requirement
+White Eternity failed song length requirement
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+ナイト・オブ・ナイツ failed song length requirement
+夏影-summer lights- [HI-Speed Edition] failed song length requirement
+Bang Bang failed song length requirement
+Goblin failed bpm requirement (avg_bpm=208.8)
+Error processing data/community/sabo/Magus/ûéÅùÆBé╠òæôÑë∩ Magus.sm: Audio file not found: data/community/sabo/Magus/B̕@` Magus.mp3
+Error processing data/community/Areicia Favorite Song Pack 1st Volume/カゲロウ/カゲロウ.sm: Audio file not found: data/community/Areicia Favorite Song Pack 1st Volume/カゲロウ/�J�Q���E.mp3
+幽霊東京 failed song length requirement
+ロケット✩ライド -Full ver- failed song length requirement
+天風 failed song length requirement
+Aihana(Radio Edit) failed song length requirement
+Error processing data/community/sabo/suimusou/╘╘█░⌡■┘╙▀╠.sm: Audio file not found: data/community/sabo/suimusou/2-19 z.mp3
+Jade Star failed song length requirement
+elegante failed song length requirement
+六兆年と一夜物語～ピアノアレンジ～ failed song length requirement
+blue traces [*>ω<*] failed song length requirement
+Error processing data/community/sabo/1111 (68)/111.sm: Audio file not found: data/community/sabo/1111 (68)/T[L[V.mp3
+Error processing data/community/sabo/Mooned Insect/σ┐üXÅHîÄ   Mooned Insect.sm: Audio file not found: data/community/sabo/Mooned Insect/03 忁XH  ` Mooned Insect.mp3
+Architecture failed bpm requirement (avg_bpm=300.0)
+Ascension to Heaven failed song length requirement
+Despre tine failed valid chart requirement (no dance-single charts)
+Give It To Dem failed song length requirement
+  Parsing file 650/954...祝祭のエレメンタリア-リンスレットver- failed song length requirement
+Change Will Come failed bpm requirement (avg_bpm=212.0)
+Stage 5 (Radio edit) failed song length requirement
+The fine every day failed valid chart requirement (no dance-single charts)
+Error processing data/community/remi/âVâôâtâHâjâbâNüEâëâu/âVâôâtâHâjâbâNüEâëâu.sm: Audio file not found: data/community/remi/âVâôâtâHâjâbâNüEâëâu/VtHjbNEu.mp3
+崩壊歌姫 -disruptive diva- failed song length requirement
+Error processing data/community/sabo/½▄½»½╬½╗½½½ñ Yui REMIX/½▄½»½╬½╗½½½ñ Yui REMIX.sm: Audio file not found: data/community/sabo/½▄½»½╬½╗½½½ñ Yui REMIX/{NmZJC Yui REMIX .mp3
+卒業２０００ failed bpm requirement (avg_bpm=210.0)
+ツキソメ failed song length requirement
+Error processing data/community/[Category Name Not Found]/[3.9] Kimi no Heart ni Lock-On/[3.9] Kimi no Heart ni Lock-On.sm: Audio file not found: data/community/[Category Name Not Found]/[3.9] Kimi no Heart ni Lock-On/Kimi no Heart ni Lock On.mp3
+La Tierra de Majestad failed song length requirement
+In The Heat Of The Night failed song length requirement
+World Against failed song length requirement
+Error processing data/community/remi/âRâCâmânâi/âRâCâmânâi.ssc: Audio file not found: data/community/remi/âRâCâmânâi/RCmni.mp3
+Destined Marionette failed song length requirement
+Error processing data/community/Areicia Favorite Song Pack 1st Volume/ワルツ第17番 ト短調 ''大犬のワルツ''-ANOTHER-/ワルツ第17番 ト短調 ''大犬のワルツ''-ANOTHER-.sm: Audio file not found: data/community/Areicia Favorite Song Pack 1st Volume/ワルツ第17番 ト短調 ''大犬のワルツ''-ANOTHER-/�����c��17�� �g�Z�� ''�匢�̃����c''-ANOTHER-.mp3
+Error processing data/community/remi/âèâôâèâôâVâFâAâèâôâO/âèâôâèâôâVâFâAâèâôâO.sm: Audio file not found: data/community/remi/âèâôâèâôâVâFâAâèâôâO/VFAO.mp3
+Error processing data/community/Areicia Favorite Song Pack 1st Volume/忌憚騒命曲 ～ Demon tale sonata/忌憚騒命曲 ～ Demon tale sonata.sm: Audio file not found: data/community/Areicia Favorite Song Pack 1st Volume/忌憚騒命曲 ～ Demon tale sonata/ݑ ` Demon tale sonata.mp3
+Error processing data/external/pack_864_7534cd/Party Lights (Tommie Sunshine's Brooklyn Fire Remix)/Party Lights (Tommie Sunshine's Brooklyn Fire Remix).sm: Audio file not found: data/external/pack_864_7534cd/Party Lights (Tommie Sunshine's Brooklyn Fire Remix)/Party Lights (Tommie Sunshine’s Brooklyn Fire Remix).ogg
+go!go!Summer drive! failed song length requirement
+Error processing data/community/Areicia Favorite Song Pack 1st Volume/電人、暁に斃れる。_Denjin,fatal attack/電人、暁に斃れる。_Denjin,fatal attack.sm: Audio file not found: data/community/Areicia Favorite Song Pack 1st Volume/電人、暁に斃れる。_Denjin,fatal attack/dlAłɝ˂B.mp3
+Euphoria failed song length requirement
+Error processing data/community/sabo/333 (36)/ô±ÉFë╘Æ▒Ancients ÅHæÜ.sm: Audio file not found: data/community/sabo/333 (36)/F@Ԓ`Ancients.mp3
+Snow storm failed song length requirement
+Rising_Scarlet failed bpm requirement (avg_bpm=230.0)
+Error processing data/community/remi/guruüçguru Ex/guruüçguru.ssc: Audio file not found: data/community/remi/guruüçguru Ex/guruguru.mp3
+Error processing data/community/Areicia Favorite Song Pack 1st Volume/アルティメットリユニオン/アルティメットリユニオン.sm: Audio file not found: data/community/Areicia Favorite Song Pack 1st Volume/アルティメットリユニオン/�A���e�B���b�g�����j�I��PianoInstVer.mp3
+  Parsing file 700/954...REVOLT DRiVE failed song length requirement
+操り人形の夜-the final- failed song length requirement
+スターチス failed song length requirement
+万年??に注意??
+#SUBTITLE: failed song length requirement
+Error processing data/community/sabo/Don't say í░lazyí▒ -nrg mix-/Don't say í░lazyí▒ -nrg mix-.sm: Audio file not found: data/community/sabo/Don't say í░lazyí▒ -nrg mix-/Don't say glazyh-nrg mix-.mp3
+Error processing data/external/pack_41_4ca62c/Frozen Ray(for EXTREME)/Frozen Ray(for EXTREME).sm: Audio file not found: data/external/pack_41_4ca62c/Frozen Ray(for EXTREME)/Frozen Ray ~for EXTREME~.ogg
+Merry Christmas Mr.butanic failed song length requirement
+Error processing data/community/sabo/High Color/High Color.sm: Audio file not found: data/community/sabo/High Color/High Color.mp3
+Sicilian Kiss failed song length requirement
+Error processing data/community/sabo/í┌LittlE HearTsí┌/í┌LittlE HearTsí┌.sm: Audio file not found: data/community/sabo/í┌LittlE HearTsí┌/LittlE HearTs.mp3
+アオイロステップ failed bpm requirement (avg_bpm=215.0)
+Aka Manto failed song length requirement
+Teller of World failed song length requirement
+LiFE Garden failed song length requirement
+NONSTOP G failed song length requirement
+言葉繋ぎ failed song length requirement
+LED eyes failed song length requirement
+GOTHIC SYSTEM failed song length requirement
+  Parsing file 750/954...言霊リフレイン (かたぎり Bootleg) failed song length requirement
+きらきらタイム☆ failed bpm requirement (avg_bpm=202.0)
+Qronostasis failed bpm requirement (avg_bpm=317.0)
+びんちょう音頭 failed bpm requirement (avg_bpm=240.0)
+Dream Battle!!・
+#SUBTITLE: failed song length requirement
+Error processing data/community/sabo/Man Nyun/Man Nyun.sm: Audio file not found: data/community/sabo/Man Nyun/05. 万年置き傘にご注意を.mp3
+Half Hearts failed song length requirement
+IX failed bpm requirement (avg_bpm=468.8)
+Error processing data/community/remi/ù÷é╡é─ïRÄm/ù÷é╡é─ïRÄm.sm: Audio file not found: data/community/remi/ù÷é╡é─ïRÄm/ċRm.mp3
+Jinsei Reset Button failed bpm requirement (avg_bpm=206.5)
+終焉り紡ぎし者 failed bpm requirement (avg_bpm=250.0)
+Nyan-Nyan Naughty Night failed bpm requirement (avg_bpm=242.0)
+蝨貞沁蟇ｺ諤懊逞ｼｱ繧｢繝斐繝ｫ縺九ｏ縺＞ failed song length requirement
+Error processing data/community/sabo/(RYU Remix)/é╒é±é┐é½é╧éΓé┴é╧üS(üKü═üK)âmü⌠ (RYU Remix).sm: Audio file not found: data/community/sabo/(RYU Remix)/Ղ񂿂ςρ[S(ḰK)m (RYU Remix).mp3
+Rich Nigga Shit failed song length requirement
+VG (Radio Edit) failed song length requirement
+エチュード failed bpm requirement (avg_bpm=226.0)
+GO BACK 2 YOUR RAVE failed song length requirement
+Pangaea failed song length requirement
+MANIERA failed bpm requirement (avg_bpm=208.0)
+縦連打体操第一 failed bpm requirement (avg_bpm=210.5)
+  Parsing file 800/954...サキガツモル failed song length requirement
+You Cannot Use the Double Gulp Cup failed bpm requirement (avg_bpm=215.9)
+どーっちどっちの歌 failed song length requirement
+夜桜 failed song length requirement
+Odin failed song length requirement
+naTivEfAcE failed song length requirement
+Error processing data/community/sabo/ZETA SEKAI/ZETA SEKAI.sm: Audio file not found: data/community/sabo/ZETA SEKAI/ZETA`f̐Eƒzҁ`.mp3
+Error processing data/community/sabo/Yure Yeogakseon/Yure Yeogakseon.sm: Audio file not found: data/community/sabo/Yure Yeogakseon/08. 幽霊客船の時空を越えた旅.mp3
+Plan 8 failed bpm requirement (avg_bpm=212.0)
+裏切りの少女～ Judas Kiss failed song length requirement
+H.A.R.D.C.O.R.E. failed song length requirement
+マシンガンポエムドール failed bpm requirement (avg_bpm=220.0)
+黒髪乱れし修羅となりて～凛 edition～ failed song length requirement
+Escalation heart failed song length requirement
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+volcano failed bpm requirement (avg_bpm=240.0)
+HAELE III ~Angel Worlds~ failed song length requirement
+Tell The Truth failed song length requirement
+Error processing data/community/remi/ù÷é╠âpâYâï/ù÷é╠âpâYâï.sm: Audio file not found: data/community/remi/ù÷é╠âpâYâï/̃pY.mp3
+あのね、涙は。 failed song length requirement
+ふわふわ♪ failed song length requirement
+QTQT failed song length requirement
+  Parsing file 850/954...NEURO-CLOUD-9 failed song length requirement
+Madness March Kamikaze failed bpm requirement (avg_bpm=2467.2)
+DISCHARGE RUSH failed bpm requirement (avg_bpm=208.0)
+HANAJI failed bpm requirement (avg_bpm=232.0)
+Plan 8 failed bpm requirement (avg_bpm=212.0)
+Now failed song length requirement
+Error processing data/community/remi/Éié▀üIâCâbâXâôîRÆc -Rebellion of the Dwarfs-/basic.sm: Audio file not found: data/community/remi/Éié▀üIâCâbâXâôîRÆc -Rebellion of the Dwarfs-/i߁ICbXRc -Rebellion of the Dwarfs- [EXH].mp3
+アンダーハンデッド・ガール failed song length requirement
+Mario Paint (Time Regression Mix for BMS) failed song length requirement
+Remilia ～吸血鬼の為の協奏曲 failed song length requirement
+MAX 360 failed bpm requirement (avg_bpm=360.2)
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+創傷イノセンス failed bpm requirement (avg_bpm=205.0)
+Error processing data/community/Areicia Favorite Song Pack 1st Volume/水橋ジェラシックパーク/水橋ジェラシックパーク.sm: Audio file not found: data/community/Areicia Favorite Song Pack 1st Volume/水橋ジェラシックパーク/WFVbNp[N.ogg
+Change&Chance! failed valid chart requirement (no dance-single charts)
+Revolution failed song length requirement
+Little Sister Bitch failed song length requirement
+Like I Do failed song length requirement
+Error processing data/community/remi/é╖é½âbâXSTEADYüÖâLâbâX!!/é╖é½âbâXSTEADYüÖâLâbâX!!.ssc: Audio file not found: data/community/remi/é╖é½âbâXSTEADYüÖâLâbâX!!/bXSTEADYLbX!!.mp3
+Snow wish failed valid chart requirement (no dance-single charts)
+ORION.78(civilization mix) failed bpm requirement (avg_bpm=200.2)
+Error processing data/community/remi/é▌é▒é▌é▒âëâôâuâïü`éáé╚é╜é╞ΓSé░é┴é┐éπü[ü`/é▌é▒é▌é▒âëâôâuâïü`éáé╚é╜é╞ΓSé░é┴é┐éπü[ü`.ssc: Audio file not found: data/community/remi/é▌é▒é▌é▒âëâôâuâïü`éáé╚é╜é╞ΓSé░é┴é┐éπü[ü`/݂݂u`ȂS[`.mp3
+Let me wish shooting star failed bpm requirement (avg_bpm=210.0)
+おてんば恋娘 failed song length requirement
+Ima o Kakeru Shoujo failed song length requirement
+  Parsing file 900/954...The legend of MAX failed bpm requirement (avg_bpm=332.2)
+First of the year failed song length requirement
+Blast of Fate ～疾風の行方～ failed song length requirement
+あの夢をなぞって failed song length requirement
+Witches' Night failed song length requirement
+Error processing data/community/Violent Violet/Atreyu - When two are one (Multi)/Atreyu - When two are one (Multi).sm: Audio file not found: data/community/Violent Violet/Atreyu - When two are one (Multi)/Atreyu - When two are one (Multi).mp3
+moments failed song length requirement
+Romantic Loneliness failed song length requirement
+天空の城ヴェリエル failed bpm requirement (avg_bpm=222.0)
+LUNASA the Stormcauser failed song length requirement
+Central Nucleus failed song length requirement
+Super Kamehameha failed song length requirement
+Parousia failed song length requirement
+Error processing data/community/sabo/ppp/p.sm: Audio file not found: data/community/sabo/ppp/{[_[YI.mp3
+FUCK YOU failed bpm requirement (avg_bpm=426.5)
+CHAINSAW PARTY (Wind God Girl remix) failed song length requirement
+Error processing data/community/Sanatenshin/ZoNE-iT/ZoNE-iT.sm: Audio file not found: data/community/Sanatenshin/ZoNE-iT/ZoNe-iT.mp3
+黒猫円舞曲 failed bpm requirement (avg_bpm=209.8)
+Alastor failed song length requirement
+HesitationSnow Ex failed song length requirement
+Error processing data/community/sabo/1233333333333335/1233333333333335.sm: Audio file not found: data/community/sabo/1233333333333335/10 Chƌ̉v.mp3
+  Parsing file 950/954...FLOWER failed bpm requirement (avg_bpm=218.4)
+Error processing data/community/Sanatenshin/â^ñΩÇÃêæÇ¢(èKí«â¡î≈)/â^ñΩÇÃêæÇ¢.sm: Audio file not found: data/community/Sanatenshin/â^ñΩÇÃêæÇ¢(èKí«â¡î≈)/^̐.mp3
+Lemur failed song length requirement
+
+Dataset initialized with 786 valid samples
+Cache: 786/786 samples (100.0% hit rate)
+Parsing 0 chart files...
+
+Dataset initialized with 0 valid samples
+Cache: 0/0 samples (0.0% hit rate)
+Warming cache to cache/samples/val...
+Caching samples:   0%|          | 0/786 [00:00<?, ?it/s]Caching samples: 100%|██████████| 786/786 [00:00<00:00, 263695.64it/s]
+Cache warming complete: 0 new, 786 existing
+
+Real val density (eval set): 0.196
+====================================================================================
+  decoding              onset_F1  onset_P  onset_R  gen_dens  crit_adj  crit_mae
+------------------------------------------------------------------------------------
+  greedy                   0.000    0.000    0.000     0.000     0.469     1.562
+  temp=1.0                 0.300    0.210    0.577     0.536     0.562     1.312
+  temp=0.9 top_k=4         0.288    0.209    0.496     0.466     0.656     1.172
+  temp=0.7 top_k=2         0.245    0.208    0.332     0.308     0.984     0.375
+====================================================================================
+  Floor: per-frame MLP onset_F1=0.053; n-gram crit_adj=0.977
