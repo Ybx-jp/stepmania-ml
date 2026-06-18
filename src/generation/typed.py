@@ -19,6 +19,24 @@ SYMBOL_NAMES = ["none", "tap", "hold_head", "tail", "roll_head"]
 NUM_SYMBOLS = len(SYMBOL_NAMES)  # 5, per panel
 NUM_PANELS = 4
 
+# Layered head: which-panels "pattern" (15 non-empty 4-bit combos) + per-active-panel
+# "type" (4 non-none symbols). Decouples is-panel-active from what-type.
+NUM_PATTERNS = (1 << NUM_PANELS) - 1   # 15
+NUM_TYPES = NUM_SYMBOLS - 1            # 4: tap, hold_head, tail, roll_head
+_BITW = (1 << np.arange(NUM_PANELS)).astype(np.int64)  # [1,2,4,8]
+
+
+def panels_to_pattern(active_bits) -> np.ndarray:
+    """(..., 4) bool/int of active panels -> pattern index 0..14 (state 1..15 minus 1)."""
+    bits = (np.asarray(active_bits) > 0).astype(np.int64)
+    return (bits @ _BITW) - 1
+
+
+def pattern_to_panels(idx):
+    """pattern index 0..14 -> (4,) int active-panel bits."""
+    state = int(idx) + 1
+    return np.array([(state >> i) & 1 for i in range(NUM_PANELS)], dtype=np.int64)
+
 
 def to_numpy(chart) -> np.ndarray:
     return chart.detach().cpu().numpy() if isinstance(chart, torch.Tensor) else np.asarray(chart)
