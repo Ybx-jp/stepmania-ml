@@ -34,3 +34,27 @@ def symbol_histogram(chart) -> dict:
     arr = to_numpy(chart).astype(int).reshape(-1)
     counts = np.bincount(arr, minlength=NUM_SYMBOLS)
     return {SYMBOL_NAMES[i]: int(counts[i]) for i in range(NUM_SYMBOLS)}
+
+
+def pair_holds(chart) -> np.ndarray:
+    """Make holds structurally valid per panel so the chart is always playable:
+    every hold/roll head (2/4) gets a later tail (3); orphan heads -> tap (1);
+    orphan tails -> none (0). Returns a new (T, 4) array."""
+    arr = to_numpy(chart).astype(np.int64).copy()
+    T, P = arr.shape
+    for p in range(P):
+        open_head = -1
+        for t in range(T):
+            s = arr[t, p]
+            if s in (2, 4):              # hold-head or roll-head
+                if open_head >= 0:       # previous head never closed -> demote to tap
+                    arr[open_head, p] = 1
+                open_head = t
+            elif s == 3:                 # tail
+                if open_head >= 0:
+                    open_head = -1       # valid close
+                else:
+                    arr[t, p] = 0        # orphan tail -> none
+        if open_head >= 0:               # unclosed head at end -> tap
+            arr[open_head, p] = 1
+    return arr

@@ -154,6 +154,29 @@ def test_typed_helpers():
     assert h["tap"] == 1 and h["hold_head"] == 1 and h["none"] == 18
 
 
+def test_pair_holds():
+    from src.generation.typed import pair_holds
+    chart = np.zeros((10, 4), dtype=np.int64)
+    # panel 0: valid hold (head@1 -> tail@4)
+    chart[1, 0] = 2; chart[4, 0] = 3
+    # panel 1: orphan head (no tail) -> should become a tap
+    chart[2, 1] = 2
+    # panel 2: orphan tail (no head) -> should become none
+    chart[5, 2] = 3
+    # panel 3: roll head -> tail (valid)
+    chart[0, 3] = 4; chart[3, 3] = 3
+    out = pair_holds(chart)
+    assert out[1, 0] == 2 and out[4, 0] == 3      # valid hold preserved
+    assert out[2, 1] == 1                          # orphan head -> tap
+    assert out[5, 2] == 0                          # orphan tail -> none
+    assert out[0, 3] == 4 and out[3, 3] == 3       # valid roll preserved
+    # every head now has a matching tail per panel
+    for p in range(4):
+        heads = int(((out[:, p] == 2) | (out[:, p] == 4)).sum())
+        tails = int((out[:, p] == 3).sum())
+        assert heads == tails, f"panel {p}: {heads} heads vs {tails} tails"
+
+
 def test_kv_cache_matches_noncached():
     # Cached generation must be bit-identical to non-cached (greedy, fixed onset).
     import torch

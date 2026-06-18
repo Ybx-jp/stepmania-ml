@@ -33,7 +33,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits, create_datasets
 from src.generation.typed_model import TypedChartGenerator
-from src.generation.typed import NUM_SYMBOLS, NUM_PANELS, SYMBOL_NAMES, symbol_histogram
+from src.generation.typed import NUM_SYMBOLS, NUM_PANELS, SYMBOL_NAMES, symbol_histogram, pair_holds
 from src.generation.evaluation import onset_density_metrics, DifficultyCritic
 
 DEFAULT_BPM = 150.0
@@ -51,6 +51,10 @@ def parse_args():
     p.add_argument('--lr', type=float, default=3e-4)
     p.add_argument('--warmup_freeze', type=int, default=3)
     p.add_argument('--focal_gamma', type=float, default=2.0)
+    p.add_argument('--panel_loss', choices=['weighted_ce', 'focal'], default='focal',
+                   help='focal = calibration-preserving (recommended); weighted_ce over-corrects')
+    p.add_argument('--panel_weight', choices=['inv', 'inv_sqrt', 'none'], default='inv_sqrt',
+                   help='rare-symbol weighting scheme; inv_sqrt is milder than inv')
     p.add_argument('--eval_songs', type=int, default=64)
     p.add_argument('--max_gen_len', type=int, default=768)
     p.add_argument('--checkpoint_dir', default='checkpoints/gen_typed')
@@ -93,6 +97,19 @@ def focal_bce(logits, targets, gamma):
     return ((1 - p_t) ** gamma * bce).mean()
 
 
+def focal_ce(logits, targets, gamma, weight=None):
+    """Multi-class focal loss: (1-p_t)^gamma * CE. Down-weights easy/confident frames so
+    rare classes (holds) get learned without the generation-time over-prediction that heavy
+    class weights cause. Optional mild per-class weight."""
+    logp = nn.functional.log_softmax(logits, dim=-1)
+    logp_t = logp.gather(1, targets.unsqueeze(1)).squeeze(1)
+    p_t = logp_t.exp()
+    loss = -((1 - p_t) ** gamma) * logp_t
+    if weight is not None:
+        loss = loss * weight[targets]
+    return loss.mean()
+
+
 def main():
     args = parse_args()
     set_seed(args.seed)
@@ -127,10 +144,16 @@ def main():
         on = (s['typed'] != 0).any(1)
         vals = s['typed'][on].reshape(-1)
         sym_counts += np.bincount(vals, minlength=NUM_SYMBOLS)
-    sym_w = sym_counts.sum() / (NUM_SYMBOLS * sym_counts)
-    sym_w = np.clip(sym_w, 0, 20.0)
+    balanced = sym_counts.sum() / (NUM_SYMBOLS * sym_counts)
+    if args.panel_weight == 'inv':
+        sym_w = np.clip(balanced, 0, 20.0)
+    elif args.panel_weight == 'inv_sqrt':
+        sym_w = np.clip(np.sqrt(balanced), 0, 5.0)
+    else:  # none
+        sym_w = np.ones(NUM_SYMBOLS)
     panel_weight = torch.tensor(sym_w, dtype=torch.float32, device=device)
-    print("panel class weights:", {SYMBOL_NAMES[i]: round(float(sym_w[i]), 2) for i in range(NUM_SYMBOLS)})
+    print(f"panel loss={args.panel_loss} weight={args.panel_weight}:",
+          {SYMBOL_NAMES[i]: round(float(sym_w[i]), 2) for i in range(NUM_SYMBOLS)})
 
     target_density = float(np.mean([(s['typed'] != 0).any(1).mean() for s in val]))
 
@@ -145,7 +168,13 @@ def main():
     model.freeze_audio_encoder(True)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    panel_crit = nn.CrossEntropyLoss(weight=panel_weight)
+    ce_crit = nn.CrossEntropyLoss(weight=panel_weight)
+
+    def panel_loss_fn(logits, targets):
+        if args.panel_loss == 'focal':
+            return focal_ce(logits, targets, args.focal_gamma, weight=panel_weight)
+        return ce_crit(logits, targets)
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
     def batches(samples, bs, shuffle):
@@ -172,7 +201,7 @@ def main():
         o_loss = focal_bce(ol[mask], onset_t[mask], args.focal_gamma)
         sel = mask & (onset_t > 0.5)
         if sel.any():
-            p_loss = panel_crit(pl[sel].reshape(-1, NUM_SYMBOLS), states[sel].reshape(-1))
+            p_loss = panel_loss_fn(pl[sel].reshape(-1, NUM_SYMBOLS), states[sel].reshape(-1))
         else:
             p_loss = torch.zeros((), device=device)
         return o_loss, p_loss
@@ -250,16 +279,15 @@ def main():
         gen = model.generate(audio.to(device), diff.to(device), lengths=lengths.to(device),
                              onset_threshold=tau).cpu().numpy()
         for b, s in enumerate(batch):
-            t = int(lengths[b]); g = gen[b, :t]
-            gb = ((g == 1) | (g == 2) | (g == 4)).astype(np.float32)  # binarized onset-ish for metrics
-            ref_b = typed_binary(s['typed'][:t])
+            t = int(lengths[b]); g_raw = gen[b, :t]
+            # raw orphan rate (model quality), then pair holds -> always-valid chart
+            for pnl in range(NUM_PANELS):
+                col = g_raw[:, pnl]; h = int(((col == 2) | (col == 4)).sum()); tl = int((col == 3).sum())
+                holds += h; orphans += abs(h - tl)
+            g = pair_holds(g_raw)
             m = onset_density_metrics((g != 0).astype(np.float32), reference=(s['typed'][:t] != 0).astype(np.float32))
             f1s.append(m['onset_f1']); dens.append((g != 0).any(1).mean())
             for k, v in symbol_histogram(g).items(): gen_syms[k] += v
-            # orphan holds: hold-heads without a later tail on the same panel (per panel)
-            for pnl in range(NUM_PANELS):
-                col = g[:, pnl]; h = int((col == 2).sum()); tl = int((col == 3).sum())
-                holds += h; orphans += abs(h - tl)
             preds.append(critic.predict(typed_binary(g), s['audio'][:t], bpm=DEFAULT_BPM)['class']); tgts.append(s['difficulty'])
     dd = np.abs(np.array(preds) - np.array(tgts))
 

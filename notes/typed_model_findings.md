@@ -51,3 +51,38 @@ small orphan rate by a head→tail pairing pass at decode (drop unmatched heads/
 Typed generation is structurally working (holds appear, pair up, round-trip to playable .sm via
 the typed writer) with onset quality intact. The remaining issue is purely the rare-symbol
 calibration over-correction, with a clear fix. Checkpoint: `checkpoints/gen_typed/best_val.pt`.
+
+## Fix attempt 1: focal panel loss + inv_sqrt weights + hold pairing (2026-06-18)
+
+Replaced the heavy weighted-CE panel loss with focal loss + milder inverse-sqrt weights
+(hold 3.94 vs the old 15.5), added `pair_holds()` (orphan heads→tap, orphan tails→none → always
+playable). Checkpoint `checkpoints/gen_typed_focal/best_val.pt`.
+
+| metric | weighted-CE (w=15) | focal + inv_sqrt | binary (no holds) |
+|---|---|---|---|
+| onset_F1 | 0.765 | 0.769 | 0.748 |
+| crit_adj | 0.531 | 0.688 | 0.927 |
+| tap:hold ratio | ~1:4 | ~5.8:1 | real ~20:1 |
+| holds (paired) | 17358 | 1591 | 0 |
+
+**Partial success.** Over-generation dropped (1:4 → 5.8:1), crit_adj recovered 0.53 → 0.69 — but
+short of binary's 0.93, and **teacher-forced tap recall collapsed to 0.01** (none recall 0.93).
+The per-panel head learned to predict "none" for almost everything; generation now leans on the
+≥1-non-empty enforcement fallback to place notes.
+
+**Root cause (deeper than weighting):** the per-panel 5-way head conflates *is this panel active*
+(mostly no — ~75% of onset-frame panels are none, for single taps) with *what type* — the SAME
+imbalance-conflation we solved at the frame level with the onset head. No weighting scheme fixes
+a conflated objective.
+
+## Fix attempt 2 (proposed): layered pattern + type head
+
+Stop making the panel head decide none-vs-active per panel. Instead reuse the binary model's
+proven structure:
+- **pattern head** — which panels are active (the 15-way binary pattern the binary factorized
+  model nailed at crit_adj 0.93; fully warm-startable from it), then
+- **type head** — for each *active* panel, its type {tap, hold-head, tail, roll} (4-way, no none).
+
+Decode: onset (frame has a step) → pattern (which panels) → per-active-panel type. This keeps the
+"which panels" decision at the binary model's quality and layers types on top, instead of
+re-introducing the none/active imbalance into the panel head. This is the principled fix.
