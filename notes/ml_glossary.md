@@ -39,3 +39,7 @@ Format per entry: **term** — plain meaning *(how it shows up here)*.
 - **Bernoulli sampling** — deciding a yes/no outcome by flipping a weighted coin: emit "yes" with probability equal to the model's predicted probability for that frame.
 - **non-causal** — attention/processing allowed to look at the whole sequence (past and future), not just earlier positions; valid here for the onset head because the full song audio is known up front (opposite of a [[causal mask]]).
 - **factorized head** — splitting one combined prediction into two simpler sub-predictions trained separately (here: onset = "is there a step?" then panel = "which arrows?"), so each can be controlled and calibrated on its own.
+- **calibration** — making a model's predicted probabilities match real frequencies: if it says 30% across many frames, ~30% should actually be onsets. A model can rank well yet be mis-calibrated (here: over-confident).
+- **Platt scaling** — post-hoc calibration that fits a small logistic `sigmoid(a·logit + c)` on held-out data to remap raw scores to honest probabilities, without retraining the model (a = sharpness, c = bias shift).
+- **temperature scaling** — the simplest calibration: divide logits by one learned scalar T before softmax/sigmoid (a special case of Platt with only a scale). Higher T = softer/less confident.
+- **ECE / expected calibration error** — a single 0–1 score for mis-calibration: bin predictions by confidence and average |predicted confidence − actual frequency| across bins. 0 = perfectly calibrated.
