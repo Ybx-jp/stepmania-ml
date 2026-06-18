@@ -5465,3 +5465,6 @@ outputs/**/run.log
 
 # Generated sample song folders (contain copied audio)
 outputs/samples/
+
+# Generated typed sample folders (copied audio)
+outputs/typed_samples/
