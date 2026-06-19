@@ -287,7 +287,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  onset_override=None, greedy=True, temperature=1.0,
                  type_sample=False, type_temperature=1.0, hold_aware=False,
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
-                 repetition_penalty=1.0):
+                 repetition_penalty=1.0, pattern_bias=None, no_crossovers=False):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -320,6 +320,10 @@ class LayeredTypedChartGenerator(nn.Module):
         prev_emb = self.bos.expand(B, 1, -1)
         held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
         prev_pat = torch.full((B,), -1, dtype=torch.long, device=device)    # previous note's pattern (for rep penalty)
+        next_foot = torch.zeros(B, dtype=torch.long, device=device)         # 0=left, 1=right (crossover automaton)
+        if pattern_bias is not None:
+            pattern_bias = torch.as_tensor(pattern_bias, dtype=torch.float32, device=device)  # (15,)
+        n_panels = panel_bits.sum(1)                                        # (15,) panels per pattern
 
         for t in range(T):
             x = prev_emb + self.pos_encoding.pe[:, t:t + 1] + diff_emb
@@ -327,11 +331,17 @@ class LayeredTypedChartGenerator(nn.Module):
             pat_logits = self.pattern_head(h)                                  # (B,15)
             typ_logits = self.type_head(h).view(B, NUM_PANELS, NUM_TYPES)      # (B,4,4)
             # pattern (which panels). greedy collapses to Left/jacks; sampling adds variety.
+            if pattern_bias is not None:                  # pattern-preference knob (jumps, panel prefs)
+                pat_logits = pat_logits + pattern_bias
             if repetition_penalty != 1.0:  # discourage repeating the previous note's pattern (jacks)
                 has_prev = prev_pat >= 0
                 if has_prev.any():
                     rows = has_prev.nonzero(as_tuple=True)[0]
                     pat_logits[rows, prev_pat[rows]] -= float(np.log(repetition_penalty))
+            if no_crossovers:  # forbid single-note pattern that crosses for the current foot
+                forbid_panel = torch.where(next_foot == 0, 3, 0)             # left->R, right->L
+                forbid_idx = (1 << forbid_panel) - 1                         # single-panel pattern index
+                pat_logits[torch.arange(B, device=device), forbid_idx] = float("-inf")
             if pattern_sample or not greedy:
                 lg = pat_logits / (pattern_temperature if pattern_sample else temperature)
                 if pattern_top_k is not None:
@@ -362,7 +372,11 @@ class LayeredTypedChartGenerator(nn.Module):
 
             gen[:, t] = state
             prev_emb = self._state_emb(state.unsqueeze(1))
-            prev_pat = torch.where(onset[:, t], pat, prev_pat)  # track last note's pattern
+            on = onset[:, t]
+            prev_pat = torch.where(on, pat, prev_pat)  # track last note's pattern
+            npc = n_panels[pat]                        # panels in the chosen pattern
+            next_foot = torch.where(on & (npc == 1), 1 - next_foot, next_foot)   # alternate on singles
+            next_foot = torch.where(on & (npc >= 2), torch.zeros_like(next_foot), next_foot)  # reset after jump
 
         if lengths is not None:
             valid = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)
