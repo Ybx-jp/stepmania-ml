@@ -217,6 +217,15 @@ class LayeredTypedChartGenerator(nn.Module):
         self.decoder = nn.TransformerDecoder(dec_layer, num_layers=num_layers)
         self.pattern_head = nn.Linear(d_model, NUM_PATTERNS)          # which panels (15-way)
         self.type_head = nn.Linear(d_model, NUM_PANELS * NUM_TYPES)   # per-panel type (4-way)
+        # target groove-radar conditioning (Step 2): 5 dims -> d; null embedding for CFG dropout
+        self.radar_proj = nn.Linear(5, d_model)
+        self.null_radar = nn.Parameter(torch.zeros(d_model))
+
+    def _cond(self, difficulty, radar):
+        """Per-sample conditioning vector (B, d): difficulty + groove-radar (or null radar)."""
+        c = self.diff_embedding(difficulty)
+        c = c + (self.radar_proj(radar) if radar is not None else self.null_radar.unsqueeze(0))
+        return c
 
     def load_from_factorized(self, sd: dict) -> int:
         """Warm-start: name+shape matches (audio enc, onset branch, decoder, diff emb) PLUS
@@ -237,10 +246,10 @@ class LayeredTypedChartGenerator(nn.Module):
     def encode_audio(self, audio):
         return self.audio_encoder(audio)
 
-    def onset_logits(self, memory, difficulty, mask=None):
+    def onset_logits(self, memory, difficulty, mask=None, radar=None):
         B, T, _ = memory.shape
-        diff = self.diff_embedding(difficulty).unsqueeze(1).expand(B, T, -1)
-        x = self.dropout(self.pos_encoding(memory) + diff)
+        cond = self._cond(difficulty, radar).unsqueeze(1).expand(B, T, -1)
+        x = self.dropout(self.pos_encoding(memory) + cond)
         pad = (~mask.bool()) if mask is not None else None
         return self.onset_head(self.onset_encoder(x, src_key_padding_mask=pad)).squeeze(-1)
 
@@ -252,21 +261,22 @@ class LayeredTypedChartGenerator(nn.Module):
         e = self._state_emb(states)
         return torch.cat([self.bos.expand(B, 1, -1), e[:, :-1]], dim=1)
 
-    def _decode(self, memory, states, difficulty, mask=None):
+    def _decode(self, memory, states, difficulty, mask=None, radar=None):
         B, T, _ = states.shape
-        diff = self.diff_embedding(difficulty).unsqueeze(1).expand(B, T, -1)
-        tgt = self.dropout(self.pos_encoding(self._decoder_input(states)) + diff)
+        cond = self._cond(difficulty, radar).unsqueeze(1).expand(B, T, -1)
+        tgt = self.dropout(self.pos_encoding(self._decoder_input(states)) + cond)
         causal = _causal_mask(T, states.device)
         pad = (~mask.bool()) if mask is not None else None
         h = self.decoder(tgt=tgt, memory=memory, tgt_mask=causal,
                          tgt_key_padding_mask=pad, memory_key_padding_mask=pad)
         return self.pattern_head(h), self.type_head(h).view(B, T, NUM_PANELS, NUM_TYPES)
 
-    def forward(self, audio, states, difficulty, mask=None):
-        """Returns (onset_logits (B,T), pattern_logits (B,T,15), type_logits (B,T,4,4))."""
+    def forward(self, audio, states, difficulty, mask=None, radar=None):
+        """Returns (onset_logits (B,T), pattern_logits (B,T,15), type_logits (B,T,4,4)).
+        `radar` (B,5) is an optional target groove-radar conditioning (None -> null/CFG)."""
         memory = self.encode_audio(audio)
-        ol = self.onset_logits(memory, difficulty, mask)
-        pat, typ = self._decode(memory, states, difficulty, mask)
+        ol = self.onset_logits(memory, difficulty, mask, radar)
+        pat, typ = self._decode(memory, states, difficulty, mask, radar)
         return ol, pat, typ
 
     def _decoder_step_cached(self, x, caches):
@@ -287,7 +297,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  onset_override=None, greedy=True, temperature=1.0,
                  type_sample=False, type_temperature=1.0, hold_aware=False,
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
-                 repetition_penalty=1.0, pattern_bias=None, no_crossovers=False):
+                 repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -307,7 +317,7 @@ class LayeredTypedChartGenerator(nn.Module):
         if onset_override is not None:
             onset = onset_override.bool().to(device)
         else:
-            p = torch.sigmoid(onset_logit_scale * self.onset_logits(memory, difficulty) + onset_logit_bias)
+            p = torch.sigmoid(onset_logit_scale * self.onset_logits(memory, difficulty, radar=radar) + onset_logit_bias)
             onset = torch.bernoulli(p).bool() if onset_sample else (p > onset_threshold)
 
         # precompute which-panel bit table for the 15 patterns: (15,4)
@@ -315,7 +325,7 @@ class LayeredTypedChartGenerator(nn.Module):
         panel_bits = ((states_tab.unsqueeze(-1) >> torch.arange(NUM_PANELS, device=device)) & 1)  # (15,4)
 
         caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
-        diff_emb = self.diff_embedding(difficulty).unsqueeze(1)
+        cond_emb = self._cond(difficulty, radar).unsqueeze(1)  # (B,1,d): difficulty + groove radar
         gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = self.bos.expand(B, 1, -1)
         held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
@@ -326,7 +336,7 @@ class LayeredTypedChartGenerator(nn.Module):
         n_panels = panel_bits.sum(1)                                        # (15,) panels per pattern
 
         for t in range(T):
-            x = prev_emb + self.pos_encoding.pe[:, t:t + 1] + diff_emb
+            x = prev_emb + self.pos_encoding.pe[:, t:t + 1] + cond_emb
             h = self._decoder_step_cached(x, caches)[:, -1]
             pat_logits = self.pattern_head(h)                                  # (B,15)
             typ_logits = self.type_head(h).view(B, NUM_PANELS, NUM_TYPES)      # (B,4,4)
