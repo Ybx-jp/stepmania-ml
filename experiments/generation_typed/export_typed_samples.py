@@ -2,16 +2,24 @@
 """
 Export playable .sm song folders from the typed hold-aware generator.
 
-Loads the layered checkpoint and, for each of N val songs, generates a FULL-LENGTH
+Loads the style checkpoint and, for each of N val songs, generates a FULL-LENGTH
 typed chart (taps + holds, hold-aware decoding, KV-cached) conditioned on the real
 audio + difficulty, then writes a StepMania song folder: the original audio + a .sm
 holding the generated chart (as "Challenge") and the original chart (for A/B), both
 with hold/tail symbols. Drop a folder into StepMania and play it.
 
+Step 3 (style): pass --reference <some_chart.sm> to generate every song IN THE STYLE OF
+that chart, and --guidance 2-3 to amplify the effect (classifier-free guidance).
+
 Usage:
+    # plain (audio + difficulty only)
     python experiments/generation_typed/export_typed_samples.py \
-        --data_dir data/ --audio_dir data/ --out_dir outputs/typed_samples \
-        --num_songs 8 --type_temperature 0.4
+        --data_dir data/ --audio_dir data/ --out_dir outputs/typed_samples --num_songs 8
+
+    # in the style of a reference chart, amplified
+    python experiments/generation_typed/export_typed_samples.py \
+        --data_dir data/ --audio_dir data/ --out_dir outputs/style_samples --num_songs 8 \
+        --reference "data/.../SomeSong/SomeSong.sm" --guidance 2.5
 """
 
 import warnings, os
@@ -37,9 +45,15 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--out_dir', default='outputs/typed_samples')
-    p.add_argument('--checkpoint', default='checkpoints/gen_layered/best_val.pt')
+    p.add_argument('--checkpoint', default='checkpoints/gen_style/best_val.pt')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
+    p.add_argument('--reference', type=str, default=None,
+                   help='path to a reference .sm/.ssc chart: generate every song IN THE STYLE OF this chart (Step 3)')
+    p.add_argument('--reference_difficulty', type=str, default=None,
+                   help='which difficulty of the reference chart to use (name, e.g. Hard); default = hardest available')
+    p.add_argument('--guidance', type=float, default=1.0,
+                   help='classifier-free guidance scale; >1 amplifies the reference style (2-3 is a good range)')
     p.add_argument('--type_temperature', type=float, default=0.4)
     p.add_argument('--pattern_temperature', type=float, default=1.0,  # sample patterns for variety (greedy->Left/jacks)
                    help='which-panels sampling temperature; 1.0 matches real panel balance & jack rate')
@@ -74,6 +88,26 @@ def main():
     model = LayeredTypedChartGenerator(audio_dim=23, d_model=128, num_layers=4, onset_layers=2).to(device)
     model.load_state_dict(torch.load(args.checkpoint, map_location=device)['model_state_dict']); model.eval()
     critic = DifficultyCritic(device=device)
+
+    # Step 3: optional reference chart -> condition every generated song on its style
+    style_vec, style_label = None, None
+    if args.reference:
+        ref_chart = ds.parser.parse_file(args.reference)
+        if ref_chart is None:
+            raise SystemExit(f"could not parse reference chart: {args.reference}")
+        cands = [n for n in ref_chart.note_data if n.difficulty_name]
+        if args.reference_difficulty:
+            cands = [n for n in cands if n.difficulty_name.lower() == args.reference_difficulty.lower()] or cands
+        ref_nd = max(cands, key=lambda n: n.difficulty_value)  # hardest available (or filtered)
+        ref_typed = ds.parser.convert_to_tensor_typed(ref_chart, ref_nd)[:args.max_len]
+        ref_t = torch.from_numpy(ref_typed.astype(np.int64)).unsqueeze(0).to(device)
+        ref_mask = torch.ones(1, ref_t.shape[1], dtype=torch.bool, device=device)
+        with torch.no_grad():
+            style_vec = model.encode_style(ref_t, ref_mask)  # (1,d) latent, reused for every song
+        ref_dens = float((ref_typed != 0).any(1).mean())
+        style_label = f"{ref_chart.title or Path(args.reference).stem} [{ref_nd.difficulty_name}]"
+        print(f"\nstyle reference: {style_label}  (density {ref_dens:.3f}, {len(ref_typed)} frames)  "
+              f"guidance={args.guidance}")
 
     # build pattern-preference bias from CLI knobs
     from src.generation.typed import make_pattern_bias
@@ -120,7 +154,8 @@ def main():
                              type_temperature=args.type_temperature, hold_aware=True,
                              pattern_sample=True, pattern_temperature=args.pattern_temperature,
                              repetition_penalty=args.repetition_penalty,
-                             pattern_bias=pattern_bias, no_crossovers=args.no_crossovers)[0].cpu().numpy()
+                             pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
+                             style=style_vec, guidance_scale=args.guidance)[0].cpu().numpy()
         gen = pair_holds(gen)
 
         chart_obj = meta['chart']
