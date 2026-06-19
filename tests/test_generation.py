@@ -177,6 +177,40 @@ def test_pair_holds():
         assert heads == tails, f"panel {p}: {heads} heads vs {tails} tails"
 
 
+def test_pattern_bias_and_crossover_helpers():
+    from src.generation.typed import make_pattern_bias, count_crossovers, NUM_PATTERNS
+    # jump bias only boosts multi-panel patterns
+    b = make_pattern_bias(jump=2.0)
+    assert b.shape == (NUM_PATTERNS,)
+    # single-panel patterns (state 1<<p, index state-1): L=0, D=1, U=3, R=7 -> unboosted
+    assert b[0] == 0.0 and b[1] == 0.0 and b[3] == 0.0 and b[7] == 0.0
+    assert b[(1 | 2) - 1] == 2.0                                # L+D jump (state 3 -> index 2) boosted
+    # panel_prefs adds per-panel bias
+    pp = make_pattern_bias(panel_prefs=[0, 0, 0, 5.0])          # favor R (panel 3)
+    assert pp[(1 << 3) - 1] == 5.0                              # single-R pattern gets +5
+    assert pp[0] == 0.0                                         # single-L unaffected
+    # crossover counting: L(left foot) then R(right foot) = no cross; L then L = ...
+    chart = np.zeros((4, 4), dtype=np.int64)
+    chart[0, 3] = 1   # R with left foot (next_foot starts left) -> crossover
+    cr, singles = count_crossovers(chart)
+    assert singles == 1 and cr == 1
+
+
+def test_no_crossovers_decoding():
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    from src.generation.typed import count_crossovers
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 200
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 3])
+    ov = torch.ones(B, T, dtype=torch.bool)
+    g = m.generate(audio, diff, onset_override=ov, pattern_sample=True, pattern_temperature=1.0,
+                   no_crossovers=True).numpy()
+    total_cross = sum(count_crossovers(g[b])[0] for b in range(B))
+    assert total_cross == 0, f"no_crossovers should yield 0 crossovers, got {total_cross}"
+
+
 def test_hold_aware_decoding_valid():
     # Hold-aware decoding's automaton guarantees no orphan tails (a tail only ever
     # closes an open head) and at most one open hold per panel at a time.
