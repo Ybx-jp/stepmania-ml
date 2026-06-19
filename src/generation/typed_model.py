@@ -297,7 +297,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  onset_override=None, greedy=True, temperature=1.0,
                  type_sample=False, type_temperature=1.0, hold_aware=False,
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
-                 repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None):
+                 repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
+                 guidance_scale=1.0):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -314,10 +315,15 @@ class LayeredTypedChartGenerator(nn.Module):
         device = audio.device
         B, T, _ = audio.shape
         memory = self.encode_audio(audio)
+        do_cfg = (guidance_scale != 1.0) and (radar is not None)  # amplify the radar conditioning
         if onset_override is not None:
             onset = onset_override.bool().to(device)
         else:
-            p = torch.sigmoid(onset_logit_scale * self.onset_logits(memory, difficulty, radar=radar) + onset_logit_bias)
+            ol = self.onset_logits(memory, difficulty, radar=radar)
+            if do_cfg:  # classifier-free guidance: push onset toward the radar-conditioned prediction
+                ol_u = self.onset_logits(memory, difficulty, radar=None)
+                ol = ol_u + guidance_scale * (ol - ol_u)
+            p = torch.sigmoid(onset_logit_scale * ol + onset_logit_bias)
             onset = torch.bernoulli(p).bool() if onset_sample else (p > onset_threshold)
 
         # precompute which-panel bit table for the 15 patterns: (15,4)
@@ -326,6 +332,9 @@ class LayeredTypedChartGenerator(nn.Module):
 
         caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
         cond_emb = self._cond(difficulty, radar).unsqueeze(1)  # (B,1,d): difficulty + groove radar
+        if do_cfg:  # parallel unconditioned (null-radar) path for guidance
+            uncond_caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
+            uncond_emb = self._cond(difficulty, None).unsqueeze(1)
         gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = self.bos.expand(B, 1, -1)
         held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
@@ -336,10 +345,16 @@ class LayeredTypedChartGenerator(nn.Module):
         n_panels = panel_bits.sum(1)                                        # (15,) panels per pattern
 
         for t in range(T):
-            x = prev_emb + self.pos_encoding.pe[:, t:t + 1] + cond_emb
-            h = self._decoder_step_cached(x, caches)[:, -1]
+            pe_t = self.pos_encoding.pe[:, t:t + 1]
+            h = self._decoder_step_cached(prev_emb + pe_t + cond_emb, caches)[:, -1]
             pat_logits = self.pattern_head(h)                                  # (B,15)
             typ_logits = self.type_head(h).view(B, NUM_PANELS, NUM_TYPES)      # (B,4,4)
+            if do_cfg:  # blend toward the radar-conditioned prediction (run the null path in lockstep)
+                hu = self._decoder_step_cached(prev_emb + pe_t + uncond_emb, uncond_caches)[:, -1]
+                pat_u = self.pattern_head(hu)
+                typ_u = self.type_head(hu).view(B, NUM_PANELS, NUM_TYPES)
+                pat_logits = pat_u + guidance_scale * (pat_logits - pat_u)
+                typ_logits = typ_u + guidance_scale * (typ_logits - typ_u)
             # pattern (which panels). greedy collapses to Left/jacks; sampling adds variety.
             if pattern_bias is not None:                  # pattern-preference knob (jumps, panel prefs)
                 pat_logits = pat_logits + pattern_bias
