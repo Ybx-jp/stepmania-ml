@@ -16,6 +16,7 @@ See notes/step_types.md.
 
 from typing import Optional, Tuple
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -284,7 +285,9 @@ class LayeredTypedChartGenerator(nn.Module):
     def generate(self, audio, difficulty, lengths=None, onset_threshold=0.5,
                  onset_sample=False, onset_logit_scale=1.0, onset_logit_bias=0.0,
                  onset_override=None, greedy=True, temperature=1.0,
-                 type_sample=False, type_temperature=1.0, hold_aware=False):
+                 type_sample=False, type_temperature=1.0, hold_aware=False,
+                 pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
+                 repetition_penalty=1.0):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -316,17 +319,27 @@ class LayeredTypedChartGenerator(nn.Module):
         gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = self.bos.expand(B, 1, -1)
         held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
+        prev_pat = torch.full((B,), -1, dtype=torch.long, device=device)    # previous note's pattern (for rep penalty)
 
         for t in range(T):
             x = prev_emb + self.pos_encoding.pe[:, t:t + 1] + diff_emb
             h = self._decoder_step_cached(x, caches)[:, -1]
             pat_logits = self.pattern_head(h)                                  # (B,15)
             typ_logits = self.type_head(h).view(B, NUM_PANELS, NUM_TYPES)      # (B,4,4)
-            # pattern (which panels): greedy unless globally sampling
-            if greedy:
-                pat = pat_logits.argmax(-1)
+            # pattern (which panels). greedy collapses to Left/jacks; sampling adds variety.
+            if repetition_penalty != 1.0:  # discourage repeating the previous note's pattern (jacks)
+                has_prev = prev_pat >= 0
+                if has_prev.any():
+                    rows = has_prev.nonzero(as_tuple=True)[0]
+                    pat_logits[rows, prev_pat[rows]] -= float(np.log(repetition_penalty))
+            if pattern_sample or not greedy:
+                lg = pat_logits / (pattern_temperature if pattern_sample else temperature)
+                if pattern_top_k is not None:
+                    kth = torch.topk(lg, pattern_top_k, dim=-1).values[:, -1:]
+                    lg = lg.masked_fill(lg < kth, float("-inf"))
+                pat = torch.multinomial(torch.softmax(lg, dim=-1), 1).squeeze(-1)
             else:
-                pat = torch.multinomial(torch.softmax(pat_logits / temperature, -1), 1).squeeze(-1)
+                pat = pat_logits.argmax(-1)
             # type (per panel): sample if requested (lets rare holds surface), else greedy
             if type_sample or not greedy:
                 tt = type_temperature if type_sample else temperature
@@ -349,6 +362,7 @@ class LayeredTypedChartGenerator(nn.Module):
 
             gen[:, t] = state
             prev_emb = self._state_emb(state.unsqueeze(1))
+            prev_pat = torch.where(onset[:, t], pat, prev_pat)  # track last note's pattern
 
         if lengths is not None:
             valid = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)

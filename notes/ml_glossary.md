@@ -43,3 +43,5 @@ Format per entry: **term** — plain meaning *(how it shows up here)*.
 - **Platt scaling** — post-hoc calibration that fits a small logistic `sigmoid(a·logit + c)` on held-out data to remap raw scores to honest probabilities, without retraining the model (a = sharpness, c = bias shift).
 - **temperature scaling** — the simplest calibration: divide logits by one learned scalar T before softmax/sigmoid (a special case of Platt with only a scale). Higher T = softer/less confident.
 - **ECE / expected calibration error** — a single 0–1 score for mis-calibration: bin predictions by confidence and average |predicted confidence − actual frequency| across bins. 0 = perfectly calibrated.
+- **greedy decoding** — at each step pick the single highest-probability option (argmax). Reproduces the most likely sequence but collapses to repetitive/degenerate output (here: always Left, jacks). Opposite of sampling.
+- **repetition penalty** — at decode, lower the probability of recently-chosen tokens so generation stops repeating itself (here: discourage placing the same arrow pattern as the previous note).

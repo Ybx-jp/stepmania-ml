@@ -41,6 +41,10 @@ def parse_args():
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
     p.add_argument('--type_temperature', type=float, default=0.4)
+    p.add_argument('--pattern_temperature', type=float, default=1.0,  # sample patterns for variety (greedy->Left/jacks)
+                   help='which-panels sampling temperature; 1.0 matches real panel balance & jack rate')
+    p.add_argument('--repetition_penalty', type=float, default=1.0,
+                   help='>1 further discourages repeating the previous note; 1.0 already matches real')
     p.add_argument('--max_len', type=int, default=1440)  # full 2-min songs (KV-cache makes it cheap)
     return p.parse_args()
 
@@ -98,7 +102,9 @@ def main():
 
         gen = model.generate(audio, diff, lengths=torch.tensor([T], device=device),
                              onset_threshold=tau, type_sample=True,
-                             type_temperature=args.type_temperature, hold_aware=True)[0].cpu().numpy()
+                             type_temperature=args.type_temperature, hold_aware=True,
+                             pattern_sample=True, pattern_temperature=args.pattern_temperature,
+                             repetition_penalty=args.repetition_penalty)[0].cpu().numpy()
         gen = pair_holds(gen)
 
         chart_obj = meta['chart']
