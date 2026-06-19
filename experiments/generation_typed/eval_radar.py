@@ -35,6 +35,7 @@ def parse_args():
     p.add_argument('--checkpoint', default='checkpoints/gen_radar/best_val.pt')
     p.add_argument('--eval_songs', type=int, default=24); p.add_argument('--max_gen_len', type=int, default=512)
     p.add_argument('--low', type=float, default=0.1); p.add_argument('--high', type=float, default=0.9)
+    p.add_argument('--guidance', type=float, default=1.0, help='classifier-free guidance scale (>1 amplifies radar)')
     return p.parse_args()
 
 
@@ -78,7 +79,8 @@ def main():
             radar = torch.tensor(radar_vec, device=device).unsqueeze(0).expand(B, -1)
             gen = model.generate(audio.to(device), diff.to(device), lengths=lengths.to(device),
                                  onset_sample=True, type_sample=True, type_temperature=0.4, hold_aware=True,
-                                 pattern_sample=True, pattern_temperature=1.0, radar=radar).cpu().numpy()
+                                 pattern_sample=True, pattern_temperature=1.0, radar=radar,
+                                 guidance_scale=args.guidance).cpu().numpy()
             for b in range(B):
                 d, j, h = proxies(pair_holds(gen[b, :int(lengths[b])])); ds.append(d); js.append(j); hs.append(h)
         return np.mean(ds), np.mean(js), np.mean(hs)
