@@ -38,6 +38,46 @@ def pattern_to_panels(idx):
     return np.array([(state >> i) & 1 for i in range(NUM_PANELS)], dtype=np.int64)
 
 
+# (15,4) bit table: which panels are active for each pattern index 0..14
+_PATTERN_PANELS = np.stack([pattern_to_panels(i) for i in range(NUM_PATTERNS)])  # (15,4)
+
+
+def make_pattern_bias(jump=0.0, panel_prefs=None):
+    """A (15,) additive logit bias for the pattern (which-panels) head — a decode-time
+    'pattern preference' knob (no retraining).
+
+    - jump > 0 boosts multi-panel (jump) patterns (e.g. +2.0 for many more jumps);
+      jump < 0 suppresses them.
+    - panel_prefs (4,) adds a per-panel bias (L,D,U,R) to every pattern containing that
+      panel, e.g. [0,0,1,1] favors Up/Right.
+    """
+    bias = np.zeros(NUM_PATTERNS, dtype=np.float32)
+    npan = _PATTERN_PANELS.sum(1)  # panels per pattern
+    bias += np.where(npan >= 2, jump, 0.0)
+    if panel_prefs is not None:
+        bias += _PATTERN_PANELS @ np.asarray(panel_prefs, dtype=np.float32)
+    return bias
+
+
+def count_crossovers(chart):
+    """Greedy foot heuristic: alternate feet on single notes (reset after a jump); a
+    crossover is the left foot on R or the right foot on L. Returns (crossings, singles)."""
+    arr = to_numpy(chart)
+    active = arr != 0
+    foot = 0  # next foot: 0=left, 1=right
+    crossings = singles = 0
+    for t in range(arr.shape[0]):
+        panels = np.where(active[t])[0]
+        if len(panels) == 1:
+            p = int(panels[0]); singles += 1
+            if (foot == 0 and p == 3) or (foot == 1 and p == 0):
+                crossings += 1
+            foot = 1 - foot
+        elif len(panels) >= 2:
+            foot = 0  # reset alternation after a jump
+    return crossings, singles
+
+
 def to_numpy(chart) -> np.ndarray:
     return chart.detach().cpu().numpy() if isinstance(chart, torch.Tensor) else np.asarray(chart)
 
