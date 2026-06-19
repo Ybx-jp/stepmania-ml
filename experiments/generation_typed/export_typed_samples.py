@@ -97,7 +97,8 @@ def main():
             raise SystemExit(f"could not parse reference chart: {args.reference}")
         cands = [n for n in ref_chart.note_data if n.difficulty_name]
         if args.reference_difficulty:
-            cands = [n for n in cands if n.difficulty_name.lower() == args.reference_difficulty.lower()] or cands
+            want = args.reference_difficulty.rstrip(':').strip().lower()
+            cands = [n for n in cands if n.difficulty_name.rstrip(':').strip().lower() == want] or cands
         ref_nd = max(cands, key=lambda n: n.difficulty_value)  # hardest available (or filtered)
         ref_typed = ds.parser.convert_to_tensor_typed(ref_chart, ref_nd)[:args.max_len]
         ref_t = torch.from_numpy(ref_typed.astype(np.int64)).unsqueeze(0).to(device)
@@ -105,7 +106,7 @@ def main():
         with torch.no_grad():
             style_vec = model.encode_style(ref_t, ref_mask)  # (1,d) latent, reused for every song
         ref_dens = float((ref_typed != 0).any(1).mean())
-        style_label = f"{ref_chart.title or Path(args.reference).stem} [{ref_nd.difficulty_name}]"
+        style_label = f"{ref_chart.title or Path(args.reference).stem} [{ref_nd.difficulty_name.rstrip(':').strip()}]"
         print(f"\nstyle reference: {style_label}  (density {ref_dens:.3f}, {len(ref_typed)} frames)  "
               f"guidance={args.guidance}")
 
