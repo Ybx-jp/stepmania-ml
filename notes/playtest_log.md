@@ -8,6 +8,91 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-06-19 (round 3) — stream_voltage + structural observations (H4 confirmed, H5 born)
+
+### What was played
+`outputs/radar_samples/stream_voltage/` (stream=0.9, voltage=0.9, g=2.0). Plus general
+observations across the session's sets.
+
+### Raw feedback (user)
+> "stream_voltage was a little off but playable. some occasional random notes and unnatural jack
+> sequences. broadly speaking, it feels like the model sometimes fails to pair choreography with a
+> phase change in the song, and seems to consistently start and end the song awkwardly."
+
+### What this confirms / opens
+**H4 CONFIRMED.** stream_voltage (a *quantity* knob — density) is *playable*, while chaos_air (a
+*musicality* knob) was *unplayable*. Exactly H4's prediction: quantity knobs steer fine, musicality
+knobs break. The "occasional random notes / unnatural jacks" are minor choreography defects (H1/H2
+territory — pattern head + decode temperature), not the structural problem below.
+
+**H5 (new) — no song-structure / phrase awareness.** Measured density vs normalized song position
+(6 base songs, generated vs their real charts, deciles 0=start..9=end):
+```
+REAL:  0.05 0.15 0.19 0.17 0.17 0.15 0.16 0.15 0.20 0.14   (intro -> build -> CLIMAX@8 -> outro)
+GEN:   0.06 0.17 0.18 0.17 0.18 0.19 0.18 0.17 0.14 0.08   (flat -> FADE)
+```
+The real chart has a musical *arc* — sparse intro, build, a density **peak at 80–90%** (final
+chorus/climax), short outro. The generated chart is **structurally flat and fades at the end** (last
+two deciles 0.14/0.08 vs real 0.20/0.14). This is the measured signature of "awkward end" and "fails
+to track phase changes": the model has no representation of song sections, so it can't ramp into a
+climax or mark a verse→chorus boundary. It choreographs locally, frame by frame, with no global plan.
+
+**"Awkward start" is a separate mechanism.** The data shows generated *start* density (0.06) matches
+real (0.05) — the intro is fine densitywise. So the start-awkwardness the user feels is **choreographic
+or sync**, not density. Candidates: AR cold-start (decoder begins from BOS with no context), audio
+Conv1D edge effects on the first frames, or offset/lead-in sync. Needs its own probe — do NOT fold it
+into H5.
+
+### Mechanism notes
+- End fade has two possible causes to separate: (a) audio energy genuinely drops at the outro and the
+  model faithfully follows it, while the *human charter keeps density up for gameplay climax* (a
+  choreographic choice not in the audio) — this is H5/H1; or (b) a *mechanical* decay — the onset head's
+  positional encoding / AR context degrades at long positions so onset logits sag regardless of audio.
+  **Probe to disambiguate (next):** feed constant-energy synthetic audio and plot onset prob vs
+  position — if it sags with no audio reason, it's mechanical (b); if flat, the fade is structural (a).
+- H1 (local: arrow↔event) and H5 (global: section structure) are two faces of the same root — the
+  feature set is **frame-local timbre/energy**, expressing neither local event-identity (no chroma) nor
+  global structure (no novelty/section curve, shallow Conv1D receptive field). Fix levers diverge though:
+  H1 → chroma/HPSS per-frame; H5 → a structural signal (audio self-similarity/novelty, downbeat phase,
+  or a wider-context / attention audio encoder so the decoder can see beyond the local frame).
+
+### Probe result (done this session) — end-fade is structural, not mechanical
+Fed the onset head **constant-energy audio** (fixed feature vector × 1440 frames) so any slope is
+purely positional. Onset prob by decile (diff 2): `0.32 0.33 0.35 0.37 0.36 0.35 0.35 0.37 0.36 0.38`
+— **flat, slightly rising at the end** (same shape across difficulties 0–3). Conclusions:
+- **End-fade = audio-faithful, NOT mechanical.** The model doesn't positionally decay; the real-song
+  end-fade is it *following audio energy down at the outro* while humans keep density up for the
+  climax/finale. Mechanism (b) ruled OUT; (a) confirmed. **Refines H5:** the model maps audio-energy→
+  density too literally; human charting density carries structural/gameplay intent (build to a climax)
+  that is *not a pure function of instantaneous audio energy*. Decode/position fixes won't help — needs
+  structural signal or a density target that isn't purely audio-energy-driven.
+- **Cold-start dip exists but is small:** first decile depressed (0.32 vs ~0.36 steady) with no audio
+  reason — a mechanical AR/positional start effect. But real-song start *density* matched real (0.06 vs
+  0.05), so "awkward start" is more likely choreographic/sync than density. Still worth a pattern-level
+  start probe.
+
+### Action / next
+- [ ] **Start probe**: inspect first ~16 frames of generated vs real (pattern + onset + sync offset) to
+      characterize the cold-start awkwardness (density ruled out; look at choreography/sync).
+- [ ] User still to play the disambiguation sets: chaos_only / air_only / chaos_gentle (H4/H3 split).
+- [ ] H5 fix candidates to scope: (1) add an audio *novelty/self-similarity* feature; (2) add downbeat
+      phase; (3) widen the audio encoder's receptive field or add self-attention for global context.
+
+### Connecting thread
+The defect taxonomy is sharpening into a clean hierarchy:
+- **Timing (onset, local)** — solved (ROC-AUC ~0.9).
+- **Local choreography (which arrow ↔ which event)** — H1, blocked by no melodic features.
+- **Global structure (sections / phrases / climax / start-end)** — H5, blocked by frame-local features +
+  shallow receptive field.
+- **Decode polish (jacks, random notes, jump-during-hold)** — fixable at decode time (the pattern keeps
+  holding: many "problems" are decode/feature gaps, not capacity).
+Every layer above "timing" traces back to the audio representation being musically shallow. The
+quantitative metrics (onset_F1, crit_adj) score only the bottom layer — which is why they've looked
+great while the chart still doesn't *feel* musical. **The playtest log is measuring the layers the
+metrics can't see.**
+
+---
+
 ## 2026-06-19 (round 2) — radar toggle playtest
 
 ### What was played

@@ -79,9 +79,18 @@ with a test in `tests/test_generation.py`.
   chroma/pitch). Fix lever: chroma + HPSS + retrain.
 - **H2** Pattern-temperature has a coherence/variety sweet spot (~0.7); 1.0 over-randomizes, greedy collapses.
 - **H3** Strong CFG guidance trades musicality for control; gentle (≈1.4) keeps the steer and stays musical.
-- **H4** *(new 06-19)* Quantity knobs (density/holds/jumps) steer fine because they need no musical
-  justification; musicality knobs (chaos/syncopation) break because the model is musically blind —
-  amplified chaos = rhythmic noise, not syncopation. The cleanest stress test of H1.
+- **H4** *(confirmed 06-19: stream_voltage playable, chaos unplayable)* Quantity knobs
+  (density/holds/jumps) steer fine because they need no musical justification; musicality knobs
+  (chaos/syncopation) break because the model is musically blind — amplified chaos = rhythmic noise.
+- **H5** *(new 06-19, measured)* No song-structure/phrase awareness: generated density is structurally
+  flat and fades at the end while real charts have an arc (intro→build→climax@~80-90%→outro). The model
+  choreographs frame-locally with no global plan. Root: frame-local features + shallow Conv1D receptive
+  field. Fix levers (distinct from H1): audio novelty/self-similarity feature, downbeat phase, or a
+  wider-context/attention audio encoder. ("Awkward start" is separate — choreographic/sync, not density.)
+
+Defect hierarchy (each layer above "timing" traces to a musically-shallow audio representation; the
+metrics onset_F1/crit_adj only score the bottom layer, which is why charts score well yet feel off):
+timing (solved) → local choreography (H1) → global structure (H5) → decode polish (jacks, jump-in-hold).
 
 Update these as playtests confirm or break them. The log is the project's qualitative-evidence ledger,
 complementing the quantitative metrics (onset_F1, crit_adj) — which by design never capture play-feel.
