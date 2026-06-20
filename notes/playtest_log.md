@@ -24,6 +24,10 @@ base-model sets, for A/B. (Offline numbers: `stage1_musical_features_findings.md
 Then, on the plain (non-chaos) `base` set:
 > "the base outputs were definitely more musical! it felt mostly right"
 
+Then, on `chaos_gated` (chaos=0.9, g=2.0, `onset_phase_penalty=1.0`):
+> "it did feel a bit more musical than chaos, but it doesn't have any sense of taste. The decode-time
+> gate may have helped, but I think you're right that it won't be enough to fix it."
+
 ### Commentary / hypotheses
 - **★ Stage-1 base felt "definitely more musical… mostly right" — the first play-feel WIN for the
   feature retrain.** This is the key result: the offline metrics were flat (`stage1_musical_features_findings.md`),
@@ -51,14 +55,22 @@ onset-strength) = **+0.10** (on-beat −0.07); off-beat onset prob **mean 0.70, 
 floods off-beats to ~0.70 (the smear), with only *weak* audio signal underneath. Built the gate anyway
 (`onset_phase_penalty`: on-beat 0, 8th −p, 16th −2p; 25 tests).
 
-**Result — the gate does NOT rescue chaos.** Gated chaos sets came out near-empty / wildly inconsistent
-(g=1.5+pen1.0: densities ~0.00–0.02; g=2.0+pen1.0: 0.007 / 0.42 / 0.59 / 0.72). **The key learning:**
-chaos doesn't *add* off-beats on top of an on-beat backbone — it *moves* placement off-beat
+**Result — the gate helps marginally but does NOT rescue chaos.** Gated chaos sets came out near-empty /
+inconsistent (g=1.5+pen1.0: densities ~0.00–0.02; g=2.0+pen1.0: 0.007 / 0.42 / 0.59 / 0.72). Played, the
+g=2.0 gated set "felt a bit more musical than chaos, but… doesn't have any sense of taste." **The key
+learning:** chaos doesn't *add* off-beats on top of an on-beat backbone — it *moves* placement off-beat
 (suppressing on-beat too). So gating off-beats leaves almost nothing, not "backbone + selective
 syncopation." **Decode cannot fix chaos musicality** — confirms the deeper H6 read for the chaos knob:
 the fix is the conditioning mechanism / objective, not decode. (The gate is still a useful *general*
 metric-anchoring knob; for density-matched use it needs the threshold re-derived AFTER the penalty,
 else density collapses — a real interaction bug, currently the gated sets are not density-matched.)
+
+**"No sense of taste"** is the phrase to carry forward: the model places notes that are individually
+plausible but lack musical *judgment* (which off-beats are worth hitting, when to vary). That's not a
+feature gap (chroma is in and helped plain play) nor a decode gap (the gate proved decode's ceiling) —
+it points squarely at the **training objective**: frame-wise CE rewards matching the reference token,
+never "is this a tasteful choreography." This is the strongest signal yet toward an objective-level
+Stage 2 (see H6).
 
 ### Action / next
 - [x] Diagnostic + gate built & tested → chaos is *moved* off-beat, not layered; decode can't fix it.
