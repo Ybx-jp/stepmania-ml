@@ -33,6 +33,12 @@ class AudioFeatureConfig:
     # Onset detection settings
     use_onset_features: bool = True
     use_spectral_contrast: bool = True
+    # Musical-feature retrain (Stage 1, default OFF -> keeps the 23-dim path identical):
+    use_chroma: bool = False          # 12-dim chromagram (per-pitch-class energy = melody/harmony)
+    use_hpss_onsets: bool = False     # 2-dim: onset strength of percussive vs harmonic components
+    use_metric_phase: bool = False    # 4-dim: sin/cos of beat-phase and measure-phase (from the 16th grid)
+    timesteps_per_beat: int = 4       # chart resolution (16th notes); must match the parser
+    beats_per_measure: int = 4
 
 
 @dataclass
@@ -43,6 +49,10 @@ class AudioFeatures:
     onset_rate: Optional[np.ndarray] = None  # Shape: (n_frames,) local onset density
     tempo: Optional[float] = None  # Estimated tempo in BPM
     spectral_contrast: Optional[np.ndarray] = None  # Shape: (n_bands+1, n_frames)
+    chroma: Optional[np.ndarray] = None        # Shape: (12, n_frames) per-pitch-class energy
+    perc_onset: Optional[np.ndarray] = None    # Shape: (n_frames,) percussive onset strength (HPSS)
+    harm_onset: Optional[np.ndarray] = None    # Shape: (n_frames,) harmonic onset strength (HPSS)
+    metric_phase: Optional[np.ndarray] = None  # Shape: (n_frames, 4) sin/cos of beat & measure phase
     audio_duration: float = 0.0
     sample_rate: int = 22050
     hop_length: int = 512
@@ -92,6 +102,20 @@ class AudioFeatures:
             contrast_normalized = self._safe_normalize(self.spectral_contrast.T)
             features.append(contrast_normalized)  # (n_frames, 7)
 
+        # --- Stage-1 musical features (appended AFTER the original 23 so dims 0..22 are unchanged) ---
+        if self.chroma is not None:
+            # per-pitch-class energy; z-score per class over the song (like MFCC)
+            features.append(self._safe_normalize(self.chroma.T))  # (n_frames, 12)
+
+        if self.perc_onset is not None:
+            features.append(self._normalize_envelope(self.perc_onset))  # (n_frames, 1)
+        if self.harm_onset is not None:
+            features.append(self._normalize_envelope(self.harm_onset))  # (n_frames, 1)
+
+        if self.metric_phase is not None:
+            # already in [-1, 1] (sin/cos); pass through with a safety clip
+            features.append(self._safe_clip(self.metric_phase))  # (n_frames, 4)
+
         result = np.concatenate(features, axis=1)
 
         # Final safety check for NaN/Inf
@@ -120,6 +144,13 @@ class AudioFeatures:
         """Clip array and replace NaN/Inf values."""
         arr = np.nan_to_num(arr, nan=0.0, posinf=max_val, neginf=min_val)
         return np.clip(arr, min_val, max_val)
+
+    def _normalize_envelope(self, env: np.ndarray) -> np.ndarray:
+        """Normalize a 1D strength envelope to 0-1 by its max, like onset_env -> (n_frames, 1)."""
+        env = np.nan_to_num(env, nan=0.0, posinf=0.0, neginf=0.0)
+        m = np.max(env)
+        out = (env / m) if m > 1e-8 else np.zeros_like(env)
+        return self._safe_clip(out.reshape(-1, 1))
 
 
 class AudioFeatureExtractor:
@@ -221,6 +252,26 @@ class AudioFeatureExtractor:
                     fmin=max(self.config.fmin, 200.0)  # Minimum 200Hz for spectral contrast
                 )
 
+            # --- Stage-1 musical features (chroma / HPSS onsets / metric phase) ---
+            chroma = None
+            if self.config.use_chroma:
+                # chroma_stft (not _cqt): CQT constrains hop to a power of two; our hop is BPM-derived.
+                # tuning=0.0 disables tuning estimation (its piptrack path segfaults in this env, and
+                # tuning correction is negligible for pitch-class energy as a conditioning feature).
+                chroma = librosa.feature.chroma_stft(
+                    y=audio, sr=sr, hop_length=aligned_hop_length, n_fft=self.config.n_fft, tuning=0.0
+                )  # (12, n_frames)
+
+            perc_onset = None
+            harm_onset = None
+            if self.config.use_hpss_onsets:
+                # split into harmonic (tuned) and percussive (drums), onset strength on each
+                y_harm, y_perc = librosa.effects.hpss(audio)
+                perc_onset = librosa.onset.onset_strength(y=y_perc, sr=sr, hop_length=aligned_hop_length,
+                                                          n_fft=self.config.n_fft)
+                harm_onset = librosa.onset.onset_strength(y=y_harm, sr=sr, hop_length=aligned_hop_length,
+                                                          n_fft=self.config.n_fft)
+
             # Align audio frames to match chart timesteps exactly
             expected_frames = chart.timesteps_total
             actual_frames = mfcc.shape[1]
@@ -233,6 +284,15 @@ class AudioFeatureExtractor:
                     onset_rate = self._align_features_1d(onset_rate, expected_frames)
                 if spectral_contrast is not None:
                     spectral_contrast = self._align_features(spectral_contrast, expected_frames)
+                if chroma is not None:
+                    chroma = self._align_features(chroma, expected_frames)
+                if perc_onset is not None:
+                    perc_onset = self._align_features_1d(perc_onset, expected_frames)
+                if harm_onset is not None:
+                    harm_onset = self._align_features_1d(harm_onset, expected_frames)
+
+            # metric phase is derived from the (BPM-aligned) frame index, not the audio
+            metric_phase = self._metric_phase(mfcc.shape[1]) if self.config.use_metric_phase else None
 
             return AudioFeatures(
                 mfcc=mfcc,
@@ -240,6 +300,10 @@ class AudioFeatureExtractor:
                 onset_rate=onset_rate,
                 tempo=tempo,
                 spectral_contrast=spectral_contrast,
+                chroma=chroma,
+                perc_onset=perc_onset,
+                harm_onset=harm_onset,
+                metric_phase=metric_phase,
                 audio_duration=len(audio) / sr,
                 sample_rate=sr,
                 hop_length=aligned_hop_length,
@@ -329,6 +393,21 @@ class AudioFeatureExtractor:
             padding = target_frames - current_frames
             padded = np.pad(features, (0, padding), mode='constant', constant_values=0)
             return padded
+
+    def _metric_phase(self, n_frames: int) -> np.ndarray:
+        """Beat- and measure-phase as sin/cos, from the 16th-grid frame index -> (n_frames, 4).
+
+        Frame t is the t-th 16th-note timestep (audio hop is BPM-aligned), so t % tpb is its
+        position within a beat and t % (tpb*beats_per_measure) within a measure. Encoding each as
+        (sin, cos) of its phase gives the model an explicit, cyclical sense of metric position
+        (downbeat vs offbeat, bar boundaries) so syncopation can be metric-aware.
+        """
+        tpb = self.config.timesteps_per_beat
+        tpm = tpb * self.config.beats_per_measure
+        t = np.arange(n_frames)
+        beat = 2.0 * np.pi * (t % tpb) / tpb
+        meas = 2.0 * np.pi * (t % tpm) / tpm
+        return np.stack([np.sin(beat), np.cos(beat), np.sin(meas), np.cos(meas)], axis=1).astype(np.float32)
 
     def _compute_onset_rate(self, onset_env: np.ndarray, window_size: int = 32) -> np.ndarray:
         """

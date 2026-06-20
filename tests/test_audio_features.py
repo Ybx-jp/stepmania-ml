@@ -8,7 +8,54 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.data.stepmania_parser import StepManiaParser
-from src.data.audio_features import AudioFeatureExtractor
+from src.data.audio_features import AudioFeatureExtractor, AudioFeatures
+
+
+def _base_features(T=40):
+    """Synthetic AudioFeatures with the original 23-dim set populated (no audio needed)."""
+    rng = np.random.default_rng(0)
+    return AudioFeatures(
+        mfcc=rng.standard_normal((13, T)).astype(np.float32),
+        onset_env=rng.random(T).astype(np.float32),
+        onset_rate=rng.random(T).astype(np.float32),
+        tempo=150.0,
+        spectral_contrast=rng.standard_normal((7, T)).astype(np.float32),
+        n_frames=T,
+    )
+
+
+def test_stage1_features_are_a_clean_suffix():
+    # The new musical features must append AFTER the original 23, leaving dims 0..22 byte-identical
+    # so existing 23-dim checkpoints/behavior are unaffected.
+    T = 40
+    base23 = _base_features(T).get_aligned_features()
+    assert base23.shape == (T, 23)
+
+    full = _base_features(T)
+    rng = np.random.default_rng(1)
+    full.chroma = rng.random((12, T)).astype(np.float32)
+    full.perc_onset = rng.random(T).astype(np.float32)
+    full.harm_onset = rng.random(T).astype(np.float32)
+    full.metric_phase = AudioFeatureExtractor()._metric_phase(T)
+    full41 = full.get_aligned_features()
+    assert full41.shape == (T, 41)
+    np.testing.assert_allclose(full41[:, :23], base23, rtol=0, atol=0)
+
+
+def test_metric_phase_values():
+    # beat-phase cycles every 4 frames (16th grid), measure-phase every 16; encoded as sin/cos.
+    mp = AudioFeatureExtractor()._metric_phase(32)
+    assert mp.shape == (32, 4)
+    np.testing.assert_allclose(mp[0], [0.0, 1.0, 0.0, 1.0], atol=1e-6)  # t=0 = downbeat
+    np.testing.assert_allclose(mp[0, :2], mp[4, :2], atol=1e-6)         # beat period 4
+    np.testing.assert_allclose(mp[0, 2:], mp[16, 2:], atol=1e-6)        # measure period 16
+    assert not np.allclose(mp[0, 2:], mp[4, 2:], atol=1e-6)             # measure != beat period
+
+
+def test_default_config_unchanged_23dim():
+    ext = AudioFeatureExtractor()
+    assert not (ext.config.use_chroma or ext.config.use_hpss_onsets or ext.config.use_metric_phase)
+    assert _base_features().get_aligned_features().shape[1] == 23
 
 def test_audio_feature_alignment():
     """Test audio features align with chart and have correct properties"""
