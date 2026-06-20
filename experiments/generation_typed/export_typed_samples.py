@@ -61,7 +61,12 @@ def parse_args():
                    help='>1 further discourages repeating the previous note; 1.0 already matches real')
     p.add_argument('--jump_bias', type=float, default=0.0, help='pattern preference: + = more jumps, - = fewer')
     p.add_argument('--no_crossovers', action='store_true', help='forbid crossover steps (foot automaton)')
+    p.add_argument('--no_jump_during_hold', action='store_true',
+                   help='forbid jumps while a hold is open (one free foot); pad-playable holds')
     p.add_argument('--prefer', type=str, default=None, help='panel preference, e.g. "U,R" to favor Up+Right')
+    p.add_argument('--radar', type=str, default=None,
+                   help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
+                        'e.g. "chaos=0.9,air=0.85"; unset dims default to the dataset mean. Use with --guidance to amplify.')
     p.add_argument('--max_len', type=int, default=1440)  # full 2-min songs (KV-cache makes it cheap)
     return p.parse_args()
 
@@ -110,6 +115,20 @@ def main():
         print(f"\nstyle reference: {style_label}  (density {ref_dens:.3f}, {len(ref_typed)} frames)  "
               f"guidance={args.guidance}")
 
+    # groove-radar target: base at the dataset mean, override the requested dims
+    RADAR_DIMS = ['stream', 'voltage', 'air', 'freeze', 'chaos']
+    radar_vec = None
+    if args.radar:
+        radars = [m['groove_radar'].to_vector() for m in ds.valid_samples if 'groove_radar' in m]
+        base = np.mean(radars, 0).astype(np.float32) if radars else np.full(5, 0.5, np.float32)
+        for tok in args.radar.split(','):
+            k, _, v = tok.strip().partition('=')
+            k = k.strip().lower()
+            if k in RADAR_DIMS:
+                base[RADAR_DIMS.index(k)] = float(v)
+        radar_vec = torch.from_numpy(base).unsqueeze(0).to(device)  # (1,5), reused for every song
+        print(f"\ngroove radar target: {dict(zip(RADAR_DIMS, base.round(2).tolist()))}  guidance={args.guidance}")
+
     # build pattern-preference bias from CLI knobs
     from src.generation.typed import make_pattern_bias
     panel_prefs = None
@@ -156,7 +175,8 @@ def main():
                              pattern_sample=True, pattern_temperature=args.pattern_temperature,
                              repetition_penalty=args.repetition_penalty,
                              pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
-                             style=style_vec, guidance_scale=args.guidance)[0].cpu().numpy()
+                             no_jump_during_hold=args.no_jump_during_hold,
+                             style=style_vec, guidance_scale=args.guidance, radar=radar_vec)[0].cpu().numpy()
         gen = pair_holds(gen)
 
         chart_obj = meta['chart']
