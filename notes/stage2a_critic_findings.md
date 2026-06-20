@@ -1,8 +1,31 @@
 # Stage 2a — realism critic: findings (offline)
 
-*2026-06-20. First realism-critic attempt (see `notes/stage2_realism_critic_plan.md`). Result: the
-critic does NOT give a valid taste metric — it learned the generator's fingerprint, not musical taste.
-This is the validation gate the staged plan was designed to catch before escalating to 2b/2c.*
+*2026-06-20. Two attempts. **v1 (generated negatives) FAILED** — learned the generator fingerprint,
+taste metric scored backwards. **v2 (corrupted-real negatives) SUCCEEDED** — AUC 0.964 and the taste
+metric ranks generations in playtest order (REAL > BASE > CHAOS). See `stage2_realism_critic_plan.md`.*
+
+## v2 (corrupted-real negatives) — SUCCESS ✅
+
+Fix per v1's lesson: negatives are REAL charts perturbed at FIXED density/timing, so the only cue is
+taste — **panels** (per note-frame reassign which panels, keep count → kills arrow coherence) and
+**shift** (roll chart vs audio → kills alignment). No generator in training. Warm-start from Phase-1.
+
+- **AUC 0.964** (epoch 12) separating real vs corrupted-real. P(real): real ≈ 0.79, panels ≈ 0.03,
+  shift ≈ 0.05 → the critic confidently flags both scrambled-arrow and misaligned charts as fake. It
+  learned arrow-choice taste AND audio-alignment (the two things v1 missed).
+- **Taste metric (`eval_taste.py`, 64 val songs, P(real)): REAL 0.823 > BASE 0.290 > CHAOS 0.003** —
+  matches the playtest exactly (base "more musical", chaos "no taste"). **We now have a quantitative
+  musicality signal** — the thing every prior metric (onset_F1, crit_adj, phase, structure) couldn't see.
+
+Unblocks **2b (best-of-N reranking)**: a valid taste scorer means we can generate N candidates and keep
+the highest P(real). Checkpoint `checkpoints/realism_critic/best_val.pt` (config embedded).
+
+---
+
+## v1 (generated negatives) — FAILED (kept for the record)
+
+*Result: the critic did NOT give a valid taste metric — it learned the generator's fingerprint, not
+musical taste. The validation gate the staged plan was designed to catch before escalating.*
 
 ## What ran
 `train_critic.py`: `LateFusionClassifier` + binary real/fake head, warm-started from the Phase-1
