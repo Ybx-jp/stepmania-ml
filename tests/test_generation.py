@@ -211,6 +211,63 @@ def test_no_crossovers_decoding():
     assert total_cross == 0, f"no_crossovers should yield 0 crossovers, got {total_cross}"
 
 
+def test_style_encoder_bottleneck_and_invariance():
+    # The reference-chart style encoder pools over time to a single (B,d) latent, and
+    # padded frames must not affect that latent (masked mean).
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 64
+    ref = torch.randint(0, 5, (B, T, 4))
+    mask = torch.ones(B, T, dtype=torch.bool)
+    s = m.encode_style(ref, mask)
+    assert s.shape == (B, 64), "style latent must be a single per-sample vector"
+    # garbage in the padded tail must not change the latent when masked out
+    mask2 = mask.clone(); mask2[:, T // 2:] = False
+    ref2 = ref.clone(); ref2[:, T // 2:] = torch.randint(0, 5, (B, T - T // 2, 4))
+    s_a = m.encode_style(ref, mask2)
+    s_b = m.encode_style(ref2, mask2)
+    assert torch.allclose(s_a, s_b, atol=1e-5), "masked frames leaked into the style latent"
+
+
+def test_style_conditioning_changes_logits():
+    # Conditioning on a reference chart must actually move the model's predictions
+    # (vs the null-style path), otherwise the style knob is a no-op.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 32
+    audio = torch.randn(B, T, 23); states = torch.randint(0, 5, (B, T, 4)); diff = torch.tensor([1, 2])
+    mask = torch.ones(B, T, dtype=torch.bool)
+    ref = torch.randint(1, 5, (B, T, 4))  # dense reference
+    # nudge the style encoder off its zero-init so conditioning is non-trivial
+    for p in m.style_encoder.parameters():
+        p.data += 0.1 * torch.randn_like(p)
+    ol0, pat0, _ = m(audio, states, diff, mask)                       # null style
+    ol1, pat1, _ = m(audio, states, diff, mask, reference=ref, reference_mask=mask)
+    assert not torch.allclose(pat0, pat1, atol=1e-4), "style conditioning did not change pattern logits"
+
+
+def test_style_guidance_runs_and_shapes():
+    # CFG guidance on the style knob produces a valid chart and differs from g=1.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    for p in m.style_encoder.parameters():
+        p.data += 0.1 * torch.randn_like(p)
+    B, T = 2, 48
+    audio = torch.randn(B, T, 23); diff = torch.tensor([1, 2])
+    ref = torch.randint(1, 5, (B, T, 4)); mask = torch.ones(B, T, dtype=torch.bool)
+    ov = torch.ones(B, T, dtype=torch.bool)
+    g1 = m.generate(audio, diff, onset_override=ov, reference=ref, reference_mask=mask, guidance_scale=1.0)
+    g3 = m.generate(audio, diff, onset_override=ov, reference=ref, reference_mask=mask, guidance_scale=3.0)
+    assert g1.shape == (B, T, 4) and g3.shape == (B, T, 4)
+    assert (g1 != g3).any(), "style guidance had no effect on the generated chart"
+
+
 def test_hold_aware_decoding_valid():
     # Hold-aware decoding's automaton guarantees no orphan tails (a tail only ever
     # closes an open head) and at most one open hold per panel at a time.

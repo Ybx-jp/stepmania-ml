@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.models.components.encoders import AudioEncoder
+from src.models.components.encoders import AudioEncoder, ChartEncoder
 from .transformer import PositionalEncoding, _causal_mask
 from .factorized import _project, _attend, _LayerCache
 from .typed import NUM_SYMBOLS, NUM_PANELS, NUM_PATTERNS, NUM_TYPES  # 5 symbols, 4 panels, 15 patterns, 4 types
@@ -187,6 +187,30 @@ class TypedChartGenerator(nn.Module):
         return gen
 
 
+class StyleEncoder(nn.Module):
+    """Reference-chart style encoder (Step 3). Reuses the Phase 1 ChartEncoder (embedding +
+    Conv1D blocks) to map a reference chart's per-frame occupancy (B,L,4) -> (B,L,d), then
+    masked-mean-pools over time to a single (B,d) STYLE LATENT. The temporal pool is the
+    bottleneck: it can only carry global feel (density, which-panels / jack tendencies),
+    not the exact note sequence, so conditioning on it transfers style rather than copying.
+    """
+
+    def __init__(self, d_model: int = 128, embedding_dim: int = 64):
+        super().__init__()
+        self.encoder = ChartEncoder(input_dim=NUM_PANELS, embedding_dim=embedding_dim, hidden_dim=d_model)
+        self.norm = nn.LayerNorm(d_model)
+
+    def forward(self, ref_occupancy: torch.Tensor, ref_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """ref_occupancy (B,L,4) binary; ref_mask (B,L) bool (valid frames) -> (B,d) latent."""
+        h = self.encoder(ref_occupancy)  # (B,L,d)
+        if ref_mask is not None:
+            m = ref_mask.unsqueeze(-1).float()
+            pooled = (h * m).sum(1) / m.sum(1).clamp(min=1.0)
+        else:
+            pooled = h.mean(1)
+        return self.norm(pooled)
+
+
 class LayeredTypedChartGenerator(nn.Module):
     """Layered factorization: onset (frame has a step) -> pattern (WHICH panels are active,
     15-way — the binary model's proven head) -> type (per active panel: tap/hold-head/tail/roll,
@@ -220,11 +244,26 @@ class LayeredTypedChartGenerator(nn.Module):
         # target groove-radar conditioning (Step 2): 5 dims -> d; null embedding for CFG dropout
         self.radar_proj = nn.Linear(5, d_model)
         self.null_radar = nn.Parameter(torch.zeros(d_model))
+        # reference-chart style conditioning (Step 3): encode a reference chart -> (B,d) latent
+        self.style_encoder = StyleEncoder(d_model=d_model)
+        self.null_style = nn.Parameter(torch.zeros(d_model))
 
-    def _cond(self, difficulty, radar):
-        """Per-sample conditioning vector (B, d): difficulty + groove-radar (or null radar)."""
+    def encode_style(self, reference, reference_mask=None):
+        """Reference chart -> (B,d) style latent. `reference` is (B,L,4) typed symbols (0..4) or
+        binary occupancy; we condition on per-frame occupancy (step present on a panel).
+        Padded frames are zeroed before encoding so they read as empty (the conv mixes
+        neighbors, so garbage in the pad would otherwise leak across the mask boundary)."""
+        occ = (reference != 0).float() if reference.dtype != torch.float32 else (reference > 0).float()
+        if reference_mask is not None:
+            occ = occ * reference_mask.unsqueeze(-1).float()
+        return self.style_encoder(occ, reference_mask)
+
+    def _cond(self, difficulty, radar, style=None):
+        """Per-sample conditioning vector (B, d): difficulty + groove-radar (or null radar)
+        + reference-chart style latent (or null style)."""
         c = self.diff_embedding(difficulty)
         c = c + (self.radar_proj(radar) if radar is not None else self.null_radar.unsqueeze(0))
+        c = c + (style if style is not None else self.null_style.unsqueeze(0))
         return c
 
     def load_from_factorized(self, sd: dict) -> int:
@@ -246,9 +285,9 @@ class LayeredTypedChartGenerator(nn.Module):
     def encode_audio(self, audio):
         return self.audio_encoder(audio)
 
-    def onset_logits(self, memory, difficulty, mask=None, radar=None):
+    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None):
         B, T, _ = memory.shape
-        cond = self._cond(difficulty, radar).unsqueeze(1).expand(B, T, -1)
+        cond = self._cond(difficulty, radar, style).unsqueeze(1).expand(B, T, -1)
         x = self.dropout(self.pos_encoding(memory) + cond)
         pad = (~mask.bool()) if mask is not None else None
         return self.onset_head(self.onset_encoder(x, src_key_padding_mask=pad)).squeeze(-1)
@@ -261,9 +300,9 @@ class LayeredTypedChartGenerator(nn.Module):
         e = self._state_emb(states)
         return torch.cat([self.bos.expand(B, 1, -1), e[:, :-1]], dim=1)
 
-    def _decode(self, memory, states, difficulty, mask=None, radar=None):
+    def _decode(self, memory, states, difficulty, mask=None, radar=None, style=None):
         B, T, _ = states.shape
-        cond = self._cond(difficulty, radar).unsqueeze(1).expand(B, T, -1)
+        cond = self._cond(difficulty, radar, style).unsqueeze(1).expand(B, T, -1)
         tgt = self.dropout(self.pos_encoding(self._decoder_input(states)) + cond)
         causal = _causal_mask(T, states.device)
         pad = (~mask.bool()) if mask is not None else None
@@ -271,12 +310,17 @@ class LayeredTypedChartGenerator(nn.Module):
                          tgt_key_padding_mask=pad, memory_key_padding_mask=pad)
         return self.pattern_head(h), self.type_head(h).view(B, T, NUM_PANELS, NUM_TYPES)
 
-    def forward(self, audio, states, difficulty, mask=None, radar=None):
+    def forward(self, audio, states, difficulty, mask=None, radar=None,
+                reference=None, reference_mask=None, style=None):
         """Returns (onset_logits (B,T), pattern_logits (B,T,15), type_logits (B,T,4,4)).
-        `radar` (B,5) is an optional target groove-radar conditioning (None -> null/CFG)."""
+        `radar` (B,5) optional target groove-radar conditioning (None -> null/CFG).
+        `reference` (B,L,4) optional reference chart for style conditioning; or pass a
+        precomputed `style` (B,d) latent directly. Both None -> null style/CFG."""
         memory = self.encode_audio(audio)
-        ol = self.onset_logits(memory, difficulty, mask, radar)
-        pat, typ = self._decode(memory, states, difficulty, mask, radar)
+        if style is None and reference is not None:
+            style = self.encode_style(reference, reference_mask)
+        ol = self.onset_logits(memory, difficulty, mask, radar, style)
+        pat, typ = self._decode(memory, states, difficulty, mask, radar, style)
         return ol, pat, typ
 
     def _decoder_step_cached(self, x, caches):
@@ -298,7 +342,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  type_sample=False, type_temperature=1.0, hold_aware=False,
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
-                 guidance_scale=1.0):
+                 guidance_scale=1.0, reference=None, reference_mask=None, style=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -315,13 +359,15 @@ class LayeredTypedChartGenerator(nn.Module):
         device = audio.device
         B, T, _ = audio.shape
         memory = self.encode_audio(audio)
-        do_cfg = (guidance_scale != 1.0) and (radar is not None)  # amplify the radar conditioning
+        if style is None and reference is not None:
+            style = self.encode_style(reference, reference_mask)
+        do_cfg = (guidance_scale != 1.0) and (radar is not None or style is not None)  # amplify radar/style conditioning
         if onset_override is not None:
             onset = onset_override.bool().to(device)
         else:
-            ol = self.onset_logits(memory, difficulty, radar=radar)
-            if do_cfg:  # classifier-free guidance: push onset toward the radar-conditioned prediction
-                ol_u = self.onset_logits(memory, difficulty, radar=None)
+            ol = self.onset_logits(memory, difficulty, radar=radar, style=style)
+            if do_cfg:  # classifier-free guidance: push onset toward the conditioned prediction
+                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None)
                 ol = ol_u + guidance_scale * (ol - ol_u)
             p = torch.sigmoid(onset_logit_scale * ol + onset_logit_bias)
             onset = torch.bernoulli(p).bool() if onset_sample else (p > onset_threshold)
@@ -331,10 +377,10 @@ class LayeredTypedChartGenerator(nn.Module):
         panel_bits = ((states_tab.unsqueeze(-1) >> torch.arange(NUM_PANELS, device=device)) & 1)  # (15,4)
 
         caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
-        cond_emb = self._cond(difficulty, radar).unsqueeze(1)  # (B,1,d): difficulty + groove radar
-        if do_cfg:  # parallel unconditioned (null-radar) path for guidance
+        cond_emb = self._cond(difficulty, radar, style).unsqueeze(1)  # (B,1,d): difficulty + radar + style
+        if do_cfg:  # parallel unconditioned (null radar + null style) path for guidance
             uncond_caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
-            uncond_emb = self._cond(difficulty, None).unsqueeze(1)
+            uncond_emb = self._cond(difficulty, None, None).unsqueeze(1)
         gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = self.bos.expand(B, 1, -1)
         held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
