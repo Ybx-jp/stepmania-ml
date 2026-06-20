@@ -196,6 +196,26 @@ def test_pattern_bias_and_crossover_helpers():
     assert singles == 1 and cr == 1
 
 
+def test_onset_phase_penalty_shifts_on_beat():
+    # The metric gate suppresses off-beat onsets, so a higher penalty must raise the fraction of
+    # notes that land on the beat (frame index % 4 == 0).
+    import numpy as np, torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 400
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 2])
+
+    def on_beat_frac(pen):
+        torch.manual_seed(1)
+        g = m.generate(audio, diff, onset_sample=True, onset_phase_penalty=pen).numpy()
+        on = (g != 0).any(2)
+        fr = [(np.where(on[b])[0] % 4 == 0).mean() for b in range(B) if on[b].any()]
+        return float(np.mean(fr))
+
+    assert on_beat_frac(2.5) > on_beat_frac(0.0) + 0.1, "phase penalty did not push onsets on-beat"
+
+
 def test_no_crossovers_decoding():
     import torch
     from src.generation.typed_model import LayeredTypedChartGenerator

@@ -81,11 +81,11 @@ with a test in `tests/test_generation.py`.
 
 ## Standing hypotheses (keep current)
 
-- **H1** *(reinforced 06-19 by chaos playtest; complicated 06-20 by Stage 1)* Timing is solved (onset
-  ROC-AUC ~0.9); choreography (arrow↔musical-event mapping) is the open axis, bottlenecked by
-  timbre/energy-only features. Stage 1 added chroma/HPSS/phase: the model *uses* chroma (ablation KL
-  10.3 ≈ MFCC) but offline musicality didn't improve — see `stage1_musical_features_findings.md`.
-  Verdict now hinges on the Stage-1 *playtest* (pending).
+- **H1** *(SUPPORTED 06-20 by playtest)* Choreography (arrow↔musical-event) was the open axis,
+  bottlenecked by timbre-only features. Stage 1 added chroma (used heavily, ablation KL 10.3) and the
+  **plain Stage-1 model played "definitely more musical… mostly right"** — a play-feel win, even though
+  every offline metric (onset_F1, phase, structure) stayed flat. The features helped; the metrics just
+  can't see it. (Chaos still smears — that's an H4/chaos-knob issue, not the features.)
 - **H2** Pattern-temperature has a coherence/variety sweet spot (~0.7); 1.0 over-randomizes, greedy collapses.
 - **H3** Strong CFG guidance trades musicality for control; gentle (≈1.4) keeps the steer and stays musical.
 - **H4** *(FULLY confirmed 06-19: stream_voltage & air_only playable, chaos_only/chaos_air/chaos_gentle
@@ -99,10 +99,11 @@ with a test in `tests/test_generation.py`.
   choreographs frame-locally with no global plan. Root: frame-local features + shallow Conv1D receptive
   field. Fix levers (distinct from H1): audio novelty/self-similarity feature, downbeat phase, or a
   wider-context/attention audio encoder. ("Awkward start" is separate — choreographic/sync, not density.)
-- **H6** *(new 06-20)* Informative features are *necessary but not sufficient*: Stage 1's model uses
-  chroma heavily (ablation KL 10.3) yet offline musicality didn't improve. If the Stage-1 playtest also
-  disappoints, the next lever is the *objective* (reward musicality, not just frame-wise CE) or an
-  event-grounding architecture — not more input features. See `stage1_musical_features_findings.md`.
+- **H6** *(revised 06-20)* For *plain* generation the features WERE sufficient (the playtest win, H1) —
+  the offline metrics simply couldn't detect it. The "necessary-not-sufficient" failure is specific to
+  the **chaos knob**: a decode gate (`onset_phase_penalty`) does NOT rescue it because chaos *moves*
+  notes off-beat (suppressing on-beat) rather than layering off-beats on a backbone, so gating →
+  near-empty. Fixing chaos needs the conditioning mechanism/objective, not decode or more features.
 - **H7** *(new 06-20)* Metric-phase feature backfires for syncopation — it gave the model a clean
   downbeat signal which it used to sit MORE on-beat (0.93→0.952). Drop or rethink in Stage 2.
 - **H8** *(new 06-20)* HPSS onsets are near-redundant with the existing onset_env (ablation KL 0.29);

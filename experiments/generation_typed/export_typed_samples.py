@@ -65,6 +65,9 @@ def parse_args():
     p.add_argument('--no_crossovers', action='store_true', help='forbid crossover steps (foot automaton)')
     p.add_argument('--no_jump_during_hold', action='store_true',
                    help='forbid jumps while a hold is open (one free foot); pad-playable holds')
+    p.add_argument('--onset_phase_penalty', type=float, default=0.0,
+                   help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
+                        '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
     p.add_argument('--prefer', type=str, default=None, help='panel preference, e.g. "U,R" to favor Up+Right')
     p.add_argument('--radar', type=str, default=None,
                    help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
@@ -186,6 +189,7 @@ def main():
                              repetition_penalty=args.repetition_penalty,
                              pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                              no_jump_during_hold=args.no_jump_during_hold,
+                             onset_phase_penalty=args.onset_phase_penalty,
                              style=style_vec, guidance_scale=args.guidance, radar=radar_vec)[0].cpu().numpy()
         gen = pair_holds(gen)
 
