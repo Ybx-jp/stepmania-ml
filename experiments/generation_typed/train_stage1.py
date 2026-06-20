@@ -266,7 +266,8 @@ def main():
             m = onset_density_metrics((g != 0).astype(np.float32), reference=(s['typed'][:t] != 0).astype(np.float32))
             f1s.append(m['onset_f1']); dens.append((g != 0).any(1).mean())
             for k, val_ in symbol_histogram(g).items(): gen_syms[k] += val_
-            preds.append(critic.predict(typed_binary(g), s['audio'][:t], bpm=DEFAULT_BPM)['class']); tgts.append(s['difficulty'])
+            # critic is the Phase-1 classifier (23-dim audio encoder) -> feed only the original 23 dims
+            preds.append(critic.predict(typed_binary(g), s['audio'][:t, :23], bpm=DEFAULT_BPM)['class']); tgts.append(s['difficulty'])
     dd = np.abs(np.array(preds) - np.array(tgts))
     real_taps = sum(symbol_histogram(s['typed'])['tap'] for s in eval_set)
     real_holds = sum(symbol_histogram(s['typed'])['hold_head'] for s in eval_set)

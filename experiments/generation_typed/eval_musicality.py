@@ -114,7 +114,9 @@ def main():
     target_density = float(np.mean([(s['typed'] != 0).any(1).mean() for s in songs]))
 
     model = LayeredTypedChartGenerator(audio_dim=audio_dim, d_model=128, num_layers=4, onset_layers=2).to(device)
-    model.load_state_dict(torch.load(args.checkpoint, map_location=device)['model_state_dict']); model.eval()
+    # strict=False: older checkpoints (e.g. gen_radar) predate style_encoder; those params stay at init
+    # and are unused here (no reference/style passed to generate).
+    model.load_state_dict(torch.load(args.checkpoint, map_location=device)['model_state_dict'], strict=False); model.eval()
     critic = DifficultyCritic(device=device)
 
     def feats(a41):  # (T,41) -> model input on the right dim

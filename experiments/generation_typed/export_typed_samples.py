@@ -46,6 +46,8 @@ def parse_args():
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--out_dir', default='outputs/typed_samples')
     p.add_argument('--checkpoint', default='checkpoints/gen_style/best_val.pt')
+    p.add_argument('--features', choices=['base', 'stage1'], default='base',
+                   help='base=23-dim (cache/samples); stage1=41-dim musical features (cache/samples_v2)')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
     p.add_argument('--reference', type=str, default=None,
@@ -87,11 +89,19 @@ def main():
     _, val_files, _ = create_data_splits(cf, random_state=args.seed)
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)['classifier']['max_sequence_length']
+    # feature set: base (23-dim) vs stage1 (41-dim musical features)
+    if args.features == 'stage1':
+        from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
+        feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
+        audio_dim, cache = 41, 'cache/samples_v2'
+    else:
+        feat_ext, audio_dim, cache = None, 23, 'cache/samples'
     ds = StepManiaDataset(chart_files=val_files[:args.num_songs * 8], audio_dir=args.audio_dir,
-                          max_sequence_length=msl, cache_dir='cache/samples')
+                          max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=cache)
 
-    model = LayeredTypedChartGenerator(audio_dim=23, d_model=128, num_layers=4, onset_layers=2).to(device)
-    model.load_state_dict(torch.load(args.checkpoint, map_location=device)['model_state_dict']); model.eval()
+    model = LayeredTypedChartGenerator(audio_dim=audio_dim, d_model=128, num_layers=4, onset_layers=2).to(device)
+    # strict=False: gen_radar/gen_layered predate style_encoder; those params stay at init (unused unless --reference)
+    model.load_state_dict(torch.load(args.checkpoint, map_location=device)['model_state_dict'], strict=False); model.eval()
     critic = DifficultyCritic(device=device)
 
     # Step 3: optional reference chart -> condition every generated song on its style
@@ -202,7 +212,7 @@ def main():
         (folder / "chart.sm").write_text(sm, encoding="utf-8")
 
         h = symbol_histogram(gen)
-        cpred = critic.predict(typed_binary(gen), audio_np, bpm=DEFAULT_BPM)['name']
+        cpred = critic.predict(typed_binary(gen), audio_np[:, :23], bpm=DEFAULT_BPM)['name']  # critic is 23-dim Phase-1
         gen_d = float((gen != 0).any(1).mean())
         print(f"{safe_name(title)[:33]:<34} {dname:<8} {gen_d:>8.3f} {real_density:>8.3f} "
               f"{h['hold_head']:>6} {cpred:>9}")

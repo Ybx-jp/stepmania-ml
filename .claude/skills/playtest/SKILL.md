@@ -53,6 +53,13 @@ Radar dims (0–1, base = dataset mean): `stream, voltage, air, freeze, chaos`
 
 ## Logging feedback
 
+**Scope of `notes/playtest_log.md`:** it is the **subjective** ledger — the user's hands-on play-feel
+connected to hypotheses. It is NOT where offline/quantitative experiment results go. Those (training
+runs, metric head-to-heads, ablations, eval tables) belong in their own `notes/<experiment>_findings.md`
+like every other experiment in this repo (e.g. `stage1_musical_features_findings.md`,
+`focal_onset_findings.md`). When a playtest entry needs to reference such numbers, *link* to the
+findings note rather than pasting the tables in. Keep the log about what the charts *felt* like.
+
 Append to `notes/playtest_log.md` (newest on top). **Each entry must do four things, not one:**
 
 1. **What was played** — which sets/songs, with the knob settings.
@@ -74,9 +81,11 @@ with a test in `tests/test_generation.py`.
 
 ## Standing hypotheses (keep current)
 
-- **H1** *(reinforced 06-19 by chaos playtest)* Timing is solved (onset ROC-AUC ~0.9); choreography
-  (arrow↔musical-event mapping) is the open axis, bottlenecked by timbre/energy-only features (no
-  chroma/pitch). Fix lever: chroma + HPSS + retrain.
+- **H1** *(reinforced 06-19 by chaos playtest; complicated 06-20 by Stage 1)* Timing is solved (onset
+  ROC-AUC ~0.9); choreography (arrow↔musical-event mapping) is the open axis, bottlenecked by
+  timbre/energy-only features. Stage 1 added chroma/HPSS/phase: the model *uses* chroma (ablation KL
+  10.3 ≈ MFCC) but offline musicality didn't improve — see `stage1_musical_features_findings.md`.
+  Verdict now hinges on the Stage-1 *playtest* (pending).
 - **H2** Pattern-temperature has a coherence/variety sweet spot (~0.7); 1.0 over-randomizes, greedy collapses.
 - **H3** Strong CFG guidance trades musicality for control; gentle (≈1.4) keeps the steer and stays musical.
 - **H4** *(FULLY confirmed 06-19: stream_voltage & air_only playable, chaos_only/chaos_air/chaos_gentle
@@ -90,6 +99,14 @@ with a test in `tests/test_generation.py`.
   choreographs frame-locally with no global plan. Root: frame-local features + shallow Conv1D receptive
   field. Fix levers (distinct from H1): audio novelty/self-similarity feature, downbeat phase, or a
   wider-context/attention audio encoder. ("Awkward start" is separate — choreographic/sync, not density.)
+- **H6** *(new 06-20)* Informative features are *necessary but not sufficient*: Stage 1's model uses
+  chroma heavily (ablation KL 10.3) yet offline musicality didn't improve. If the Stage-1 playtest also
+  disappoints, the next lever is the *objective* (reward musicality, not just frame-wise CE) or an
+  event-grounding architecture — not more input features. See `stage1_musical_features_findings.md`.
+- **H7** *(new 06-20)* Metric-phase feature backfires for syncopation — it gave the model a clean
+  downbeat signal which it used to sit MORE on-beat (0.93→0.952). Drop or rethink in Stage 2.
+- **H8** *(new 06-20)* HPSS onsets are near-redundant with the existing onset_env (ablation KL 0.29);
+  not worth their ~4.4s/sample extraction cost as-is.
 
 Defect hierarchy (each layer above "timing" traces to a musically-shallow audio representation; the
 metrics onset_F1/crit_adj only score the bottom layer, which is why charts score well yet feel off):
