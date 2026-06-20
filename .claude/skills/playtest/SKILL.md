@@ -74,10 +74,14 @@ with a test in `tests/test_generation.py`.
 
 ## Standing hypotheses (keep current)
 
-- **H1** Timing is solved (onset ROC-AUC ~0.9); choreography (arrow↔musical-event mapping) is the open
-  axis, bottlenecked by timbre/energy-only features (no chroma/pitch). Fix lever: chroma + HPSS + retrain.
+- **H1** *(reinforced 06-19 by chaos playtest)* Timing is solved (onset ROC-AUC ~0.9); choreography
+  (arrow↔musical-event mapping) is the open axis, bottlenecked by timbre/energy-only features (no
+  chroma/pitch). Fix lever: chroma + HPSS + retrain.
 - **H2** Pattern-temperature has a coherence/variety sweet spot (~0.7); 1.0 over-randomizes, greedy collapses.
 - **H3** Strong CFG guidance trades musicality for control; gentle (≈1.4) keeps the steer and stays musical.
+- **H4** *(new 06-19)* Quantity knobs (density/holds/jumps) steer fine because they need no musical
+  justification; musicality knobs (chaos/syncopation) break because the model is musically blind —
+  amplified chaos = rhythmic noise, not syncopation. The cleanest stress test of H1.
 
 Update these as playtests confirm or break them. The log is the project's qualitative-evidence ledger,
 complementing the quantitative metrics (onset_F1, crit_adj) — which by design never capture play-feel.

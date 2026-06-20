@@ -8,6 +8,57 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-06-19 (round 2) — radar toggle playtest
+
+### What was played
+`outputs/radar_samples/chaos_air/` — radar `chaos=0.9, air=0.85` (others at dataset mean),
+`guidance 2.0`, `pattern_temperature 0.7`, `no_jump_during_hold` on.
+
+### Raw feedback (user)
+> "chaos_air is totally unplayable. the density wasn't too bad, it was just so unintuitive with
+> the music i couldn't establish any kind of rhythm or feel for what should come next."
+
+Crucially the user **ruled out density** as the cause — it's the *rhythmic placement* that's the
+problem: no steady pulse to lock to, and no ability to anticipate the next note.
+
+### Commentary & hypothesis
+The `chaos` radar dim is *defined* as off-grid-ness / note-quantization variety (see
+`groove_radar.py`: chaos scores notes by their position within the beat — on-beat = 0, off-beat
+subdivisions score higher). So cranking chaos to 0.9 **and** amplifying at g=2.0 did exactly what the
+knob says: it pushed notes off the steady 4th/8th grid onto unpredictable subdivisions. The knob
+*works*. But "unpredictable rhythm" is precisely "unplayable" for a human — a player anticipates from
+two anchors: (a) the steady grid/pulse and (b) the music itself. Chaos destroys (a), and our weak
+choreography never provided (b), so the player is left with nothing to read.
+
+This sharply **reinforces H1 and spawns H4.** A human author's syncopation is *motivated*: the off-grid
+note lands on a vocal stab or a snare fill, so it's still readable. Our model has **no melodic/percussive
+features** to motivate off-grid placement, so amplified chaos is *rhythmic noise, not musical
+syncopation*. Notably the user said `base_coherent` (chaos at its natural ~mean) felt human — so it's
+not chaos-the-concept that's broken, it's **chaos amplified beyond what the (musically-blind) model can
+justify.** Two confounds to separate: the air=0.85 (jumps) component, and the g=2.0 overshoot (H3).
+
+**H4 (new):** Knobs that demand *musical justification* (chaos / syncopation) expose the feature gap
+(H1) far more than *quantity* knobs (stream/voltage→density, freeze→holds). Quantity needs no musical
+reason — more on-grid notes is still readable — so those sets should stay playable while chaos breaks.
+Prediction to test: stream_voltage, freeze_holds, calm remain playable; chaos is the lone unplayable one.
+
+### Action / next
+- [ ] Disambiguate the chaos_air result: generate **chaos-only** (`chaos=0.9`) vs **air-only**
+      (`air=0.9`) at g=2.0 — is the unplayability from off-grid (chaos) or jumps (air)? H4 predicts chaos.
+- [ ] Generate **chaos at gentle guidance** (`chaos=0.9 --guidance 1.3`) — does moderate chaos become
+      readable? Tests whether it's chaos itself or the g=2.0 overshoot (H3).
+- [ ] Get the user's read on the other three sets (stream_voltage / freeze_holds / calm) — direct H4 test.
+- [ ] If H4 holds, it's the strongest argument yet for the chroma+HPSS feature retrain (H1): chaos can
+      only become *musical* if the model can see the musical events it should syncopate to.
+
+### Connecting thread
+The knobs are splitting into two families: **quantity knobs (density, holds, jumps)** that steer fine
+because they don't need musical reasons, and **musicality knobs (chaos/syncopation, and ultimately
+choreographic arrow-mapping)** that fail because the feature set is musically blind. Same root as the
+"disconnected from the music" complaint and the choreography gap — every road keeps leading back to H1.
+
+---
+
 ## 2026-06-19 — Session: conditioning knobs + first real playtest
 
 ### Sets played
