@@ -8,6 +8,89 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-06-20 — Stage 1 model playtest (chaos still smears; decode-time idea)
+
+### What was played
+`outputs/stage1_samples/{base, chaos}` — generated from the 41-dim `gen_stage1` model (base =
+density-matched, pattern_temp 0.7, no_jump_during_hold; chaos = chaos=0.9, g=2.0). Same 6 songs as the
+base-model sets, for A/B. (Offline numbers: `stage1_musical_features_findings.md`.)
+
+### Raw feedback (user)
+> "chaos was basically all 1/16s and 1/8s, and i wouldn't really consider it playable on those grounds…
+> however, it did [seem] to improve somewhat. still a pretty random opening sequence, so cold-start is
+> still an issue. i wonder if some decode-time tuning could help the model express some more musicality,
+> with respect to chaos conditioning."
+
+Then, on the plain (non-chaos) `base` set:
+> "the base outputs were definitely more musical! it felt mostly right"
+
+Then, on `chaos_gated` (chaos=0.9, g=2.0, `onset_phase_penalty=1.0`):
+> "it did feel a bit more musical than chaos, but it doesn't have any sense of taste. The decode-time
+> gate may have helped, but I think you're right that it won't be enough to fix it."
+
+### Commentary / hypotheses
+- **★ Stage-1 base felt "definitely more musical… mostly right" — the first play-feel WIN for the
+  feature retrain.** This is the key result: the offline metrics were flat (`stage1_musical_features_findings.md`),
+  but the human verdict on *plain* generation improved. So the chroma features DID help musicality where
+  it's a free choice (which-panels following melody/harmony), even though onset_F1/phase didn't move.
+  **Reframes H6:** features-not-sufficient was the wrong read for plain generation — they helped; the
+  failure is specific to the *chaos knob* (forced off-grid timing), not to the features themselves. The
+  metrics just couldn't see the improvement (re: the log's whole reason to exist).
+- **Chaos still smears (H4/H6 hold for the chaos knob).** "All 1/16s and 1/8s" matches the offline phase
+  histogram (stage1 chaos ≈ 6% on-beat). Chroma is used for *which-panels*; the chaos dim drives onset
+  *timing* and still goes uniformly off-grid. "Improved somewhat" = the which-panels/chroma effect.
+- **Cold-start persists.** "Random opening" = the AR pattern head starts from BOS with no prior-note
+  context, so the first several notes are unanchored. This is the "awkward start" from round 3 (which we
+  showed is NOT a density issue) — a decode/AR cold-start problem, plausibly decode-fixable.
+- **The user's decode-time idea is sharp and worth testing.** Mechanism candidate — **phase-aware onset
+  gating**: the audio-driven onset head localizes well (ROC-AUC ~0.9), so under chaos the off-beat smear
+  may be a *thresholding* artifact — cranking chaos lifts ALL off-beat onset logits above a uniform
+  threshold. If we require off-beat frames to clear a *higher* bar (or keep only the top off-beats by
+  confidence), only musically-salient off-beats survive → *selective* syncopation instead of a smear.
+  This was the optimistic read; the diagnostic below tempers it.
+
+### Decode-gate diagnostic + result (this session)
+**Diagnostic** — under chaos conditioning (chaos=0.9, g=2.0): corr(off-beat onset prob, audio
+onset-strength) = **+0.10** (on-beat −0.07); off-beat onset prob **mean 0.70, std 0.11**. So chaos
+floods off-beats to ~0.70 (the smear), with only *weak* audio signal underneath. Built the gate anyway
+(`onset_phase_penalty`: on-beat 0, 8th −p, 16th −2p; 25 tests).
+
+**Result — the gate helps marginally but does NOT rescue chaos.** Gated chaos sets came out near-empty /
+inconsistent (g=1.5+pen1.0: densities ~0.00–0.02; g=2.0+pen1.0: 0.007 / 0.42 / 0.59 / 0.72). Played, the
+g=2.0 gated set "felt a bit more musical than chaos, but… doesn't have any sense of taste." **The key
+learning:** chaos doesn't *add* off-beats on top of an on-beat backbone — it *moves* placement off-beat
+(suppressing on-beat too). So gating off-beats leaves almost nothing, not "backbone + selective
+syncopation." **Decode cannot fix chaos musicality** — confirms the deeper H6 read for the chaos knob:
+the fix is the conditioning mechanism / objective, not decode. (The gate is still a useful *general*
+metric-anchoring knob; for density-matched use it needs the threshold re-derived AFTER the penalty,
+else density collapses — a real interaction bug, currently the gated sets are not density-matched.)
+
+**"No sense of taste"** is the phrase to carry forward: the model places notes that are individually
+plausible but lack musical *judgment* (which off-beats are worth hitting, when to vary). That's not a
+feature gap (chroma is in and helped plain play) nor a decode gap (the gate proved decode's ceiling) —
+it points squarely at the **training objective**: frame-wise CE rewards matching the reference token,
+never "is this a tasteful choreography." This is the strongest signal yet toward an objective-level
+Stage 2 (see H6).
+
+### Action / next
+- [x] Diagnostic + gate built & tested → chaos is *moved* off-beat, not layered; decode can't fix it.
+- [ ] **Pursue the Stage-1 base WIN**: it's musical — lock it in as the default, and consider Stage 2
+      (drop metric-phase H7, drop HPSS H8, add structural feature H5) to push plain musicality further.
+- [ ] Chaos knob: needs a conditioning/objective rethink (not decode) — lower priority than the base win.
+- [ ] Gate knob: fix the density-matched-threshold interaction (re-derive tau post-penalty) before using
+      it for non-chaos metric anchoring.
+- [ ] Cold-start: still open (low-temp/primed opening), separate from chaos.
+
+### Connecting thread
+The recurring decode lever has a limit here: it unlocked latent quality before (pattern sampling,
+hold-aware) because the model *already encoded* the right thing. For chaos it doesn't — the conditioning
+genuinely relocates notes off-grid with little audio grounding (+0.10), so there's nothing musical for
+decode to extract. The bigger, happier signal: **the plain Stage-1 model is more musical to play** even
+though every offline metric said "no change" — vindicating both the feature retrain AND the playtest
+log's reason to exist (the numbers can't see musicality; the hands can).
+
+---
+
 ## 2026-06-19 (round 4) — chaos/air disambiguation (H4 fully confirmed + mechanism)
 
 ### What was played

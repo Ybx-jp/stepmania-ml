@@ -343,7 +343,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None,
-                 no_jump_during_hold=False):
+                 no_jump_during_hold=False, onset_phase_penalty=0.0):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -360,7 +360,13 @@ class LayeredTypedChartGenerator(nn.Module):
         `no_jump_during_hold` (needs hold_aware): a pad player holding one panel has only one
         free foot, so a jump (>=2 fresh presses) while a hold is open is unhittable. When set,
         any pattern that would place >=2 fresh notes on non-held panels is forbidden while a
-        hold is open (closing the held panel and single taps stay allowed)."""
+        hold is open (closing the held panel and single taps stay allowed).
+
+        `onset_phase_penalty` (logits; on threshold/Bernoulli onsets only): a metric gate that
+        subtracts from off-beat onset logits (on-beat 0, 8th -p, 16th -2p) so off-beats survive
+        only where the onset head is confident. Restores the downbeat anchor under chaos
+        conditioning (which otherwise floods off-beats into a uniform smear). ~0.5-1.5 is a useful
+        range; 0 = off."""
         self.eval()
         device = audio.device
         B, T, _ = audio.shape
@@ -375,6 +381,13 @@ class LayeredTypedChartGenerator(nn.Module):
             if do_cfg:  # classifier-free guidance: push onset toward the conditioned prediction
                 ol_u = self.onset_logits(memory, difficulty, radar=None, style=None)
                 ol = ol_u + guidance_scale * (ol - ol_u)
+            if onset_phase_penalty != 0.0:
+                # metric gate: off-beat frames need higher onset confidence (on-beat free, 8th -p, 16th -2p).
+                # Restores the downbeat anchor under chaos conditioning -> off-beats survive only where the
+                # audio-driven onset head is confident, instead of a uniform off-grid smear.
+                ph = torch.arange(T, device=device) % 4          # 16th-grid phase within a beat
+                pen = torch.where(ph == 0, 0.0, torch.where(ph == 2, onset_phase_penalty, 2.0 * onset_phase_penalty))
+                ol = ol - pen.unsqueeze(0)                         # (T,) broadcast over batch
             p = torch.sigmoid(onset_logit_scale * ol + onset_logit_bias)
             onset = torch.bernoulli(p).bool() if onset_sample else (p > onset_threshold)
 
