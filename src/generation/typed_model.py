@@ -342,7 +342,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  type_sample=False, type_temperature=1.0, hold_aware=False,
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
-                 guidance_scale=1.0, reference=None, reference_mask=None, style=None):
+                 guidance_scale=1.0, reference=None, reference_mask=None, style=None,
+                 no_jump_during_hold=False):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -354,7 +355,12 @@ class LayeredTypedChartGenerator(nn.Module):
         panel is then occupied; the hold CLOSES (emits a tail) at the next frame the model
         places a note on that panel — so holds span a musically coherent, audio-aligned
         duration (head -> next note) and are always valid (no orphans), like a human author.
-        Frames between head and tail emit nothing on the held panel."""
+        Frames between head and tail emit nothing on the held panel.
+
+        `no_jump_during_hold` (needs hold_aware): a pad player holding one panel has only one
+        free foot, so a jump (>=2 fresh presses) while a hold is open is unhittable. When set,
+        any pattern that would place >=2 fresh notes on non-held panels is forbidden while a
+        hold is open (closing the held panel and single taps stay allowed)."""
         self.eval()
         device = audio.device
         B, T, _ = audio.shape
@@ -413,6 +419,10 @@ class LayeredTypedChartGenerator(nn.Module):
                 forbid_panel = torch.where(next_foot == 0, 3, 0)             # left->R, right->L
                 forbid_idx = (1 << forbid_panel) - 1                         # single-panel pattern index
                 pat_logits[torch.arange(B, device=device), forbid_idx] = float("-inf")
+            if no_jump_during_hold:  # one foot pinned by an open hold -> no >=2 fresh presses on free panels
+                fresh_cnt = (panel_bits.unsqueeze(0).bool() & (~held).unsqueeze(1)).sum(-1)  # (B,15) fresh presses per pattern
+                forbid = held.any(1, keepdim=True) & (fresh_cnt >= 2)        # (B,15)
+                pat_logits = pat_logits.masked_fill(forbid, float("-inf"))
             if pattern_sample or not greedy:
                 lg = pat_logits / (pattern_temperature if pattern_sample else temperature)
                 if pattern_top_k is not None:

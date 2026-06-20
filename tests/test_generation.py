@@ -211,6 +211,35 @@ def test_no_crossovers_decoding():
     assert total_cross == 0, f"no_crossovers should yield 0 crossovers, got {total_cross}"
 
 
+def test_no_jump_during_hold():
+    # A pad player holding a panel has one free foot, so while a hold is open there must be
+    # no jump (>=2 fresh presses on non-held panels). Verify the knob enforces it.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 200
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 3])
+    ov = torch.ones(B, T, dtype=torch.bool)  # force onsets so holds and notes appear
+    g = m.generate(audio, diff, onset_override=ov, pattern_sample=True, pattern_temperature=1.5,
+                   type_sample=True, type_temperature=1.0, hold_aware=True,
+                   no_jump_during_hold=True).numpy()
+    for b in range(B):
+        held = [False, False, False, False]
+        for tt in range(T):
+            row = g[b, tt]
+            # panels held entering this frame (head opened earlier, not yet tailed)
+            fresh = sum(1 for p in range(4) if row[p] in (1, 2, 4) and not held[p])  # fresh presses on free panels
+            if any(held):
+                assert fresh <= 1, f"jump ({fresh} fresh presses) placed while a hold was open at b={b} t={tt}"
+            # update hold automaton: head opens, tail closes
+            for p in range(4):
+                if row[p] in (2, 4):
+                    held[p] = True
+                elif row[p] == 3:
+                    held[p] = False
+
+
 def test_style_encoder_bottleneck_and_invariance():
     # The reference-chart style encoder pools over time to a single (B,d) latent, and
     # padded frames must not affect that latent (masked mean).
