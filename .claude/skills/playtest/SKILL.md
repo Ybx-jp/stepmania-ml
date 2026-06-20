@@ -79,9 +79,12 @@ with a test in `tests/test_generation.py`.
   chroma/pitch). Fix lever: chroma + HPSS + retrain.
 - **H2** Pattern-temperature has a coherence/variety sweet spot (~0.7); 1.0 over-randomizes, greedy collapses.
 - **H3** Strong CFG guidance trades musicality for control; gentle (≈1.4) keeps the steer and stays musical.
-- **H4** *(confirmed 06-19: stream_voltage playable, chaos unplayable)* Quantity knobs
-  (density/holds/jumps) steer fine because they need no musical justification; musicality knobs
-  (chaos/syncopation) break because the model is musically blind — amplified chaos = rhythmic noise.
+- **H4** *(FULLY confirmed 06-19: stream_voltage & air_only playable, chaos_only/chaos_air/chaos_gentle
+  unplayable; phase histogram)* Quantity knobs (density/holds/jumps, all on-grid) steer fine; musicality
+  knobs (chaos/syncopation) break. Mechanism: the model renders chaos as a *degenerate global grid
+  manipulation* (uniform 8th-offbeat "all blues" at g=1.3, or uniform smear at g=2.0 — only 6% on-beat),
+  NOT event-driven syncopation, because it can't see which offbeats deserve a note. Base also
+  under-syncopates vs real (0.91 vs 0.80 on-beat).
 - **H5** *(new 06-19, measured)* No song-structure/phrase awareness: generated density is structurally
   flat and fades at the end while real charts have an arc (intro→build→climax@~80-90%→outro). The model
   choreographs frame-locally with no global plan. Root: frame-local features + shallow Conv1D receptive

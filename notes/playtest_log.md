@@ -8,6 +8,47 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-06-19 (round 4) — chaos/air disambiguation (H4 fully confirmed + mechanism)
+
+### What was played
+`outputs/radar_samples/{chaos_only (chaos=0.9,g=2), air_only (air=0.9,g=2), chaos_gentle (chaos=0.9,g=1.3)}`.
+
+### Raw feedback (user)
+> "chaos_only was similarly unplayable. air_only was fine. chaos_gentle was just all blues (i think
+> that's 1/8 shifted) pretty much."
+
+### Measured corroboration — within-beat note phase (16th grid: 0=on-beat/4th-red, 2=8th-offbeat/blue, 1&3=16th)
+```
+                       on-beat   16th   8th-off(blue)  16th
+air_only   (g=2.0)       0.98    0.00      0.01        0.00   on the beat -> playable
+base ORIG  (real)        0.80    0.02      0.16        0.02   human: mostly on-beat + some syncopation
+chaos_only (g=2.0)       0.06    0.32      0.30        0.32   downbeat GONE, uniform smear -> unplayable
+chaos_gentle (g=1.3)     0.24    0.04      0.66        0.06   "all blues": 66% on the 8th-offbeat
+```
+
+### Conclusion — H4 FULLY CONFIRMED, with mechanism
+- **air (jumps) is on-grid (98% on-beat) → playable.** Quantity knob, no musical justification needed.
+- **chaos destroys the downbeat anchor.** Gentle chaos → ~uniform 8th-offbeat ("all blues", 66% phase-2,
+  exactly the user's read); strong chaos → ~uniform smear across all 16th phases (only 6% on-beat).
+- **Mechanism (the key insight):** the model renders the chaos dim as a *degenerate GLOBAL grid
+  manipulation* — shift everything onto the offbeat, or smear uniformly — NOT *event-driven
+  syncopation*. With no melodic/percussive features it has no idea *which* offbeats deserve a note, so
+  the only way it can satisfy "more off-grid" is uniformly. A human places an 8th-offbeat note because a
+  specific musical hit lives there. This is H1 + H5 made visible in one histogram: the model treats
+  rhythm position as a *global statistic to match* (the radar value), not a *response to musical events*.
+- **Bonus:** base-generated is *more* on-beat (0.91) than real (0.80) — the model slightly
+  **under-syncopates by default** and literally cannot add musical syncopation; the only syncopation it
+  can produce is the chaos knob's uniform smear. Strong motivation for the feature retrain.
+
+### Action / next
+- [x] Disambiguation done — chaos (off-grid) is the culprit, not air (jumps); g=2.0 overshoot makes it
+      worse but even g=1.3 is degenerate (uniform blues). H3 also visible (gentle = less smeared but still
+      not musical).
+- [ ] **Feature retrain** is now the clearly-indicated move (H1 local + H5 global + this chaos mechanism
+      all converge): per-frame chroma/HPSS for event-identity, structural signal for sections. Scoping next.
+
+---
+
 ## 2026-06-19 (round 3) — stream_voltage + structural observations (H4 confirmed, H5 born)
 
 ### What was played
