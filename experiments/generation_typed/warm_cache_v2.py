@@ -66,6 +66,8 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--cache_dir", default="cache/samples_v2")
+    p.add_argument("--highres", action="store_true",
+                   help="add the 1-dim high-res onset feature (42-dim total); use with --cache_dir cache/samples_v3")
     args = p.parse_args()
     set_seed(args.seed)
 
@@ -74,7 +76,8 @@ def main():
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)["classifier"]["max_sequence_length"]
 
-    ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
+    ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
+                                                   use_metric_phase=True, use_highres_onset=args.highres))
     train_ds, val_ds, _ = create_datasets(train_files=train_files, val_files=val_files, test_files=[],
                                           audio_dir=args.audio_dir, max_sequence_length=msl,
                                           feature_extractor=ext, cache_dir=args.cache_dir)

@@ -37,6 +37,9 @@ class AudioFeatureConfig:
     use_chroma: bool = False          # 12-dim chromagram (per-pitch-class energy = melody/harmony)
     use_hpss_onsets: bool = False     # 2-dim: onset strength of percussive vs harmonic components
     use_metric_phase: bool = False    # 4-dim: sin/cos of beat-phase and measure-phase (from the 16th grid)
+    use_highres_onset: bool = False   # 1-dim: onset strength computed at fine hop, max-pooled per 16th cell.
+    highres_hop_length: int = 128     # ~5.8ms @ 22050; resolves transients the grid-hop onset smears (H4).
+    highres_n_fft: int = 512          # ~23ms window (vs the smeary 2048/~93ms used for the grid-hop onset).
     timesteps_per_beat: int = 4       # chart resolution (16th notes); must match the parser
     beats_per_measure: int = 4
 
@@ -53,6 +56,7 @@ class AudioFeatures:
     perc_onset: Optional[np.ndarray] = None    # Shape: (n_frames,) percussive onset strength (HPSS)
     harm_onset: Optional[np.ndarray] = None    # Shape: (n_frames,) harmonic onset strength (HPSS)
     metric_phase: Optional[np.ndarray] = None  # Shape: (n_frames, 4) sin/cos of beat & measure phase
+    highres_onset: Optional[np.ndarray] = None  # Shape: (n_frames,) high-res onset, max-pooled per 16th cell
     audio_duration: float = 0.0
     sample_rate: int = 22050
     hop_length: int = 512
@@ -115,6 +119,9 @@ class AudioFeatures:
         if self.metric_phase is not None:
             # already in [-1, 1] (sin/cos); pass through with a safety clip
             features.append(self._safe_clip(self.metric_phase))  # (n_frames, 4)
+
+        if self.highres_onset is not None:
+            features.append(self._normalize_envelope(self.highres_onset))  # (n_frames, 1)
 
         result = np.concatenate(features, axis=1)
 
@@ -294,6 +301,12 @@ class AudioFeatureExtractor:
             # metric phase is derived from the (BPM-aligned) frame index, not the audio
             metric_phase = self._metric_phase(mfcc.shape[1]) if self.config.use_metric_phase else None
 
+            # high-res onset: detect at a fine hop, then max-pool the peak into each 16th-grid cell.
+            # (the grid-hop onset above smears transients across cells -> washes out off-beat saliency, H4)
+            highres_onset = None
+            if self.config.use_highres_onset:
+                highres_onset = self._highres_pooled_onset(audio, sr, aligned_hop_length, mfcc.shape[1])
+
             return AudioFeatures(
                 mfcc=mfcc,
                 onset_env=onset_env,
@@ -304,6 +317,7 @@ class AudioFeatureExtractor:
                 perc_onset=perc_onset,
                 harm_onset=harm_onset,
                 metric_phase=metric_phase,
+                highres_onset=highres_onset,
                 audio_duration=len(audio) / sr,
                 sample_rate=sr,
                 hop_length=aligned_hop_length,
@@ -393,6 +407,26 @@ class AudioFeatureExtractor:
             padding = target_frames - current_frames
             padded = np.pad(features, (0, padding), mode='constant', constant_values=0)
             return padded
+
+    def _highres_pooled_onset(self, audio: np.ndarray, sr: int, grid_hop: int, n_frames: int) -> np.ndarray:
+        """High-res onset strength max-pooled into the 16th-note grid -> (n_frames,).
+
+        The grid-hop onset envelope uses a ~93ms window at a ~one-16th hop, smearing transients across
+        cells so off-beat saliency washes out (H4, see h4_offbeat_signal_findings.md). Here we detect at
+        a fine hop and keep each cell's *peak*: grid cell t covers samples [t*grid_hop, (t+1)*grid_hop),
+        i.e. high-res frames [t*grid_hop // hop_hr, (t+1)*grid_hop // hop_hr).
+        """
+        hop_hr = self.config.highres_hop_length
+        onset_hr = librosa.onset.onset_strength(
+            y=audio, sr=sr, hop_length=hop_hr, n_fft=self.config.highres_n_fft
+        )
+        pooled = np.zeros(n_frames, dtype=np.float32)
+        for t in range(n_frames):
+            lo = (t * grid_hop) // hop_hr
+            hi = max(lo + 1, ((t + 1) * grid_hop) // hop_hr)
+            seg = onset_hr[lo:hi]
+            pooled[t] = seg.max() if seg.size else 0.0
+        return pooled
 
     def _metric_phase(self, n_frames: int) -> np.ndarray:
         """Beat- and measure-phase as sin/cos, from the 16th-grid frame index -> (n_frames, 4).

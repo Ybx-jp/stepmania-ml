@@ -74,3 +74,46 @@ A discriminator optimizes the *easiest* separating cue, not the one we want. "Re
 was easier to learn than "tasteful vs not," so the critic learned the former and the taste framing
 collapsed. The negatives must be engineered so the *only* available cue is the target concept
 (corrupted-real). Same shape as H8/density-shortcut worries — verified here the hard way.
+
+---
+
+## Stage 2b — best-of-N at HARD: the critic is trustworthy at Hard; the generator is *tame*
+
+*2026-06-20, follow-on. Driven by the Hard best-of-N playtest (`notes/playtest_log.md`, 2026-06-20
+Hard entry).* `export_reranked.py --difficulty Hard` produced a **collapsed critic table**: best-of-8
+P(real) tops out at **0.116** (Deja loin), most songs 0.02–0.05, mean lift +0.032 (the mixed-difficulty
+set was +0.444). Yet the charts *played well* ("pretty good" / "very good"), with the user noting they
+felt **"too tame for an 11" — "expected more chaos."**
+
+Two readings to disambiguate: (1) critic over-rejects dense/Hard charts (blind spot), or (2) the
+generator's Hard charts genuinely differ from real Hard (gap is real).
+
+**Decisive diagnostic** — `diag_real_by_difficulty.py` scores 25 *real* charts per difficulty with the
+same critic:
+
+| difficulty | n | mean P(real) | median | min | max |
+|---|---|---|---|---|---|
+| Beginner | 25 | 0.727 | 0.909 | 0.058 | 0.984 |
+| Easy | 25 | 0.852 | 0.986 | 0.007 | 0.988 |
+| Medium | 25 | 0.852 | 0.985 | 0.035 | 0.988 |
+| **Hard** | 25 | **0.818** | **0.983** | 0.037 | 0.987 |
+
+**Real Hard scores 0.82 — as high as every other difficulty. The critic does NOT over-reject Hard.**
+So reading (2): the gap is real. Generated Hard ≈ 0.02–0.12 vs real Hard ≈ 0.82 is a genuine
+gen-vs-real difference, and the critic is **trustworthy at Hard**.
+
+**What the gap *is*:** not density (tau matches the real chart's density) but **tameness/on-gridness** —
+the generator under-syncopates (H4/H7: sits on-beat), so at Hard density it produces a regular on-grid
+chart where a real DDR 11 has syncopated intensity. The critic flags this as un-Hard-like; the user
+feels it as "expected more chaos." Same defect, two instruments, agreeing.
+
+**Implications for 2b/2c:**
+- **2b (best-of-N) has little headroom at Hard** — *all* candidates are tame, so selection can't surface
+  intensity that the generator never draws. Best-of-N is a low/mid-difficulty win, not a Hard fix.
+- **2c (critic-guided fine-tuning) at Hard is bottlenecked by H4.** Pushing toward higher critic P(real)
+  at Hard means pushing toward syncopation/intensity — exactly the chaos-conditioning the model can't
+  render (H4 root: can't see which offbeats deserve notes). 2c likely won't fix Hard until chaos is
+  fixed at the conditioning/objective level. The critic is *ready*; the generator's capacity is the gate.
+- **Secondary (pad-playability):** one B4U sequence required one-footed crossovers+jacks during a hold
+  (`--no_jump_during_hold` was on, `--no_crossovers` was not). Worth testing whether `--no_crossovers`
+  (or a crossover-under-hold mask) raises P(real) and removes the awkward sequence.
