@@ -49,6 +49,11 @@ Radar dims (0–1, base = dataset mean): `stream, voltage, air, freeze, chaos`
   their radar profile — confirm the profile before handing off. Pick the axis the knob/fix touches.
   Prefer harder songs (more revealing of decoder/musicality subtleties). Backed by
   `src/data/song_selection.py`. (deja loin is a good general test: strong stream/voltage/freeze/air.)
+- **Match the expected profile with `--match_radar` (+ `--guidance ~1.5`).** By default the output groove
+  profile drifts from the original (generation isn't radar-conditioned). When you select/expect a specific
+  feel, `--match_radar` conditions each song on its OWN source-chart radar so the output tracks it (e.g.
+  high-freeze songs actually get more holds). g≈1.5 matches; g≈2+ amplifies (and dents density/difficulty
+  since holds are sparse in note-presence). Use it so a groove-validated set's OUTPUT also reads on-axis.
 - **Same `--seed` (default 42) → same songs** across sets, so the user can A/B *the same song* under
   different knobs. Keep `--num_songs` modest (4–8).
 - Vary **one idea per set**; name `--out_dir` after it (e.g. `outputs/radar_samples/chaos_air`).

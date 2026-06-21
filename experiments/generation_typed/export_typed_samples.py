@@ -75,6 +75,10 @@ def parse_args():
     p.add_argument('--radar', type=str, default=None,
                    help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
                         'e.g. "chaos=0.9,air=0.85"; unset dims default to the dataset mean. Use with --guidance to amplify.')
+    p.add_argument('--match_radar', action='store_true',
+                   help="condition each song's generation on its OWN source-chart radar (with --guidance) so "
+                        "the output matches the original's groove profile -- avoids profile drift when you "
+                        "selected/expected a specific feel. Overrides --radar; pair with --guidance 1.5-2.5.")
     p.add_argument('--max_len', type=int, default=1440)  # full 2-min songs (KV-cache makes it cheap)
     p.add_argument('--install', action='store_true',
                    help="After exporting, copy the set into the StepMania songs dir (no sudo).")
@@ -206,6 +210,13 @@ def main():
         orig_typed = ds.parser.convert_to_tensor_typed(meta['chart'], nd)[:T]
         diff_idx = meta['difficulty_class']
 
+        # radar conditioning: match this song's own source profile (so output ~ original feel), else the
+        # fixed --radar target (or none).
+        radar_for_gen = radar_vec
+        if args.match_radar:
+            radar_for_gen = torch.from_numpy(
+                meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
+
         # onset threshold matched to THIS chart's real density
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
         diff = torch.tensor([diff_idx], device=device)
@@ -223,7 +234,7 @@ def main():
                              no_jump_during_hold=args.no_jump_during_hold,
                              no_cross_during_hold=args.no_cross_during_hold,
                              onset_phase_penalty=args.onset_phase_penalty,
-                             style=style_vec, guidance_scale=args.guidance, radar=radar_vec)[0].cpu().numpy()
+                             style=style_vec, guidance_scale=args.guidance, radar=radar_for_gen)[0].cpu().numpy()
         gen = pair_holds(gen)
 
         chart_obj = meta['chart']
