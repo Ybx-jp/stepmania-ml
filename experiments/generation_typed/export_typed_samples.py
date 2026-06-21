@@ -79,6 +79,9 @@ def parse_args():
                    help="condition each song's generation on its OWN source-chart radar (with --guidance) so "
                         "the output matches the original's groove profile -- avoids profile drift when you "
                         "selected/expected a specific feel. Overrides --radar; pair with --guidance 1.5-2.5.")
+    p.add_argument('--reference_self', action='store_true',
+                   help="per-song style conditioning: encode each song's OWN source chart as the StyleEncoder "
+                        "latent (the full-chart path vs match_radar's 5-dim summary). Pair with --guidance ~2.")
     p.add_argument('--max_len', type=int, default=1440)  # full 2-min songs (KV-cache makes it cheap)
     p.add_argument('--install', action='store_true',
                    help="After exporting, copy the set into the StepMania songs dir (no sudo).")
@@ -216,6 +219,13 @@ def main():
         if args.match_radar:
             radar_for_gen = torch.from_numpy(
                 meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
+        # style conditioning: per-song self-reference (encode this song's own source chart) vs global --reference
+        style_for_gen = style_vec
+        if args.reference_self:
+            ref_t = torch.from_numpy(np.asarray(orig_typed)).long().unsqueeze(0).to(device)
+            ref_mask = torch.ones(1, ref_t.shape[1], device=device)
+            with torch.no_grad():
+                style_for_gen = model.encode_style(ref_t, ref_mask)
 
         # onset threshold matched to THIS chart's real density
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
@@ -234,7 +244,7 @@ def main():
                              no_jump_during_hold=args.no_jump_during_hold,
                              no_cross_during_hold=args.no_cross_during_hold,
                              onset_phase_penalty=args.onset_phase_penalty,
-                             style=style_vec, guidance_scale=args.guidance, radar=radar_for_gen)[0].cpu().numpy()
+                             style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen)[0].cpu().numpy()
         gen = pair_holds(gen)
 
         chart_obj = meta['chart']
