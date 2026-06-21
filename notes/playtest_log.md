@@ -34,6 +34,9 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
   properly-hard song the model produces a genuinely good expert chart. Two lessons: (a) the hold-cross
   fix works where it matters; (b) **groove-validated selection reveals real quality** the under-grooved
   easy songs (B4U) hid — vindicates the 06-21 methodology directive.
+  **Follow-up direct A/B (same song): "both fixed and baseline were really fun, fixed was better on the
+  basis of the hold decode changes."** Clean same-song confirmation — `no_cross_during_hold` is the cause
+  of the improvement. Fix conclusively validated; PR'd.
 - **KIM POSSIBLE = a DATA timing bug (audio↔OFFSET mismatch), NOT the model.** Diagnosed: BPM is CORRECT
   (stored 122 ≈ librosa 123, ratio 0.99) — so NOT the 2×-BPM I first guessed. And the GENERATED chart is
   properly on-grid (phase% 73 on the quarter / 27 on the 8th, even *more* on-beat than the original's 61).
