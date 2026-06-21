@@ -25,7 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits
-from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
+from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES, DIFFICULTY_NAME_TO_IDX
 from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
 from src.models import LateFusionClassifier
 from src.generation.typed_model import LayeredTypedChartGenerator
@@ -44,6 +44,14 @@ def parse_args():
     p.add_argument('--num_songs', type=int, default=6)
     p.add_argument('--n_candidates', type=int, default=8)
     p.add_argument('--max_len', type=int, default=1440)
+    p.add_argument('--difficulty', default=None,
+                   help="Only export songs whose selected chart is this difficulty "
+                        "(Beginner/Easy/Medium/Hard). Keeps conditioning, density target, and A/B "
+                        "original all at the same difficulty. Default: each song's own difficulty.")
+    p.add_argument('--install', action='store_true',
+                   help="After exporting, copy the sets into the StepMania songs dir (no sudo).")
+    p.add_argument('--songs_dir', default=None,
+                   help="Destination for --install (default: $SM_SONGS_DIR or ~/sm-generated).")
     return p.parse_args()
 
 
@@ -72,7 +80,10 @@ def main():
     _, val_files, _ = create_data_splits(cf, random_state=args.seed)
     msl = yaml.safe_load(open(PROJECT_ROOT / "config/model_config.yaml"))['classifier']['max_sequence_length']
     ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
-    ds = StepManiaDataset(chart_files=val_files[:args.num_songs * 8], audio_dir=args.audio_dir,
+    target_class = DIFFICULTY_NAME_TO_IDX[args.difficulty] if args.difficulty else None
+    # With a difficulty filter, most songs are dropped — widen the pool so we still find num_songs.
+    pool = args.num_songs * (40 if target_class is not None else 8)
+    ds = StepManiaDataset(chart_files=val_files[:pool], audio_dir=args.audio_dir,
                           max_sequence_length=msl, feature_extractor=ext, cache_dir='cache/samples_v2')
 
     gen = LayeredTypedChartGenerator(audio_dim=41, d_model=128, num_layers=4, onset_layers=2).to(device)
@@ -91,6 +102,7 @@ def main():
         if exported >= args.num_songs: break
         meta = ds.valid_samples[i]
         if meta['chart_file'] in seen: continue
+        if target_class is not None and meta['difficulty_class'] != target_class: continue
         sample = ds[i]; T = min(int(sample['mask'].sum().item()), args.max_len)
         nd = next((n for n in meta['chart'].note_data if n.difficulty_name == meta['difficulty_name']
                    and n.difficulty_value == meta['difficulty_value']), None)
@@ -139,6 +151,13 @@ def main():
     print(f"exported {exported} songs x2 (best/ and first/) to {args.out_dir}/  "
           f"mean critic lift best-vs-first = {np.mean(lifts):+.3f}  (N={args.n_candidates})")
     print("Play best/ vs first/ on the same song — does the higher-taste pick feel more musical?")
+
+    if args.install:
+        from src.utils.sm_install import install_to_stepmania
+        dests = install_to_stepmania(args.out_dir, args.songs_dir)
+        print("\nInstalled to StepMania (no sudo):")
+        for d in dests:
+            print(f"  {d}")
 
 
 if __name__ == '__main__':

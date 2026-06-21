@@ -8,6 +8,116 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-06-20 — Stage 2b best-of-N at HARD difficulty (gens feel good but critic scores ~0; the gap is *tameness*)
+
+### What was played
+`outputs/reranked_hard/best` (installed as `~/sm-generated/reranked_hard_best`) — best-of-8 reranked,
+all songs forced to **Hard** (conditioning + density target + A/B original all Hard). Offline the whole
+critic table had *collapsed* vs the mixed-difficulty set: best tops out at **0.116** (Deja loin), most
+0.02–0.05, mean lift +0.032 (was +0.444). The open question going in: does Hard *feel* worse (critic
+right, generator degrades at density) or feel fine (critic over-rejects density)? Two songs so far.
+
+### Raw feedback (user)
+> "B4U (best) was pretty good! I wonder if the critic scored it poorly because of 1 quite unnatural
+> sequence during a hold arrow — it would have required doing crossovers and jacks with one foot.
+> otherwise i didn't see any problem with it."
+> "Our Soul (best) was very good! The model clearly was able to detect the 'drop' in the music after the
+> build-up. For a song rated '11' and that music profile I would have expected some more chaos."
+
+### Commentary / hypotheses
+- **★ Hard gens FEEL good ("pretty good" / "very good") despite near-zero critic P(real). So the Hard
+  collapse is NOT "generator degrades at density" — it's the *other* reading, but with a twist.** The
+  twist is in the user's own words: "expected more chaos for an 11." The charts are density-matched (tau
+  set from the real Hard chart) but rhythmically **tame / on-grid** (H4/H7: the model sits on-beat,
+  under-syncopates). A real DDR 11 has syncopated streams/intensity; a tame on-grid chart at the same
+  density reads as *un-Hard-like*. **This unifies the offline + felt evidence:** the critic correctly
+  flags "this doesn't look like a real Hard chart" (it's too tame), the user feels the same thing as
+  "expected more chaos," AND it still plays pleasantly because tame ≠ bad. The critic is doing real work
+  at Hard; the scores are just compressed near zero because the gens genuinely differ from real Hard.
+- **H9 (revised)** Best-of-N earns its keep at low/mid difficulty (big lift, top draw ≈ human). At Hard
+  the *level* of every candidate drops (all tame), so there's little good to select and the lift
+  compresses — but the survivors still play well. The headroom at Hard is **intensity/syncopation**
+  (the H4 chaos defect), not gross correctness. Consistent with "near-human on some draws, just
+  inconsistent" + "the model can't render syncopation."
+- **The B4U defect is pad-playability, and the user's critic-score hypothesis is plausible.** "Crossovers
+  and jacks with one foot during a hold" = a foot pinned by a hold while the free foot is asked to cover
+  a crossover + repeated taps — physically gross. `--no_jump_during_hold` was ON, but `--no_crossovers`
+  was NOT, and the hold-aware mask doesn't forbid crossovers-under-hold. The critic sees only the binary
+  note grid, but that specific pattern (dense taps clustered on one side during a sustained column) may
+  read as unrealistic — so the awkward sequence *could* be part of why this candidate scored low. Cheap
+  to test: re-export B4U with `--no_crossovers` and see if critic P(real) rises.
+- **"Detected the drop" is local audio responsiveness, NOT a refutation of H5.** A drop is a *local*
+  energy change (frame-local features see it fine); H5 is about the *global* arc/phrasing plan over the
+  whole song. Tracking a drop = onset density following audio energy locally, which the model already
+  does well. So this is a nice play-feel moment but doesn't touch the no-global-structure finding.
+
+### Action / next
+- [x] **Decisive diagnostic — DONE, gap is real.** `diag_real_by_difficulty.py`: real Hard charts score
+  **0.82 mean / 0.98 median** (as high as every other difficulty), vs generated Hard ~0.02–0.12. The
+  critic does NOT over-reject Hard — it's trustworthy there; the generator's Hard charts are genuinely
+  un-Hard-like (tame/on-grid, the H4 syncopation defect). Numbers in `stage2a_critic_findings.md`
+  (Stage 2b section). Consequence: best-of-N has little headroom at Hard (all candidates tame), and 2c
+  at Hard is bottlenecked by H4 — the critic is ready, the generator's capacity is the gate.
+- [ ] Re-export B4U (and the set) with `--no_crossovers` added; check whether critic P(real) rises and
+  whether the awkward-during-hold sequence disappears. If yes, consider a `--no_crossovers` default for
+  Hard, or a crossover-under-hold mask in `generate()`.
+- [ ] Play the remaining 4 Hard songs (Deja loin, ヤマト…, INSERTiON, KIM POSSIBLE) to confirm the
+  "tame but pleasant" pattern holds across the set, not just these two.
+- [ ] Connect to 2c: if the diagnostic says the gap is real-and-about-intensity, then critic-guided
+  fine-tuning at Hard should push toward *more syncopation/intensity* — which circles back to the
+  unsolved H4 chaos-conditioning problem. 2c may not fix Hard until chaos is fixed.
+
+---
+
+## 2026-06-20 — Stage 2b best-of-N reranking playtest (the critic picks the good draw)
+
+### What was played
+`outputs/reranked_samples/{best, first}` — same 6 songs, two versions each. `best/` = highest-taste
+candidate out of N=8 (selected by the Stage-2a corrupted-real taste critic); `first/` = the first/
+unranked candidate (the normal single-sample baseline). A/B the *same* song across the two folders.
+(Offline numbers — critic lift, per-song scores — in the Stage-2 findings, not here.)
+
+### Raw feedback (user)
+> "deja loin (best): VERY GOOD! it was clearly musical. only a few odd sequences. model generated some
+> really interesting patterns, felt creative."
+> "deja loin (first): still decent. less musically aligned but not incoherent."
+> "I played one of the japanese ones in best, seemed appropriately musical for the difficulty level. it
+> would be interesting to see how it feels on a high difficulty."
+> "in general, the best group i think suffered less from the cold-start problem… I think it is probable
+> that the critic is doing a good job actually picking the best chart."
+
+### Commentary / hypotheses
+- **★ Best-of-N is a play-feel WIN, and the taste critic's selection corresponds to felt quality.** The
+  song with the biggest offline critic lift (deja loin) was the standout by hand ("VERY GOOD! clearly
+  musical… felt creative"), and its `first/` counterpart was merely "decent." That the *ranking* and the
+  *hands* agree on the same song is the validation Stage 2a was built for: the critic isn't scoring a
+  shortcut the user can't feel — it's tracking taste. **New handle H9.**
+- **H9** *(new 06-20, supported)* The base generator already produces near-human-quality charts on *some*
+  draws; it's just inconsistent. A taste critic reliably picks the good draw, so best-of-N is a cheap,
+  no-retrain quality boost dialable by N. Implication: the headroom is in *consistency*, not peak
+  capability — which is exactly the premise of 2c (critic-guided fine-tuning to make every draw that good).
+- **Cold-start interacts with selection (connects to the H1-session "cold-start persists" thread).** User:
+  "best group suffered less from the cold-start problem." Plausible mechanism: a bad opening sequence
+  drags a candidate's taste score down, so the critic *implicitly* deprioritizes cold-start-damaged draws.
+  Best-of-N may be partially laundering the AR cold-start problem by selection rather than fixing it.
+  Caveat (user's own): "perhaps that's just random chance" — N=8 over 6 songs is thin; don't overclaim.
+- **Creativity, not just correctness.** "really interesting patterns, felt creative" matters: the critic
+  is rewarding good *structure*, not penalizing the generator toward a bland safe-mean. Best-of-N keeps
+  the generator's variety and skims the top — the opposite failure mode from greedy collapse (H2).
+
+### Action / next
+- [ ] Export a **high-difficulty** best-of-N set (user explicitly curious how it feels on Challenge/hard).
+  Same songs, same N, just a higher `--difficulty` — tests whether the critic's taste tracking holds when
+  patterns get dense.
+- [ ] Widen the sample base before trusting H9 / the cold-start claim: more songs (and/or larger N) so
+  "best suffered less from cold-start" isn't a 6-song coincidence.
+- [ ] If high-difficulty also feels better in `best/`, that's the green light for **2c** (critic-guided
+  fine-tuning) — the goal being to move the *whole* draw distribution up to where best-of-N's top draw is.
+- [ ] Consider an ablation: does the critic specifically down-rank cold-start openings? (correlate
+  per-candidate taste score with an opening-sequence-quality proxy) — would confirm the laundering mechanism.
+
+---
+
 ## 2026-06-20 — Stage 1 model playtest (chaos still smears; decode-time idea)
 
 ### What was played

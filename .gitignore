@@ -84,6 +84,21 @@ mlruns/
 conversation.md
 feedback.md
 out.txt
+
+# Personal-brand / marketing material (not part of the research repo)
+marketing/
+
+# Feature caches (large, regenerable) and local MLflow store
+cache/
+mlflow.db
+
+# Generated sample song folders (contain copied audio)
+outputs/reranked_samples/
+outputs/reranked_hard/
+outputs/chaos_gate/
+outputs/stage1_samples/
+outputs/style_samples/
+outputs/radar_samples/
 /cache/samples/test/sample_000000.pt
 /cache/samples/test/sample_000001.pt
 /cache/samples/test/sample_000002.pt

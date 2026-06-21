@@ -93,7 +93,19 @@ with a test in `tests/test_generation.py`.
   knobs (chaos/syncopation) break. Mechanism: the model renders chaos as a *degenerate global grid
   manipulation* (uniform 8th-offbeat "all blues" at g=1.3, or uniform smear at g=2.0 — only 6% on-beat),
   NOT event-driven syncopation, because it can't see which offbeats deserve a note. Base also
-  under-syncopates vs real (0.91 vs 0.80 on-beat).
+  under-syncopates vs real (0.91 vs 0.80 on-beat). **INVESTIGATED + RESOLVED AS NOT-A-FEATURE-PROBLEM
+  (06-20/21, `h4_offbeat_signal_findings.md`):** the shipped onset_env is coarse-hop (~93ms) and nearly
+  phase-flat (off-beat note-vs-no-note AUC ~0.53≈chance); a high-res onset (hop~128, max-pooled per 16th)
+  recovers *some* signal (off-beat AUC →0.66). BUT two retrains adding it (zero-init warm-start, then
+  random-init + off-beat-weighted loss) **both FAILED to fix chaos** — even when the feature column was
+  retained at full magnitude (v2 norm 1.04), zeroing it shifts onset logits only ~0.017 and chaos still
+  smears (~5% on-beat @ CFG2 vs real ~80-90%). The recovered signal is weak and largely redundant with the
+  coarse onset; most off-beat placement is groove/pattern (charter style), not audio-onset-determined; and
+  chaos enters as a GLOBAL conditioning scalar a local feature can't redirect. **Conclusion: chaos is an
+  OBJECTIVE + CONDITIONING-MECHANISM problem, not a feature problem** (Stage1 chroma also didn't fix it).
+  Levers: a per-frame chaos×onset *gate* (tie off-beat placement to local feature) and/or critic-guided
+  objective (2c). gen_highres/v2 parked. (OLD claim "fix = add high-res feature" — FALSIFIED. was: 2c move
+  Hard). The model's ~0.9 onset AUC rests on the metrical prior + density, not audio event detection.**
 - **H5** *(new 06-19, measured)* No song-structure/phrase awareness: generated density is structurally
   flat and fades at the end while real charts have an arc (intro→build→climax@~80-90%→outro). The model
   choreographs frame-locally with no global plan. Root: frame-local features + shallow Conv1D receptive

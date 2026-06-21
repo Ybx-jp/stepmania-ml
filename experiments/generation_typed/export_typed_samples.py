@@ -73,6 +73,10 @@ def parse_args():
                    help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
                         'e.g. "chaos=0.9,air=0.85"; unset dims default to the dataset mean. Use with --guidance to amplify.')
     p.add_argument('--max_len', type=int, default=1440)  # full 2-min songs (KV-cache makes it cheap)
+    p.add_argument('--install', action='store_true',
+                   help="After exporting, copy the set into the StepMania songs dir (no sudo).")
+    p.add_argument('--songs_dir', default=None,
+                   help="Destination for --install (default: $SM_SONGS_DIR or ~/sm-generated).")
     return p.parse_args()
 
 
@@ -225,6 +229,13 @@ def main():
     print("-" * 80)
     print(f"Exported {exported} playable folders to {out_root}/ (chart.sm: Challenge=generated, "
           f"+ original; both with holds). Drop a folder into StepMania to play.")
+
+    if args.install:
+        from src.utils.sm_install import install_to_stepmania
+        dests = install_to_stepmania(args.out_dir, args.songs_dir)
+        print("\nInstalled to StepMania (no sudo):")
+        for d in dests:
+            print(f"  {d}")
 
 
 if __name__ == '__main__':
