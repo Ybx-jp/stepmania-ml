@@ -71,11 +71,16 @@ budget fraction on accents; total density fixed. Result (8 songs):
 Smooth, density-preserving syncopation dial; accents land on ~2.1–3.0× louder audio events (event-driven,
 NOT the smear's 1.0× uniform). **Caveat:** selectivity is vs dim41, the same signal used to select — so it
 proves the audio HAS off-beat events to target (not flat), not that hitting them is musical; dim41 matches
-real charter off-beat choices only ~66%. **Open question = playtest only.** Exported `outputs/chaos_gate/
-{gated@0.3, smear}` (installed `~/sm-generated/chaos_gate_{gated,smear}`) for A/B. If gated feels musical →
-A2 (train the gate in) + this is the chaos mechanism. If it feels off despite landing on audio events →
-syncopation is genuinely groove/pattern (charter style), not audio-placeable → lever moves to pattern
-modeling / groove templates, and chaos may be a "select which audio events to accent" learned decision.
+real charter off-beat choices only ~66%.
+
+**PLAYTEST VERDICT (2026-06-21, `playtest_log.md`): gated is PLAYABLE but NOT musical; the off-beats feel
+arbitrary ("random chance"). smear was an unplayable wall.** So the gate is a strictly better chaos knob
+(playable, controlled) but audio-selective placement is NOT the musicality lever. This was the
+pre-registered "feels off despite landing on audio events" branch → **syncopation is groove/pattern, not
+audio-placeable (H10).** The gate is *pointillist* (each off-beat chosen independently); musical
+syncopation is a RHYTHMIC-PATTERN / periodicity property (repeated off-beat figures = a groove). A2
+(training the gate in) is DROPPED — it would bake in the same pointillist placement. **Lever moves to
+rhythmic-structure modeling**, OR deprioritize chaos for higher-ROI threads (see below).
 
 ## Design B — Stage 2c critic-guided fine-tuning (the objective fix, for general taste)
 Distill the taste critic's preference into the generator so *single* draws improve (not just best-of-N).

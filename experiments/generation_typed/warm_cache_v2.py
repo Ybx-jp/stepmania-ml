@@ -29,6 +29,7 @@ import yaml
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits, create_datasets
 from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
+from src.data.stepmania_parser import StepManiaParser
 
 _DS = None  # set per-dataset before the pool is forked
 
@@ -68,6 +69,9 @@ def main():
     p.add_argument("--cache_dir", default="cache/samples_v2")
     p.add_argument("--highres", action="store_true",
                    help="add the 1-dim high-res onset feature (42-dim total); use with --cache_dir cache/samples_v3")
+    p.add_argument("--allow_hands", action="store_true",
+                   help="admit hands/quads (max_simultaneous=4); use a fresh --cache_dir (e.g. cache/samples_hands). "
+                        "Train scripts reading this cache MUST also pass --allow_hands (index-based cache).")
     args = p.parse_args()
     set_seed(args.seed)
 
@@ -76,10 +80,11 @@ def main():
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)["classifier"]["max_sequence_length"]
 
+    parser = StepManiaParser(max_simultaneous=4) if args.allow_hands else None
     ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
                                                    use_metric_phase=True, use_highres_onset=args.highres))
     train_ds, val_ds, _ = create_datasets(train_files=train_files, val_files=val_files, test_files=[],
-                                          audio_dir=args.audio_dir, max_sequence_length=msl,
+                                          audio_dir=args.audio_dir, max_sequence_length=msl, parser=parser,
                                           feature_extractor=ext, cache_dir=args.cache_dir)
     print(f"workers={args.workers}  train={len(train_ds)}  val={len(val_ds)}  cache={args.cache_dir}", flush=True)
     warm(val_ds, args.workers, "val")      # smaller first -> quick confidence

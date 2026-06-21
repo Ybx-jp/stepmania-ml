@@ -40,6 +40,17 @@ untouched.
   horizontal patterns into vertical, changing ergonomics/crossovers (not feel-preserving).
 - **Measure vs the H4 model:** panel balance (L/D/U/R) + jack rate (the targets), onset_F1/crit_adj
   (must not regress), taste-critic P(real), then playtest.
+- **RESULT (2026-06-21, `--mirror` flag on train_stage1.py; `eval_mirror.py`, 32 songs): NEUTRAL.**
+  Panel symmetry improved marginally (|L−R| 3.1%→2.0%, real 0.6%); jack rate already matched real (25%);
+  onset_F1 flat (0.735→0.738); density identical; **taste P(real) slightly DOWN 0.419→0.377 (likely
+  noise, certainly no gain).** Why ~nothing: (a) the panel-bias mirror targets was already DECODE-fixed
+  by pattern sampling (the always-Left bug), so there was little left to fix; (b) ~2× *same-distribution*
+  data didn't move quality — consistent with the recurring "the bottleneck is decode/objective/capacity,
+  not data quantity" theme (val loss is flat across 15 epochs, though warm-start dampens that signal).
+  **Disposition: keep the `--mirror` flag (free, harmless, marginally better symmetry) but it is NOT a
+  quality lever. Don't playtest; don't pursue more same-distribution augmentation for quality.** The one
+  data lever that adds a MISSING category (not more-of-same) is the hands-filter fix (`constraint_relaxation_roadmap.md`):
+  the model has never seen hands, so that's distinct from this null result.
 
 ### 2. Random temporal crop — HIGH value, ~free
 Training currently truncates to the first ~1024 frames (`typed_full[:T]`), so the model trains almost

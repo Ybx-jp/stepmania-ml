@@ -8,6 +8,51 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-06-21 — Chaos gate A1 (selective off-beats land on audio events but DON'T feel musical)
+
+### What was played
+`~/sm-generated/chaos_gate_{gated, smear}` (from `chaos_gate.py`). **gated** = decode-time selective gate:
+on-beat backbone + top-K off-beat accents keyed on audio saliency (high-res onset dim41), `chaos_frac=0.3`,
+density preserved. **smear** = the trained chaos knob (radar chaos=0.9, CFG g=2) for contrast. Offline the
+gate looked good: accents land on ~2.5× louder-than-average audio events (vs smear's 1.0× uniform).
+
+### Raw feedback (user)
+> gated — "reach the sky without you: didn't feel very musical. deja loin: also didn't feel musical. any
+> local sequences that felt good i think are just random chance."
+> smear — "was just unplayable completely, a wall of notes."
+
+### Commentary / hypotheses
+- **The gate fixed PLAYABILITY but not MUSICALITY — a real but partial result.** smear = unplayable wall
+  (the trained chaos knob is broken, as known); gated = playable and controlled but the off-beats feel
+  arbitrary ("random chance"). So the selective gate is a strictly better chaos knob (playable, density-
+  matched), yet it does not produce *musical* syncopation.
+- **★ This resolves the H4/chaos branch: syncopation is NOT audio-placeable.** The gate placed accents on
+  genuine audio events (2.5× selectivity) and it STILL felt arbitrary — exactly the pre-registered branch
+  ("if it feels off despite landing on audio events → syncopation is groove/pattern, not audio-placeable").
+  Confirmed. Landing on an audio onset ≠ a musical accent.
+- **H10 (new 06-21): musical syncopation is a RHYTHMIC-PATTERN / periodicity property, not per-frame
+  placement.** Real charters make syncopation from *repeated rhythmic figures* (a groove: an off-beat
+  motif held across a phrase, 3-3-2 clave, a consistent backbeat), i.e. temporal STRUCTURE. The gate is
+  *pointillist* — each off-beat chosen independently by local audio saliency, with no notion of repetition
+  or periodicity — so even "correct" accents don't cohere into a groove → feels like scatter. This unifies
+  every chaos failure: decode gate, chroma, high-res ×2, and now audio-selective placement all operate
+  per-frame; none model rhythmic pattern. The missing ingredient is sequence/structure, not features or
+  placement.
+- **Connects to H5 (no global structure) and the AR pattern head.** Both are "the model choreographs
+  frame-locally with no plan." Syncopation-as-groove is the rhythmic-axis version of the same gap.
+
+### Action / next
+- [x] Chaos gate playtested → audio-selective placement is NOT the lever. gate kept as a *playable* chaos
+  knob (beats the smear wall) but not a musicality fix. `chaos_mechanism_plan.md` A1 updated.
+- [ ] **Strategic: chaos/syncopation is now a hard rhythmic-structure problem** (features ✗×2, decode gate
+  ✗, audio-selective gate ✗). Either (a) deprioritize chaos and bank the cheaper high-confidence wins
+  (mirror aug, hands-filter retrain, 2c critic fine-tune for general taste), or (b) commit to rhythmic-
+  pattern modeling: periodicity-aware placement (repeat an off-beat figure across beats), groove-template
+  conditioning (condition on a rhythm pattern, not a scalar), or learned rhythmic motifs in the AR head.
+- [ ] If pursuing (b): cheapest probe = periodicity-aware gate (place an off-beat figure, then REPEAT it
+  at the same beat-phase in neighboring beats) — tests "does rhythmic repetition feel more musical than
+  scatter?" before any retrain.
+
 ## 2026-06-20 — Stage 2b best-of-N at HARD difficulty (gens feel good but critic scores ~0; the gap is *tameness*)
 
 ### What was played
