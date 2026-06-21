@@ -42,6 +42,13 @@ Radar dims (0–1, base = dataset mean): `stream, voltage, air, freeze, chaos`
 (stream/voltage→density, air→jumps, freeze→holds, chaos→off-grid/varied rhythm).
 
 **Conventions that make sets comparable and fun:**
+- **★ GROOVE-VALIDATE every set (06-21 directive).** A set only tests a hypothesis if its songs actually
+  exercise the relevant axis — B4U with 3 holds CANNOT test a hold fix. Use `--groove_select <axis>`
+  (`freeze`=holds, `stream`/`voltage`=density, `air`=jumps, `chaos`=syncopation, `rich`=strong across all)
+  `[+ --difficulty_select Hard]` so the exporter picks songs that read strongly on that axis AND prints
+  their radar profile — confirm the profile before handing off. Pick the axis the knob/fix touches.
+  Prefer harder songs (more revealing of decoder/musicality subtleties). Backed by
+  `src/data/song_selection.py`. (deja loin is a good general test: strong stream/voltage/freeze/air.)
 - **Same `--seed` (default 42) → same songs** across sets, so the user can A/B *the same song* under
   different knobs. Keep `--num_songs` modest (4–8).
 - Vary **one idea per set**; name `--out_dir` after it (e.g. `outputs/radar_samples/chaos_air`).

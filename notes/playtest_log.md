@@ -6,9 +6,52 @@ Each entry: **what was played → raw feedback → commentary/hypothesis → act
 
 Sample sets live under `outputs/` (gitignored). Generation: `export_typed_samples.py`.
 
+**METHODOLOGY (06-21, user directive): playtest sets must be GROOVE-VALIDATED.** A set only tests a
+hypothesis if its songs actually exercise the relevant axis — B4U with 3 holds can't test a hold fix.
+Going forward: (1) songs must be hard enough to reveal decoder/musicality subtleties; (2) MORE important,
+each set's songs must have strong, relevant groove-radar readings (`select_by_groove`), and the export
+must REPORT them so the set is a meaningful test. Deja loin is a good general test — strong stream,
+voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, high stream/voltage/chaos.
+
 ---
 
-## 2026-06-21 — Chaos gate A1 (selective off-beats land on audio events but DON'T feel musical)
+## 2026-06-21 — Hold-cross decode fix (no_cross_during_hold) — helps; transition-adaptation is the next gap
+
+### What was played
+`~/sm-generated/holdfix_{baseline, fixed}` (gen_stage1, 6 songs, pattern_temp 0.7). baseline =
+`no_jump_during_hold`; fixed = + `no_cross_during_hold` (free foot can't fast-cross while a hold pins the
+other foot — the B4U one-foot-jacks-during-hold awkwardness). Offline: hold_burst 8.7%→4.7% (real 4.0%),
+density unchanged. See `hold_cross_decode.md`.
+
+### Raw feedback (user)
+> "B4U is too easy to tell anything — baseline only has 3 holds in all."
+> "deja loin (fixed) was better than baseline. both had awkward sequences in the beginning of the song
+> and during the bridge/breakdown. i sense the model does well continuing a sequence but struggles to
+> adapt to transitions."
+> "the other songs were not well suited to this test."
+
+### Commentary / hypotheses
+- **Hold-cross fix CONFIRMED (partial, on the one valid song):** deja loin fixed > baseline. The metric
+  (hold_burst) predicted the B4U complaint AND a fix that lands it on real felt better — the metric↔feel
+  link holds both ways. But only deja loin had enough holds to test; B4U (3 holds) and the rest were
+  un-validated for freeze → the methodology lesson above.
+- **★ H11 (new): the model handles STEADY-STATE well but fails at TRANSITIONS.** Awkwardness clustered at
+  the *start* and the *bridge/breakdown* — exactly the song-section boundaries where the music changes
+  character. "Does well continuing a sequence, struggles to adapt to transitions." This unifies the
+  long-standing "cold-start / awkward opening" thread with mid-song breakdowns: both are TRANSITIONS. The
+  AR pattern head continues a motif fine but has no signal for "the section just changed, re-choreograph."
+  Connects to H5 (no global/phrase structure) — H11 is the *local* symptom of it (transition points)
+  vs H5's *global* symptom (density arc). Likely root: frame-local features + no phrase/boundary signal
+  (audio novelty / self-similarity boundaries would mark transitions).
+
+### Action / next
+- [ ] **Build groove-validated song selection into the exporter** (the methodology directive) — select +
+  REPORT songs by groove radar; freeze for hold tests, rich/multi-dim for general. Re-export holdfix on
+  high-freeze songs for a real test. [in progress]
+- [ ] **Transition hypothesis (H11):** does awkwardness localize to audio section-boundaries? Measure
+  generated-error vs audio novelty/self-similarity boundaries. Fix levers: a boundary/novelty audio
+  feature, or phrase-position conditioning. Pairs with H5.
+- [ ] PR the hold-cross decode fix once confirmed on a freeze-validated set.
 
 ### What was played
 `~/sm-generated/chaos_gate_{gated, smear}` (from `chaos_gate.py`). **gated** = decode-time selective gate:

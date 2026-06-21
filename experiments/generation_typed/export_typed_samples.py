@@ -80,6 +80,14 @@ def parse_args():
                    help="After exporting, copy the set into the StepMania songs dir (no sudo).")
     p.add_argument('--songs_dir', default=None,
                    help="Destination for --install (default: $SM_SONGS_DIR or ~/sm-generated).")
+    p.add_argument('--groove_select', default='none',
+                   choices=['none', 'rich', 'stream', 'voltage', 'air', 'freeze', 'chaos'],
+                   help="GROOVE-VALIDATE the set: pick songs that read strongly on this axis so the set "
+                        "actually tests the hypothesis (freeze=holds, stream/voltage=density, air=jumps, "
+                        "chaos=syncopation; 'rich'=strong across all). Reports the chosen songs' radar. "
+                        "'none' = first-N by seed order (legacy).")
+    p.add_argument('--difficulty_select', default=None, choices=['Beginner', 'Easy', 'Medium', 'Hard'],
+                   help="Restrict groove-selected songs to this difficulty class (harder = more revealing).")
     return p.parse_args()
 
 
@@ -106,7 +114,10 @@ def main():
         audio_dim, cache = 41, 'cache/samples_v2'
     else:
         feat_ext, audio_dim, cache = None, 23, 'cache/samples'
-    ds = StepManiaDataset(chart_files=val_files[:args.num_songs * 8], audio_dir=args.audio_dir,
+    # widen the candidate pool when groove-selecting (parsing is cheap; audio is extracted only for the
+    # chosen songs) so the selector has enough songs to find strong-on-axis ones.
+    pool = args.num_songs * (40 if args.groove_select != 'none' else 8)
+    ds = StepManiaDataset(chart_files=val_files[:pool], audio_dir=args.audio_dir,
                           max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=cache)
 
     model = LayeredTypedChartGenerator(audio_dim=audio_dim, d_model=128, num_layers=4, onset_layers=2).to(device)
@@ -162,11 +173,25 @@ def main():
                     if (args.jump_bias or panel_prefs) else None)
 
     out_root = Path(args.out_dir); out_root.mkdir(parents=True, exist_ok=True)
+
+    # Groove-validate the set: pick songs that read strongly on the axis under test (else the playtest
+    # can't reveal the hypothesis -- e.g. B4U has 3 holds, useless for a hold fix). Report the profile.
+    if args.groove_select != 'none':
+        from src.data.song_selection import select_by_groove, radar_table, RADAR_DIMS
+        dcls = ['Beginner', 'Easy', 'Medium', 'Hard'].index(args.difficulty_select) if args.difficulty_select else None
+        order = select_by_groove(ds, n=args.num_songs, by=args.groove_select, difficulty=dcls)
+        print(f"\nGROOVE-SELECTED by '{args.groove_select}'"
+              f"{f' (difficulty={args.difficulty_select})' if args.difficulty_select else ''} "
+              f"-- {len(order)} songs, strongest first:")
+        print(radar_table(ds, order))
+    else:
+        order = range(len(ds.valid_samples))
+
     print(f"\n{'song':<34} {'diff':<8} {'gen_dens':>8} {'ref_dens':>8} {'holds':>6} {'critic':>9}")
     print("-" * 80)
 
     exported, seen = 0, set()
-    for i in range(len(ds.valid_samples)):
+    for i in order:
         if exported >= args.num_songs:
             break
         meta = ds.valid_samples[i]
