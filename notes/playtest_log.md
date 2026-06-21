@@ -15,7 +15,42 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
-## 2026-06-21 — Hold-cross decode fix (no_cross_during_hold) — helps; transition-adaptation is the next gap
+## 2026-06-21 — Hold-fix on a freeze-validated Hard set (Dead Heat = WIN; KIM = data timing bug)
+
+### What was played
+`~/sm-generated/holdfix2_fixed` — freeze-validated Hard songs (freeze 0.60–0.87, 5–25 holds), the first
+*real* hold test (vs B4U's 3 holds). `no_cross_during_hold` on.
+
+### Raw feedback (user)
+> "kim possible was such a weird song to play, almost like the audio was misaligned? seemed like 1/4 and
+> 1/8 noteskins were swapped."
+> "dead heat was a fun one! it had really interesting complexity, very intense jumps and jacks. it
+> definitely felt like a proper hard/expert. good note patterns during holds."
+
+### Commentary / hypotheses
+- **★ Dead Heat = the hold fix CONFIRMED on a valid test, and the model's ceiling is higher than the
+  easy tests showed.** "Proper hard/expert," "intense jumps and jacks," and crucially **"good note
+  patterns during holds"** — exactly what `no_cross_during_hold` targets. So on a freeze-validated,
+  properly-hard song the model produces a genuinely good expert chart. Two lessons: (a) the hold-cross
+  fix works where it matters; (b) **groove-validated selection reveals real quality** the under-grooved
+  easy songs (B4U) hid — vindicates the 06-21 methodology directive.
+- **KIM POSSIBLE = a DATA timing bug (audio↔OFFSET mismatch), NOT the model.** Diagnosed: BPM is CORRECT
+  (stored 122 ≈ librosa 123, ratio 0.99) — so NOT the 2×-BPM I first guessed. And the GENERATED chart is
+  properly on-grid (phase% 73 on the quarter / 27 on the 8th, even *more* on-beat than the original's 61).
+  So the chart is internally correct; the grid is just mis-aligned to *this audio file* — i.e. the audio
+  was re-encoded with different leading silence than the chart's `#OFFSET` expects, shifting everything
+  (original AND generated) against the music → "misaligned, colors swapped." A per-song data issue, common
+  in community packs. Implication beyond one song: audio↔offset mismatches are **label noise in the
+  audio↔chart alignment** — the model trains on mis-timed pairs and generates on a wrong grid for them. A
+  dataset-wide onset-vs-grid alignment audit could be a data-quality lever (the chaos/groove metrics all
+  assume correct beat alignment).
+
+### Action / next
+- [ ] Diagnose KIM POSSIBLE's parsed bpm/offset vs the audio's actual tempo (below). If 2× → confirms the
+  data-timing-bug class.
+- [ ] Consider a dataset-wide bpm-vs-librosa-tempo audit (how many charts are mis-timed = training noise).
+- [ ] Dead Heat win → the hold-cross decode fix is validated; ready to PR + fold into the default decode.
+- [ ] H11 (transitions) still the standing next-investigation.
 
 ### What was played
 `~/sm-generated/holdfix_{baseline, fixed}` (gen_stage1, 6 songs, pattern_temp 0.7). baseline =
