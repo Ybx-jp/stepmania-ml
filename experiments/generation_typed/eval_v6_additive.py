@@ -32,7 +32,8 @@ from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
 from src.generation.typed_model import LayeredTypedChartGenerator
 
 MODELS = {'gen_highres_v4': "checkpoints/gen_highres_v4/best_val.pt",
-          'gen_highres_v6': "checkpoints/gen_highres_v6/best_val.pt"}
+          'gen_highres_v6': "checkpoints/gen_highres_v6/best_val.pt",
+          'gen_highres_v7': "checkpoints/gen_highres_v7/best_val.pt"}
 AD = 42
 
 

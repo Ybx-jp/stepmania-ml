@@ -106,3 +106,21 @@ placement still feels off in playtest: a sequence-aware onset head (architecture
   (bigger change)?
 - Accept the AUC-0.67 placement ceiling for v7 (fix RATE only), and treat placement precision as the next,
   separate feature pass? (I think yes — one change at a time.)
+
+## v7 RESULT — ADDITIVE WIN (positive trend)
+eval_v6_additive.py (39 chaotic songs, coherent, real density), per-phase RATES + phase-L1 vs real:
+```
+  REAL    q 0.167 / 8th 0.117 / 16th 0.051   (50/35/15)   L1 ref
+  v4      q 0.156 / 8th 0.163 / 16th 0.017   (46/49/ 5)   L1 0.091
+  v6      q 0.166 / 8th 0.009 / 16th 0.160   (50/ 3/48)   L1 0.218  (8ths nuked)
+  v7      q 0.193 / 8th 0.106 / 16th 0.036   (58/31/11)   L1 0.052  <- best
+```
+v7 = pure reweighted BCE (w8=1, w16=10), additive metric (best @ epoch 5, smooth descent 0.114->0.105 — no
+epoch-1 artifact). 16th-rate DOUBLED toward real (0.017->0.036), 8ths came DOWN from v4's over-production to
+~real (0.106 vs 0.117, preserved — NOT collapsed like v6), rhythm-distribution error nearly halved
+(0.091->0.052, closest to real). Healthy: onset_F1 0.742, crit_adj 0.938 (best), density matched.
+Blemishes (tunable via small w16 bump): 16th-rate slightly under real (0.036 vs 0.051); quarters over
+(0.193 vs 0.167). Placement (where 16ths land) still at the ~0.67 audio ceiling (the "awkward" issue) — a
+separate architecture pass, NOT this fix. GATE: positive -> capacity for additive complexity confirmed ->
+improving when/where (placement) is primed. NEXT: playtest v7 (inspect musical alignment), then decide
+sequence-aware onset head vs accept ceiling.
