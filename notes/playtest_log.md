@@ -15,6 +15,45 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-22 — Phase-3 staged mask-predict > v4 (BUT infra failure: dropped no_cross_during_hold)
+
+### What was played
+`~/sm-generated/phase3_staged` (staged mask-predict onset, oracle per-phase budget, v4 panels) vs
+`phase3_staged_v4` (v4 baseline), chaotic Hard songs. **INFRA FAILURE: both used an ad-hoc export
+(`_gen_v4_panels`) that DROPPED `no_cross_during_hold`** → streams-during-hold (unplayable on pad).
+
+### Raw feedback (user)
+> "it has come to my attention that you have not been carrying forward critical pieces of infra... i noticed
+> that this gen had streams during a hold, which i've already surfaced as unplayable on pad... [run an audit
+> + assert the control knobs in the skill + add code assertions]. phase3_staged seems to be an improvement
+> over phase3_staged_v4. i suspect that the oracle budget is interfering with the model's sense of global
+> structure. global quotas have consistently damaged pattern coherence in all tests we've run."
+
+### Commentary / hypotheses
+- **★ PROCESS FAILURE (mine), now fixed.** A custom export bypassed the canonical exporter's playability
+  flags and dropped `no_cross_during_hold` → unplayable streams-during-hold in BOTH sets. Tainted the
+  absolute feel (the relative staged-vs-v4 comparison is still ~fair since both had the same handicap). FIX:
+  `src/generation/playtest_export.py::enforce_playability()` is now CODE-ENFORCED in every export path
+  (forces hold_aware + no_jump/no_cross_during_hold on; raises if disabled without `--override_playability`);
+  the playtest skill now leads with a NON-NEGOTIABLE constraints table. **Audit'd mandatory set:** hold_aware,
+  no_jump_during_hold, no_cross_during_hold, pattern_temperature ~0.7.
+- **Phase-3 direction is PROMISING:** staged mask-predict placement > v4 EVEN confounded by unplayability →
+  the joint generative paradigm's placement is on the right track (the unconfounded re-export should confirm).
+- **H12 (new, user: confirmed across ALL tests): GLOBAL QUOTAS damage pattern coherence.** The oracle
+  per-phase budget (a global count quota) is suspected to interfere with the model's global structure — same
+  pattern as `onset_phase_alloc` (smearing), fixed-density chaos, and forced per-phase shares. The amount
+  should emerge LOCALLY (per-frame confidence given context), not be imposed as a global count. The quota was
+  a crutch to escape the 0%-16th starvation; the real fix is a per-phase CONFIDENCE THRESHOLD in the staged
+  16th pass so 16ths are placed where the model is confident (local, coherent), not to hit a quota.
+
+### Action / next
+- [x] Audit playtest feedback for mandatory control knobs; assert in skill + code (`enforce_playability`).
+- [ ] Re-export `phase3_staged` playability-fixed (no_cross_during_hold on) for a clean re-play.
+- [ ] QUOTA-FREE staged generation (H12): replace the oracle top-K per-phase count with a per-phase
+  confidence threshold (amount emerges locally). Re-feel coherence.
+
+---
+
 ## 2026-06-22 — v7 additive retrain: right 16th AMOUNT, WRONG placement + cold-start regression (approach exhausted)
 
 ### What was played
