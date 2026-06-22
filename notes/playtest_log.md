@@ -60,11 +60,24 @@ quarter→8th flip — no quarter-backbone reference was provided. Bad A/B desig
   Real charts treat the quarter pulse as a near-inviolable invariant and layer chaos ON TOP. Model never
   learned that. (Did NOT hand off chaos_fair for play — numbers directly measure the "8th main line"
   complaint and confirm it persists; would only reconfirm.)
-- [ ] MODEL WORK (the pivot, vindicated): teach backbone-preservation. Candidate levers — (a) Stage 2c
-  critic-guided fine-tune (taste critic knows real keeps the backbone: REAL>BASE>CHAOS); (b) an objective/
-  representation that protects the downbeat pulse (e.g. separate backbone vs ornament prediction);
-  (c) rethink chaos conditioning so it ADDS rather than reshuffles. Plus the standing placement/taste
-  frontier (awkward 16ths, AUC-0.742).
+- [x] COHERENT re-test DONE (`--match_radar` on real high-chaos Hard songs, real density — the truly-fair
+  in-distribution test). **OVERTURNS the "model guts backbone" conclusion.** Backbone is PRESERVED: GEN
+  quarter/frame 0.129 vs REAL 0.154 (survival 0.83), quarter share 35–51% ≈ real 33–50%. The catastrophic
+  collapse (q/frame 0.047) was ENTIRELY my OOD conditioning (chaos high + density at mean — a combo real
+  data never has; chaos & density corr +0.63). I drew a model-defect conclusion from a rigged test — wrong,
+  and the prior commit ("no protected backbone") is SUPERSEDED.
+  **The REAL, narrower defect: 16th UNDER-COMMITMENT.** GEN runs 49–65% 8th / 0–19% 16th; REAL runs 35–43%
+  8th / 7–28% 16th. The model substitutes 8ths where real charts commit to 16ths — defaults to 8ths as its
+  "busy" rhythm even under coherent high-chaos conditioning. THIS is the "8th bias." Plus placement quality
+  ("awkward 16ths", AUC-0.742) is a separate model issue.
+- [ ] PLAYTEST `~/sm-generated/chaos_coherent` (GEN vs REAL per song, same high-chaos songs): does the
+  backbone-preserved version feel musical (vs the "awful" rigged set)? Is the 8th-over/16th-under gap the
+  audible deficiency? METHODOLOGY LESSON: stop testing the model with incoherent conditioning then blaming
+  it — condition in-distribution.
+- [ ] MODEL WORK (narrowed target): make the model COMMIT to 16ths where real charts do (not 8th-substitute)
+  + better 16th placement. Levers: Stage 2c critic-guided fine-tune; a 16th-recall-weighted objective at the
+  pattern/type level (v4 did it for onset; the substitution is downstream); revisit the high-res feature's
+  reach. NOT backbone-preservation (that works).
 
 ---
 
