@@ -15,6 +15,43 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-22 — v7 additive retrain: right 16th AMOUNT, WRONG placement + cold-start regression (approach exhausted)
+
+### What was played
+`~/sm-generated/v7_chaos` (gen_highres_v7, reweighted BCE w8=1/w16=10, --match_radar) vs `v7_baseline` (v4),
+chaotic Hard songs. Dancing lovers, Star Trail.
+
+### Raw feedback (user)
+> "dancing lovers chaos was very awkward, didn't align with musical themes at all. star trail chaos was the
+> same. it seems that the chaos set really suffered from cold-start as well, both songs had very long empty
+> sequences to start the chart, and felt reluctant to really start charting notes. perhaps our adjustment
+> destroyed the model's global structure awareness. i'm not convinced that tuning would save this approach."
+
+### Commentary / hypotheses
+- **PLACEMENT ceiling confirmed BY EAR.** Dancing lovers v7 matched real's rhythm DISTRIBUTION exactly
+  (34/40/26 vs 33/40/27) yet "didn't align with musical themes." The AUC-0.67 16th-localization ceiling →
+  right AMOUNT, wrong WHERE. The feature probe already said features can't fix this; ear confirms it.
+- **COLD-START is a v7 REGRESSION (confirmed by data, not just feel).** v7 starts later + sparser than v4
+  on every song (Dancing lovers 1st-note 158 vs v4 82 vs real 32; intro density 0.000 vs 0.094 vs 0.172).
+  Mechanism: down-weighting 8ths (w8 3→1) pulled onset confidence off the simple 8th-driven intros, and the
+  shift toward mid-song 16ths let the GLOBAL density threshold spend budget there → starved the intro. So
+  the reweighting + global-threshold decode redistributed notes AWAY from where structure needs them. The
+  user's "destroyed global structure awareness" is right in effect.
+- **VERDICT: v7 is NOT a win** — traded coherent structure + musical alignment for rhythm-distribution
+  numbers. **v4 is the better current model** (coherent intros, sane 16ths); v7 should not ship.
+- **The approach (reweighted BCE + global-threshold decode) is EXHAUSTED** (agree w/ user). The constraints
+  are ARCHITECTURAL: per-frame onset head (placement ceiling, can't model a 16th RUN) + global-threshold
+  decode (no structural/density plan → intro starvation). Tuning trades one failure for another.
+
+### Action / next
+- [ ] Keep v4 as the current best playable model (do NOT ship v7).
+- [ ] The justified bet (user's fork): rethink onset MODELING — a sequence/context-aware onset head that can
+  model 16th RUNS (placement) and density ARCS (structure) together. HONEST caveat: real bet, uncertain it
+  breaks the 0.67 ceiling (could be partly audio ambiguity), and a phase-change build, not a fine-tune.
+- [ ] Decision for the user: scope the architecture bet, or step back. NOT more reweighting/decode.
+
+---
+
 ## 2026-06-22 — Moderate chaos conditioning (Hard) BROKE musicality: chaos = quarter→8th grid-fining smear
 
 ### What was played
