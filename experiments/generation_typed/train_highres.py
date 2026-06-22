@@ -68,6 +68,7 @@ def parse_args():
     p.add_argument('--checkpoint_dir', default='checkpoints/gen_highres')
     p.add_argument('--cache_dir', default='cache/samples_v3', help='42-dim cache (41 musical + high-res onset)')
     p.add_argument('--cfg_drop', type=float, default=0.15, help='classifier-free guidance: prob of dropping radar conditioning per batch')
+    p.add_argument('--patience', type=int, default=3, help='early stopping: stop after this many epochs with no val_total improvement')
     return p.parse_args()
 
 
@@ -205,7 +206,7 @@ def main():
         return o, p, t
 
     Path(args.checkpoint_dir).mkdir(parents=True, exist_ok=True)
-    best = float('inf'); best_path = Path(args.checkpoint_dir) / "best_val.pt"
+    best = float('inf'); bad = 0; best_path = Path(args.checkpoint_dir) / "best_val.pt"
     if mlflow_on:
         mlflow.start_run(run_name="gen-highres"); mlflow.log_params({'epochs': args.epochs, 'lr': args.lr, 'features': '42-dim: stage1 + high-res onset', 'warm_start': 'gen_stage1'})
 
@@ -234,8 +235,12 @@ def main():
               f"val(o={v[0]:.3f} pat={v[1]:.3f} typ={v[2]:.3f} tot={vt:.3f})" + ("  *" if vt < best else ""))
         if mlflow_on: mlflow.log_metrics({'val_onset': v[0], 'val_pattern': v[1], 'val_type': v[2], 'val_total': vt}, step=epoch)
         if vt < best:
-            best = vt
+            best = vt; bad = 0
             torch.save({'model_state_dict': model.state_dict(), 'epoch': epoch, 'val_total': vt}, best_path)
+        else:
+            bad += 1
+            if bad >= args.patience:
+                print(f"  early stop @ epoch {epoch+1}: no val_total improvement for {args.patience} epochs"); break
 
     # ---- eval ----
     print(f"\nLoading best (val_total={best:.4f}) for eval...")
