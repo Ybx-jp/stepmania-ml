@@ -32,3 +32,26 @@ panels (v4 pattern head via onset_override) + taste-critic eval (vs real 0.844, 
 - Onset-only prototype; panels + critic eval pending.
 - Density control + staged order are unproven to fully fix the 16th-starvation; the staged re-run is the gate.
 - Current best playable stays gen_highres_v4.
+
+## Staged iteration — STABLE gen, but the critic EVAL is CONFOUNDED (06-22)
+`diag_maskpredict_staged.py`: staged backbone→16ths gen with oracle per-phase budget (density/phase = real
+by construction), panels via v4, taste-critic verdict:
+```
+  REAL 0.808 | STAGED 0.320 | v4-gen 0.251 | shuf16 0.743   (30 songs, NO chaos filter)
+```
+- Staged onset density/phase match real exactly (oracle budget); generation is stable.
+- **The critic CANNOT isolate placement here — two eval-design flaws (mine):** (1) panels filled by v4 for
+  BOTH staged and v4-gen → both share v4's machine PANEL fingerprint → critic crushes both to ~0.25-0.32
+  regardless of onset placement (real/shuf keep REAL panels -> 0.74-0.81; the gap is PANELS, not placement);
+  (2) no chaos filter -> most songs have few 16ths -> shuf16 barely changes -> uninformative (0.74 vs the
+  objective gate's clean 0.52 on chaotic-filtered songs).
+- **DEEPER FINDING (Phase-3 eval problem):** evaluating placement QUALITY on GENERATED charts is unsolved —
+  the taste critic confounds placement with panel style, and you can't score against ONE real chart because
+  placement is a distribution ([[phase3_generative_design]] divergence: humans agree ~33%). The EVALUATION is
+  as hard as the generation (= the project's eval thesis).
+
+## Next — a placement-ISOLATING eval
+- Quick: re-run staged-vs-v4 on CHAOTIC songs only (panel-controlled: both use v4 panels, so any critic gap
+  IS onset placement; chaos filter so 16ths matter). Tells if staged places 16ths better than v4 at all.
+- Deeper: a placement-specific metric/critic that ignores panels (e.g., critic on ONSET-only charts, or
+  distributional placement scoring vs the multi-charting pool). This is a real Phase-3 sub-project.
