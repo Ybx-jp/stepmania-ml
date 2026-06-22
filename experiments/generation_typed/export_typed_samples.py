@@ -46,7 +46,7 @@ def parse_args():
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--out_dir', default='outputs/typed_samples')
     p.add_argument('--checkpoint', default='checkpoints/gen_style/best_val.pt')
-    p.add_argument('--features', choices=['base', 'stage1'], default='base',
+    p.add_argument('--features', choices=['base', 'stage1', 'highres'], default='base',
                    help='base=23-dim (cache/samples); stage1=41-dim musical features (cache/samples_v2)')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
@@ -114,9 +114,13 @@ def main():
     _, val_files, _ = create_data_splits(cf, random_state=args.seed)
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)['classifier']['max_sequence_length']
-    # feature set: base (23-dim) vs stage1 (41-dim musical features)
-    if args.features == 'stage1':
-        from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
+    # feature set: base (23-dim) vs stage1 (41-dim musical) vs highres (42-dim, + high-res onset)
+    from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
+    if args.features == 'highres':
+        feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
+                                                            use_metric_phase=True, use_highres_onset=True))
+        audio_dim, cache = 42, 'cache/samples_v3'
+    elif args.features == 'stage1':
         feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
         audio_dim, cache = 41, 'cache/samples_v2'
     else:
