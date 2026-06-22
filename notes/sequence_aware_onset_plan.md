@@ -25,13 +25,18 @@ Root insight (user): we measured the wrong objective — global/audio, not local
    may count hold occupancy → could be positive not inverse). Radar-point conditioning is WHY chaos went OOD.
 
 ## Sequencing (cheap gates before big builds — [[experiment-design]])
-- [in progress] AR-stability de-risk (`diag_ar_stability.py`): does audio-anchored AR onset stay stable
-  (density ~real, not →0) and coherent (run-lengths ~real)? both vs seq(no anchor).
-  - stable → build the head. collapses → scheduled sampling mandatory first. seq collapses + both stable →
-    anchor confirmed.
-- [ ] Build: add causal note-context branch to the onset head (warm-start v4 audio branch); scheduled
-  sampling; KV-cache the note branch. Train; eval on PLACEMENT (16th-AUC + run-length match) + taste critic
-  + playtest. NOT per-song L1.
+- [DONE — YELLOW] AR-stability de-risk (`diag_ar_stability.py`): free-run Bernoulli AR does NOT collapse
+  (audio anchor prevents empty) but EXPLODES — density 0.73 (both) / 0.83 (seq) vs real 0.177, mean-run 5.7
+  vs real 1.0. Exposure bias the OTHER way: own context says "in a run, continue" → runaway streams. Audio
+  anchor moderates (both<seq) but doesn't tame. So: signal real (teacher-forced 0.935), but naive AR
+  unstable → **scheduled sampling is MANDATORY, not optional**, with residual risk it doesn't fully tame it.
+- [NEXT GATE] Scheduled-sampling de-risk (`diag_ar_stability.py --scheduled_sampling`): train on a mix of
+  teacher-forced + the model's OWN rolled-out context; re-measure AR density/run-lengths. Comes back to ~real
+  → the build will work → proceed. Still explodes → harder (need decode-time density control / a different
+  AR formulation) → reassess before the expensive generator integration.
+- [ ] Build (only if scheduled-sampling gate passes): causal note-context branch on the onset head
+  (warm-start v4 audio branch) + scheduled sampling + KV-cache the note branch. Eval on PLACEMENT (16th-AUC +
+  run-length match) + taste critic + playtest. NOT per-song L1.
 - [ ] Then objective (taste critic) + representation (local chaos) as follow-on refinements.
 
 ## Risks / open questions
