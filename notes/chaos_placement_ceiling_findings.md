@@ -1,4 +1,16 @@
-# Chaos / 16th-PLACEMENT: a principled ceiling (audio ambiguity) — arc conclusion
+# ⚠️ SUPERSEDED (2026-06-22) — the "audio-ambiguity ceiling" conclusion below was WRONG.
+
+The architecture de-risk that motivated this note (`diag_seqhead_probe.py`) tested AUDIO context only. The
+CORRECTED probe (`diag_seqcontext_probe.py`) shows the note SEQUENCE alone predicts real-16th placement at
+AUC **0.935** (vs audio 0.649; both 0.944). Placement is SEQUENCE-determined (run coherence), NOT audio-
+ambiguous. The real bug: the onset head is audio-only + non-causal, so it discards the 0.93 sequence signal.
+A **sequence-aware onset head IS justified**. See `notes/sequence_aware_onset_plan.md`. The analysis below is
+kept only as the record of the (refuted) intermediate conclusion — every "ruled out" claim about placement
+stands EXCEPT the audio-only architecture probe, which tested the wrong context.
+
+---
+
+# Chaos / 16th-PLACEMENT: a principled ceiling (audio ambiguity) — arc conclusion [REFUTED]
 
 The chaos arc set out to make generated charts produce musical 16th notes (chaos radar was 0). We can now
 control the 16th AMOUNT but NOT the musical PLACEMENT, and we've established WHY, ruling out every lever:
