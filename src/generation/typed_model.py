@@ -344,7 +344,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
-                 boundary_reset=None, onset_phase_alloc=None):
+                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -374,7 +374,16 @@ class LayeredTypedChartGenerator(nn.Module):
         out-budgeted by the more-confident 8ths, so the model's real 16th confidence (p_on@16th ~0.4)
         never clears tau. This keeps the SAME note budget but allocates it across the three phase bands by
         the given shares, picking the top-p_on frames within each band, so the model's own ranking chooses
-        WHICH 16ths. Density is preserved; the rhythm distribution is steered to the target. None = off."""
+        WHICH 16ths. Density is preserved; the rhythm distribution is steered to the target. None = off.
+        NOTE: a flat per-song quota is smearing (forces the same 16th share on every song); prefer
+        `onset_phase_calib` for VARIABLE per-song chaos.
+
+        `onset_phase_calib` (b8, b16): per-phase calibration offset in LOGIT space (8th += b8, 16th += b16),
+        applied before the per-song threshold. Corrects the model's systematic 16th under-confidence so the
+        16th count floats with the audio -- chaotic songs get many 16ths, calm songs ~none -- per-song
+        normalized (vs the flat `onset_phase_alloc` quota). The caller's threshold must be computed from the
+        same offset logits. Validated in diag_song_chaos.py (variable, real-range; corr-capped by the
+        model's frame-local song-level signal ~0.4). None = off."""
         self.eval()
         device = audio.device
         B, T, _ = audio.shape
@@ -396,6 +405,16 @@ class LayeredTypedChartGenerator(nn.Module):
                 ph = torch.arange(T, device=device) % 4          # 16th-grid phase within a beat
                 pen = torch.where(ph == 0, 0.0, torch.where(ph == 2, onset_phase_penalty, 2.0 * onset_phase_penalty))
                 ol = ol - pen.unsqueeze(0)                         # (T,) broadcast over batch
+            if onset_phase_calib is not None:
+                # per-phase calibration offset (b8 on 8th frames, b16 on 16th frames), ADDED to the onset
+                # logits, then the usual per-song threshold runs on the recalibrated probs. Corrects the
+                # model's systematic 16th under-confidence so the 16th COUNT floats with the audio (chaotic
+                # song -> many 16ths, calm song -> none), per-song-normalized (unlike a flat quota). The
+                # caller must compute its threshold from the SAME offset logits. See diag_song_chaos.py.
+                b8, b16 = onset_phase_calib
+                ph = torch.arange(T, device=device) % 4
+                off = torch.where(ph == 2, float(b8), torch.where((ph == 1) | (ph == 3), float(b16), 0.0))
+                ol = ol + off.unsqueeze(0)
             p = torch.sigmoid(onset_logit_scale * ol + onset_logit_bias)
             if onset_phase_alloc is not None:
                 # phase-aware threshold: keep the budget N = (p>tau).sum() per row, split across the three

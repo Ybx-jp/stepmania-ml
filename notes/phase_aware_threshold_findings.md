@@ -56,12 +56,50 @@ then wired in with a unit test (`test_onset_phase_alloc`) and an exporter flag (
   picks the most-confident 16th frames (good), but the flat per-song budget could smear 16ths into
   sections that shouldn't have them. Only play-feel decides musical-vs-noise.
 
-## Playtest handoff (installed)
-A/B, same model (gen_highres_v4), same 6 rich Hard songs, threshold off vs on:
-- `~/sm-generated/phase16_single` — single threshold (1.3% 16ths)
-- `~/sm-generated/phase16_alloc`  — phase-aware (4.1% 16ths, real-matched)
+## The quota WAS smearing — per-song diagnostic (diag_song_chaos.py)
 
-Question for the hands: do the added 16ths feel musical (right spots, real chaos) or noisy/smeared? If
-musical → phase-aware threshold is the chaos knob; if smeared → the model's 16th *ranking* is the next
-target (it has the confidence, but maybe not the right placement), and a per-song/section-adaptive share
-(not flat 4.1%) is the follow-up. See [[playtest_log]].
+User (correct): a flat per-song quota = smearing. A song that deserves real chaos is capped; a calm song
+gets spurious 16ths. The per-song VARIATION is the chaos signal. Tested whether the model even knows which
+songs deserve chaos (no generation needed — onsets are decided up front). 60 songs, gen_highres_v4:
+
+```
+  within-16th-band discrimination (AUC, p_on vs real-16th-note): 0.742   (0.5 = chance)
+  per-song real 16th-rate: mean 4.3%  std 6.6%  range [0.0, 24.0]%
+
+  signal       Spearman(real16,.)   mean16%  std16%  range16%
+  raw pon16          0.289
+  global             0.459            0.9      1.4   [0.0,  5.2]   best corr, far too timid
+  alloc (quota)      0.256            4.2      0.1   [3.8,  4.7]   FLAT = smearing (corr DROPPED)
+  calib              0.389            3.6      3.9   [0.0, 24.4]   variable, full real range  <-- WIN
+  adaptive(abs bar)  0.344            3.9      4.0   [0.0, 16.9]
+```
+
+Findings:
+- **The quota (`alloc`) is provably smearing**: std 0.1% (constant), and it DEGRADED corr 0.459→0.256.
+- **The model DOES discriminate**: frame-level AUC 0.742 (which 16th frames within a song — the high-res
+  feature working; old off-beat AUC was ~0.53). Song-level corr is moderate (0.29–0.46).
+- **`calib` (per-phase LOGIT offset b16≈0.19 + per-song threshold) is the win**: variable (std 3.9),
+  spans the full real range [0,24%], best volume-matched corr (0.389). It's per-song NORMALIZED.
+- **`adaptive` (absolute cross-song bar) is WORSE** than calib (corr 0.344, range caps at 16.9%): an
+  absolute bar conflates LOUD songs with CHAOTIC songs (a dense song clears the bar on volume, not 16th
+  prominence). calib's per-song threshold normalizes that confound out — which is why it reaches 24%.
+- **The ceiling is the MODEL, not decode.** Every method tops out at song-corr ~0.39–0.46. Strong
+  frame-local (0.742), weak song-level — the frame-local-feature limitation (= [[h5]] global structure).
+  No decode trick exceeds ~0.46; raising it needs a global-structure feature/training change.
+
+Shipped `onset_phase_calib=(b8,b16)` in generate() (+ exporter `--onset_phase_calib`, test). Prefer it
+over `onset_phase_alloc` (kept but documented as smearing). Decision (user): BANK calib, then pivot to the
+model to raise the song-level signal.
+
+## Playtest handoff (installed) — VARIABLE chaos
+A/B, gen_highres_v4, same 6 rich Hard songs: `~/sm-generated/chaos_calib` (--onset_phase_calib 0,0.19) vs
+`~/sm-generated/chaos_global` (single threshold). Per-song 16th% (calib): Pound the Alarm 12.0, Dancing
+lovers 7.4, First-of-the-Year 7.4, IN BETWEEN 6.5, Taylor Swift 1.0, Deja loin 0.5 (global: 0–2.9 flat,
+timid). The variation is real — chaotic songs get chaos, calm songs stay calm.
+
+Question for the hands: does the VARIABLE chaos feel right — chaotic songs musically busier, calm songs
+clean — and are the 16ths (where placed) on-the-music (AUC 0.742 says they should be)? Deja loin reads as
+calm (0.5%) — does that match the song? If the targeting feels off (wrong songs get chaos), that's the
+song-level ceiling (corr 0.4) → the model/feature pivot. See [[playtest_log]].
+
+(Superseded earlier handoffs: phase16_single/phase16_alloc were the flat-quota A/B — quota is smearing.)

@@ -5492,3 +5492,5 @@ outputs/v4_chaos/
 outputs/v4_baseline/
 outputs/phase16_alloc/
 outputs/phase16_single/
+outputs/chaos_calib/
+outputs/chaos_global/

@@ -72,6 +72,11 @@ def parse_args():
                    help='phase-aware onset threshold: target note shares "quarter,8th,16th" (real ~"0.707,0.252,0.041"). '
                         'Redistributes the density budget across phases so the model\'s own 16th confidence wins 16th '
                         'slots instead of losing to 8ths (which a single threshold buries). None = single threshold.')
+    p.add_argument('--onset_phase_calib', type=str, default=None,
+                   help='per-phase calibration offset "b8,b16" (logit space; e.g. "0,0.19") for VARIABLE '
+                        'per-song chaos: corrects the model\'s 16th under-confidence so the 16th count floats '
+                        'with the audio (chaotic songs get many, calm songs ~none). Preferred over the flat '
+                        '--onset_phase_alloc quota. None = single threshold.')
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
@@ -115,6 +120,8 @@ def main():
     args = parse_args(); set_seed(args.seed)
     phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
                    if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
+    phase_calib = (tuple(float(x) for x in args.onset_phase_calib.split(','))
+                   if args.onset_phase_calib else None)  # per-phase logit offset (b8, b16) for variable chaos
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cf = glob.glob(f"{args.data_dir}/**/*.sm", recursive=True) + glob.glob(f"{args.data_dir}/**/*.ssc", recursive=True)
     _, val_files, _ = create_data_splits(cf, random_state=args.seed)
@@ -241,7 +248,11 @@ def main():
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
         diff = torch.tensor([diff_idx], device=device)
         with torch.no_grad():
-            p_onset = torch.sigmoid(model.onset_logits(model.encode_audio(audio), diff))[0].cpu().numpy()
+            ol_onset = model.onset_logits(model.encode_audio(audio), diff)[0]
+            if phase_calib is not None:  # apply the SAME per-phase offset used inside generate() before tau
+                b8, b16 = phase_calib; ph = torch.arange(ol_onset.shape[0], device=device) % 4
+                ol_onset = ol_onset + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
+            p_onset = torch.sigmoid(ol_onset).cpu().numpy()
         real_density = float((orig_typed != 0).any(1).mean())
         tau = float(np.quantile(p_onset, 1 - real_density)) if real_density > 0 else 0.5
 
@@ -254,7 +265,7 @@ def main():
                              no_jump_during_hold=args.no_jump_during_hold,
                              no_cross_during_hold=args.no_cross_during_hold,
                              onset_phase_penalty=args.onset_phase_penalty,
-                             onset_phase_alloc=phase_alloc,
+                             onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
                              style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen)[0].cpu().numpy()
         gen = pair_holds(gen)
 

@@ -343,6 +343,36 @@ def test_onset_phase_alloc():
     assert 0.02 <= s1 / n_alloc <= 0.12, f"alloc 16th share off target (~0.05): {s1}/{n_alloc}"
 
 
+def test_onset_phase_calib():
+    # The per-phase calibration offset raises 16th onset confidence (b16 > 0) so more 16ths clear the SAME
+    # per-song threshold -- unlike the flat alloc quota, the count floats (here we just check it increases
+    # the 16th share vs no offset, at a fixed threshold derived from the offset probs).
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    from src.generation.typed import pair_holds
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 1, 400
+    audio = torch.randn(B, T, 23); diff = torch.tensor([3])
+
+    def run(calib):
+        # threshold computed from the SAME (calibrated) onset logits, as the exporter does
+        with torch.no_grad():
+            ol = m.onset_logits(m.encode_audio(audio), diff)[0]
+            if calib is not None:
+                ph = torch.arange(T) % 4
+                ol = ol + torch.where(ph == 2, calib[0], torch.where((ph == 1) | (ph == 3), calib[1], 0.0))
+            tau = float(torch.quantile(torch.sigmoid(ol), 1 - 0.20))
+        g = m.generate(audio, diff, onset_threshold=tau, onset_phase_calib=calib, pattern_sample=True,
+                       pattern_temperature=0.7, type_sample=True, type_temperature=0.4, hold_aware=True)
+        note = np.asarray((pair_holds(g[0].numpy()) != 0).any(1))
+        t = np.arange(T); n = max(int(note.sum()), 1)
+        return note[(t % 4 == 1) | (t % 4 == 3)].sum() / n  # 16th fraction
+
+    base = run(None)
+    boosted = run((0.0, 2.0))  # strong 16th offset
+    assert boosted > base, f"calib b16 did not raise 16th share: {base:.3f} -> {boosted:.3f}"
+
+
 def test_style_encoder_bottleneck_and_invariance():
     # The reference-chart style encoder pools over time to a single (B,d) latent, and
     # padded frames must not affect that latent (masked mean).
