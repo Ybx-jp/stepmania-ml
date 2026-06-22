@@ -35,6 +35,7 @@ from src.generation.typed_model import LayeredTypedChartGenerator
 from src.generation.typed import pair_holds
 from src.models import LateFusionClassifier
 from src.generation.sm_writer import charts_to_sm
+from src.generation.playtest_export import enforce_playability
 from src.data.dataset import DIFFICULTY_NAMES
 import re, shutil
 
@@ -144,10 +145,10 @@ def gen_staged(m, audio, real_onset, device):
 
 
 def _gen_v4_panels(v4, A42, T, diff, R, onset_override, device):
-    return pair_holds(v4.generate(A42, diff, lengths=torch.tensor([T], device=device),
-                                  onset_override=onset_override, type_sample=True, type_temperature=0.4,
-                                  hold_aware=True, pattern_sample=True, pattern_temperature=0.7,
-                                  no_jump_during_hold=True, radar=R)[0].cpu().numpy())
+    kw = dict(onset_override=onset_override, type_sample=True, type_temperature=0.4,
+              pattern_sample=True, pattern_temperature=0.7, radar=R)
+    enforce_playability(kw)   # MANDATORY pad-playability (hold_aware + no_jump/no_cross_during_hold)
+    return pair_holds(v4.generate(A42, diff, lengths=torch.tensor([T], device=device), **kw)[0].cpu().numpy())
 
 
 def export_playtest(m, v4, ds, args, device, rng):
@@ -171,7 +172,8 @@ def export_playtest(m, v4, ds, args, device, rng):
         if nd is None or T < 256: continue
         orig = np.asarray(ds.parser.convert_to_tensor_typed(meta['chart'], nd))[:T]
         real_on = (orig != 0).any(1).astype(np.float32)
-        if real_on.sum() < 32 or (real_on & ((np.arange(T) % 4 == 1) | (np.arange(T) % 4 == 3))).sum() / max(real_on.sum(), 1) < 0.05:
+        rb = real_on.astype(bool); i16 = (np.arange(T) % 4 == 1) | (np.arange(T) % 4 == 3)
+        if rb.sum() < 32 or (rb & i16).sum() / max(rb.sum(), 1) < 0.05:
             continue
         a = s['audio'][:T, :AD].numpy().astype(np.float32); A42 = torch.from_numpy(a).unsqueeze(0).to(device)
         diff = torch.tensor([meta['difficulty_class']], device=device)

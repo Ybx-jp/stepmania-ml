@@ -36,6 +36,7 @@ from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
 from src.generation.typed_model import LayeredTypedChartGenerator
 from src.generation.typed import symbol_histogram, pair_holds
 from src.generation.sm_writer import charts_to_sm
+from src.generation.playtest_export import enforce_playability
 from src.generation.evaluation import DifficultyCritic
 
 DEFAULT_BPM = 150.0
@@ -65,6 +66,10 @@ def parse_args():
     p.add_argument('--no_crossovers', action='store_true', help='forbid crossover steps (foot automaton)')
     p.add_argument('--no_jump_during_hold', action='store_true',
                    help='forbid jumps while a hold is open (one free foot); pad-playable holds')
+    p.add_argument('--override_playability', default=None, metavar='REASON',
+                   help='DELIBERATELY deviate from the MANDATORY pad-playability constraints (hold_aware, '
+                        'no_jump_during_hold, no_cross_during_hold). Requires EXPLICIT user approval; pass the '
+                        'reason. Without this, those constraints are FORCED ON regardless of the flags below.')
     p.add_argument('--no_cross_during_hold', action='store_true',
                    help='forbid the free foot fast-crossing panels while a hold is open (the B4U one-foot '
                         'jacks-during-hold awkwardness; brings hold_burst ~6.9%%->4.7%% vs real 4.0%%)')
@@ -270,18 +275,20 @@ def main():
         gen_density = args.target_density if args.target_density is not None else real_density
         tau = float(np.quantile(p_onset, 1 - gen_density)) if gen_density > 0 else 0.5
 
-        gen = model.generate(audio, diff, lengths=torch.tensor([T], device=device),
-                             onset_threshold=tau, type_sample=True,
-                             type_temperature=args.type_temperature, hold_aware=True,
-                             pattern_sample=True, pattern_temperature=args.pattern_temperature,
-                             repetition_penalty=args.repetition_penalty,
-                             pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
-                             no_jump_during_hold=args.no_jump_during_hold,
-                             no_cross_during_hold=args.no_cross_during_hold,
-                             onset_phase_penalty=args.onset_phase_penalty,
-                             onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
-                             style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen)[0].cpu().numpy()
-        gen = pair_holds(gen)
+        gen_kwargs = dict(onset_threshold=tau, type_sample=True,
+                          type_temperature=args.type_temperature,
+                          pattern_sample=True, pattern_temperature=args.pattern_temperature,
+                          repetition_penalty=args.repetition_penalty,
+                          pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
+                          onset_phase_penalty=args.onset_phase_penalty,
+                          onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
+                          style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen)
+        if args.override_playability:  # user-approved deviation -> respect the explicit flags
+            gen_kwargs.update(hold_aware=True, no_jump_during_hold=args.no_jump_during_hold,
+                              no_cross_during_hold=args.no_cross_during_hold)
+        enforce_playability(gen_kwargs, args.override_playability)  # MANDATORY pad-playability (forces them on)
+        gen = pair_holds(model.generate(audio, diff, lengths=torch.tensor([T], device=device),
+                                        **gen_kwargs)[0].cpu().numpy())
 
         chart_obj = meta['chart']
         bpm = float(chart_obj.bpm); music = os.path.basename(meta['audio_file'])
