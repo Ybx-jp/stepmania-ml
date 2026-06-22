@@ -77,6 +77,10 @@ def parse_args():
                         'per-song chaos: corrects the model\'s 16th under-confidence so the 16th count floats '
                         'with the audio (chaotic songs get many, calm songs ~none). Preferred over the flat '
                         '--onset_phase_alloc quota. None = single threshold.')
+    p.add_argument('--target_density', type=float, default=None,
+                   help='override per-chart density (notes/frame) for the onset threshold; default = match the '
+                        'source chart. Use to couple density to chaos (real high-chaos charts run ~0.34 vs ~0.22 '
+                        'baseline) so raising chaos ADDS off-beats instead of replacing the quarter backbone.')
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
@@ -260,7 +264,11 @@ def main():
                 ol_onset = ol_onset + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
             p_onset = torch.sigmoid(ol_onset).cpu().numpy()
         real_density = float((orig_typed != 0).any(1).mean())
-        tau = float(np.quantile(p_onset, 1 - real_density)) if real_density > 0 else 0.5
+        # density target: the source chart's own density by default, OR a fixed override (--target_density).
+        # Raising chaos at FIXED density forces quarter->off-beat REPLACEMENT (backbone collapse); real charts
+        # raise density WITH chaos (corr +0.63), so a high-chaos export must lift density too.
+        gen_density = args.target_density if args.target_density is not None else real_density
+        tau = float(np.quantile(p_onset, 1 - gen_density)) if gen_density > 0 else 0.5
 
         gen = model.generate(audio, diff, lengths=torch.tensor([T], device=device),
                              onset_threshold=tau, type_sample=True,

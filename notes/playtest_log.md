@@ -51,12 +51,20 @@ quarter→8th flip — no quarter-backbone reference was provided. Bad A/B desig
   / 16th 1.0), so "raise chaos" = "more off-beats" — and I held DENSITY FIXED while raising it, forcing the
   model to DELETE quarters to fit off-beats = the backbone collapse the user heard. Self-inflicted setup
   artifact, not (purely) a model defect.**
-- [ ] FAIR re-test (not a decode hack — removes my artifact): couple density to chaos (let density rise
-  ~0.23→0.34 as real does) and check whether the model ADDS off-beats over a preserved backbone or still
-  mushes. Separates setup-artifact from model-defect.
-- [ ] Model frontier that remains regardless: (1) 16th PLACEMENT quality ("awkward", AUC-0.742 ceiling);
-  (2) TASTE = which off-beats to add — frame-wise objective + scalar knob can't express it → Stage 2c
-  critic-guided fine-tune (critic already ranks chaos charts bad). These are the real "look at the model".
+- [x] FAIR re-test DONE (`--target_density 0.34`, chaos=0.3): **FAILED to rescue the backbone — it's the
+  MODEL.** Given the exact density real high-chaos charts use (0.34, ample budget for backbone + off-beats),
+  the model STILL guts quarters: q/frame 0.047 vs real 0.17 (notes on ~19% of quarter positions vs real
+  ~68%), 64% 8ths. My fixed-density setup made it worse but was NOT the cause. **DIAGNOSIS: the model has
+  no protected metric backbone** — rhythm is a per-frame probability soup; chaos conditioning SUPPRESSES
+  quarter p_on (0.625→0.564) while inflating off-beats, so off-beats crowd quarters out under any threshold.
+  Real charts treat the quarter pulse as a near-inviolable invariant and layer chaos ON TOP. Model never
+  learned that. (Did NOT hand off chaos_fair for play — numbers directly measure the "8th main line"
+  complaint and confirm it persists; would only reconfirm.)
+- [ ] MODEL WORK (the pivot, vindicated): teach backbone-preservation. Candidate levers — (a) Stage 2c
+  critic-guided fine-tune (taste critic knows real keeps the backbone: REAL>BASE>CHAOS); (b) an objective/
+  representation that protects the downbeat pulse (e.g. separate backbone vs ornament prediction);
+  (c) rethink chaos conditioning so it ADDS rather than reshuffles. Plus the standing placement/taste
+  frontier (awkward 16ths, AUC-0.742).
 
 ---
 
