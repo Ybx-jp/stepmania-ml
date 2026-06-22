@@ -5494,3 +5494,5 @@ outputs/phase16_alloc/
 outputs/phase16_single/
 outputs/chaos_calib/
 outputs/chaos_global/
+outputs/chaos_mod/
+outputs/chaos_tame/

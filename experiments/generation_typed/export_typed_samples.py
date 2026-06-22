@@ -248,7 +248,13 @@ def main():
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
         diff = torch.tensor([diff_idx], device=device)
         with torch.no_grad():
-            ol_onset = model.onset_logits(model.encode_audio(audio), diff)[0]
+            # tau MUST be computed from the SAME conditioned logits generate() decodes from, else radar/style
+            # conditioning (which raises p broadly) floods past a tau calibrated on the unconditioned p.
+            memory = model.encode_audio(audio)
+            ol_onset = model.onset_logits(memory, diff, radar=radar_for_gen, style=style_for_gen)[0]
+            if args.guidance != 1.0 and (radar_for_gen is not None or style_for_gen is not None):
+                ol_u = model.onset_logits(memory, diff, radar=None, style=None)[0]
+                ol_onset = ol_u + args.guidance * (ol_onset - ol_u)
             if phase_calib is not None:  # apply the SAME per-phase offset used inside generate() before tau
                 b8, b16 = phase_calib; ph = torch.arange(ol_onset.shape[0], device=device) % 4
                 ol_onset = ol_onset + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
