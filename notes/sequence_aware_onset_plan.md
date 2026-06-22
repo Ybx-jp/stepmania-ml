@@ -44,6 +44,21 @@ Root insight (user): we measured the wrong objective — global/audio, not local
   run-length match) + taste critic + playtest. NOT per-song L1.
 - [ ] Then objective (taste critic) + representation (local chaos) as follow-on refinements.
 
+## Critic-guided refinement (user idea, 06-22) — the OBJECTIVE layer on top of refinement
+generate → critic grades → regenerate-the-weak-parts → keep if better → iterate. Marries the two open
+pieces: refinement = the ARCHITECTURE (how to regenerate coherently), taste critic = the OBJECTIVE (what
+"better" means). Three flavors, increasing power:
+  1. best-of-N + critic (SELECT) — did this (Stage 2b), helped but only picks, never fixes.
+  2. critic-guided refinement (this idea, FIX) — critic flags weak bars, regenerate them conditioned on the
+     rest (= local inpainting = refinement applied locally), keep if critic improves. Iterate.
+  3. critic as a training signal (Stage 2c) — fine-tune toward high-critic outputs.
+KEY: (2) NEEDS the refinement mechanism — regenerating a flagged region coherently requires conditioning on
+the surrounding FROZEN notes (inpainting); a plain audio-only re-sample just yields another awkward region.
+So both the architecture pivot and this idea converge on the SAME foundation (note-context-conditioned
+onset); the critic is the guide + stopping rule on top. Caveats: critic grades whole-chart -> need LOCAL
+(windowed) scores to target regeneration; iterating toward a critic risks GAMING it (ours is a validated
+taste metric REAL>BASE>CHAOS, but cap iterations + keep a playtest in the loop).
+
 ## Risks / open questions
 - AR-drift survival under generation (the gate above settles direction).
 - Cost: causal note branch + scheduled sampling is a real architecture change to the generator (Phase 2.6),
