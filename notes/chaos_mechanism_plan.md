@@ -92,6 +92,41 @@ B1 (best-of-N self-distillation): generate N, keep top-K by P(real), fine-tune C
 - **Risk:** distribution collapse / reward-hacking the critic; mitigate with KL-to-base regularization,
   modest K, and re-checking the critic isn't being gamed (held-out real charts stay high).
 
+## SYNTHESIS (2026-06-21) — chaos is the keystone; root is architectural
+
+User intuition (endorsed): mastering chaos conditioning unlocks the other axes. Why, mechanistically:
+the other radar dims (stream/voltage/air/freeze) are QUANTITY knobs — a global scalar satisfies them (and
+`match_radar` steers them well, `conditioning_match_findings.md`). **Chaos is the only QUALITATIVE axis —
+*which* off-beats are musically right — which a global scalar fundamentally can't express, so it smears.**
+The capability that solves chaos (understanding musical rhythmic STRUCTURE) is what grounds every other
+axis's musicality.
+
+**Root (stacking the session's findings):** musical syncopation = a *periodic groove* (H10; ac_off real
+0.19 vs null 0.01), largely NOT audio-cued (off-beat audio AUC 0.66, redundant; features don't fix it —
+chroma ✗, high-res onset ✗×2). So groove is memory/context-based, not per-frame. **But the onset head
+(which decides rhythm = *when* notes go) is NON-CAUSAL / per-frame / audio-driven** (chosen to avoid
+AR-drift collapse). A per-frame head with no memory of prior placements **structurally cannot produce a
+repeated rhythmic figure** — it hits on-beats (audio aligns) but can only *scatter* off-beats. **Chaos
+smears by architecture.** (Ties to H11: rhythm needs memory; the onset head lacks it.) This is why per-frame
+decode gates feel "arbitrary" (pointillist) and the global scalar only shifts the whole grid — neither makes
+a groove.
+
+**Lever = give rhythm generation structure/memory.** Decided path: probe FIRST (does *imposed periodicity*
+feel musical → confirms the training TARGET) before a groove-aware-conditioning or periodicity-objective
+retrain.
+
+### Periodic-groove decode probe (2026-06-21, `chaos_groove_decode.py`): imposed periodicity is MECHANICAL
+Imposed an audio-grounded repeated off-beat figure per section (top-3 salient off-beat slots, fired every
+measure). Result (6 rich Hard songs): the groove hits ac16≈0.97 / ac4≈ac8≈0.59 **identically for every
+song**, vs real's *varied* periodicity (ac4/8/16 ranging 0.2–0.76, song-specific). So a rigid "same slots
+every measure" template = a **robotic loop**, not a musical groove. (Taste critic uninformative here —
+reads ~0.00 for BOTH groove and baseline = its known Hard/dense over-rejection bias, not a verdict.)
+**Conclusion: periodicity ALONE isn't musicality** (H10 is necessary, not sufficient) — real grooves are
+periodic WITH variation/development/grounding, just as per-frame *selectivity* wasn't musicality either.
+**Both decode routes (per-frame selective, rigid periodic) are now exhausted** → chaos needs LEARNED groove
+generation (variation + grounding), i.e. the objective/architecture route, not a decode template. Playtest
+(`chaos_groove_{baseline,groove}`, esp. deja loin) is the arbiter; offline predicts mechanical.
+
 ## Recommended sequence
 1. **A1 decode-time selective chaos gate** — cheap, no retrain, model-agnostic, directly tests "does
    selective off-beat placement (vs uniform smear) recover musical syncopation?" Try `sal = p_base` first
