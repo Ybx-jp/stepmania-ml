@@ -1,20 +1,47 @@
 #!/usr/bin/env python3
 """
-Stage 1 of the musical-feature retrain (see notes/feature_retrain_plan.md). Same layered typed
-generator + groove-radar conditioning as train_radar.py, but trained on the 41-dim MUSICAL feature
-set (original 23 + chroma 12 + HPSS onsets 2 + metric phase 4) from cache/samples_v2.
+H4 high-res-onset retrain (see notes/h4_offbeat_signal_findings.md). Same layered typed generator +
+groove-radar conditioning as train_stage1.py, but trained on the 42-dim feature set: the 41 Stage-1
+musical features (23 base + chroma 12 + HPSS 2 + metric phase 4) PLUS a 1-dim high-res onset feature
+(onset detected at hop~128 / n_fft~512, max-pooled into each 16th cell). From cache/samples_v3.
 
-Goal: give the model melody/harmony (chroma), drums-vs-tuned (HPSS) and metric position (phase) so
-choreography can be musically motivated — directly targeting H1 (arrow<->event) and the chaos
-uniform-offbeat-smear (metric phase). Keeps radar conditioning so we can re-run the chaos playtest.
+Goal: H4. The shipped grid-hop onset is nearly phase-flat and barely predicts off-beat note placement
+(off-beat AUC ~0.53 ≈ chance), so the model renders chaos as a uniform global smear — it has no local
+off-beat cue. The high-res-pooled onset recovers that cue (off-beat AUC 0.53->0.66; gate confirmed in
+diag_confirm_highres_feature.py), giving the onset head + chaos conditioning something local to key on.
 
-Warm-starts from gen_radar: load_from_factorized loads all 121 shared tensors and leaves ONLY the
-audio-encoder first conv fresh (its input dim changed 23->41). That fresh conv MUST train from epoch 0,
-so warmup_freeze defaults to 0 here (freezing the audio encoder would strand the new-feature mapping).
+H4-v2 (see h4_offbeat_signal_findings.md Result 5). The v1 retrain (train_highres.py) ran but the model
+IGNORED the new feature: warm-started from a model already converged WITHOUT it + zero-init new column +
+frame-wise CE that barely weights the ~5% off-beat frames => no gradient pressure. New-col weight norm
+0.127 (rank 1/42), teacher-forced ablation KL = 0.0000 (feature unused). v2 supplies INCENTIVE:
+
+  1. RANDOM-init the new conv column at full magnitude (~ scale of existing cols), not zero — so the
+     feature affects the output from step 0 and training must keep-or-suppress it (not grow-from-dead).
+  2. OFF-BEAT-UPWEIGHTED onset loss (--offbeat_weight): off-beat frames (t%4 != 0) weigh more in the
+     onset BCE, so getting syncopation right actually moves the loss. This is the key lever — the v1
+     objective gave the feature nothing to do.
+
+H4-v3 (chaos = no 16ths; see notes/chaos_mechanism_plan.md no-16ths localization). v2's 3x off-beat weight
+lumped 8ths and 16ths together; but the model produces ZERO 16ths (p_on @16th 0.169 vs 0.43 @8th, never
+> threshold) -> rhythm caps at 8ths -> chaos radar 0. The high-res feature raises 16th p_on (0.169->0.204)
+but 16ths are 4% of notes so the loss ignores them. v3: a GRADUATED phase weight that HEAVILY weights 16th
+frames (--w16, default 15) over 8ths (--w8, default 3) over quarters (1), forcing the model to use the
+high-res feature to predict 16ths. Same random-init high-res column + gen_stage1 warm-start as v2.
+
+v4 fixed v3's backfire by weighting only POSITIVE 16th notes (recall), not all 16th frames.
+
+H4-v5 (THIS script; right early-stop criterion). v4 reported "early stop @ epoch 4" but best was epoch 1:
+val_total is ~88% PATTERN loss, the onset head we change is ~7.5% of it, and even val_onset is dominated
+by abundant quarter/8th/empty frames -> the rare 16ths we optimize barely move it. So we were selecting &
+stopping on a metric BLIND to the experiment's target. v5 selects on a 16th-PHASE onset F1: at the val-set
+operating threshold (quantile at real density), precision AND recall restricted to 16th-phase frames
+(t%4 in {1,3}). MAXIMIZE it. This tells us whether 16th capability keeps improving past epoch 1 (more
+training helps) or plateaus (epoch 1 is the ceiling -> levers are w16/data/decode, not epochs). Everything
+else (model, warm-start, random-init high-res col, phase-weighted loss) is identical to v4 — one change.
 
 Usage:
-    python experiments/generation_typed/train_stage1.py --data_dir data/ --audio_dir data/ \
-        --epochs 15 --batch_size 8
+    python experiments/generation_typed/train_highres_v5.py --data_dir data/ --audio_dir data/ \
+        --epochs 15 --batch_size 8 --w8 3 --w16 15
 """
 
 import warnings, os
@@ -34,14 +61,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits, create_datasets
 from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
-from src.data.stepmania_parser import StepManiaParser
 from src.generation.typed_model import LayeredTypedChartGenerator
 from src.generation.typed import (NUM_PATTERNS, NUM_TYPES, NUM_PANELS, SYMBOL_NAMES,
                                    symbol_histogram, pair_holds, panels_to_pattern)
 from src.generation.evaluation import onset_density_metrics, DifficultyCritic
 
 DEFAULT_BPM = 150.0
-FOCAL_CKPT = "checkpoints/gen_radar/best_val.pt"  # warm-start from the trained radar model (23-dim)
+WARM_CKPT = "checkpoints/gen_stage1/best_val.pt"  # warm-start from the trained Stage-1 model (41-dim)
+FIRST_CONV = "audio_encoder.net.0.conv.weight"   # input-channel dim changes 41->42; expand, don't reset
 TYPE_NAMES = ['tap', 'hold_head', 'tail', 'roll_head']
 
 
@@ -61,16 +88,14 @@ def parse_args():
                    help='none = calibrated focal (sample types at true rate); inv_sqrt over-inflates holds')
     p.add_argument('--eval_songs', type=int, default=64)
     p.add_argument('--max_gen_len', type=int, default=768)
-    p.add_argument('--checkpoint_dir', default='checkpoints/gen_stage1')
-    p.add_argument('--cache_dir', default='cache/samples_v2', help='41-dim musical-feature cache (warm_cache_v2.py)')
+    p.add_argument('--checkpoint_dir', default='checkpoints/gen_highres_v5')
+    p.add_argument('--cache_dir', default='cache/samples_v3', help='42-dim cache (41 musical + high-res onset)')
+    p.add_argument('--w8', type=float, default=3.0, help='onset-loss weight on 8th frames (t%%4 == 2)')
+    p.add_argument('--w16', type=float, default=15.0,
+                   help='onset-loss weight on 16th frames (t%%4 in {1,3}); heavy -> forces the model to use '
+                        'the high-res feature to predict 16ths (they are 4%% of notes, else ignored).')
     p.add_argument('--cfg_drop', type=float, default=0.15, help='classifier-free guidance: prob of dropping radar conditioning per batch')
-    p.add_argument('--patience', type=int, default=3, help='early stopping: stop after this many epochs with no val_total improvement')
-    p.add_argument('--mirror', action='store_true',
-                   help='L<->R mirror augmentation on TRAIN (per-sample p=0.5). ~2x data; attacks panel-bias. '
-                        'Default off reproduces gen_stage1 exactly (one-variable comparison).')
-    p.add_argument('--allow_hands', action='store_true',
-                   help='admit hands/quads (max_simultaneous=4), +55%% of real Hard charts. MUST match the '
-                        'cache_dir built with the same flag (index-based cache).')
+    p.add_argument('--patience', type=int, default=3, help='early stopping: stop after this many epochs with no val_f16 improvement')
     return p.parse_args()
 
 
@@ -98,10 +123,13 @@ def collect_typed(ds, cap):
     return out
 
 
-def focal_bce(logits, targets, gamma):
+def focal_bce(logits, targets, gamma, weight=None):
     bce = nn.functional.binary_cross_entropy_with_logits(logits, targets, reduction='none')
     p = torch.sigmoid(logits); p_t = p * targets + (1 - p) * (1 - targets)
-    return ((1 - p_t) ** gamma * bce).mean()
+    loss = (1 - p_t) ** gamma * bce
+    if weight is not None:
+        return (weight * loss).sum() / weight.sum().clamp(min=1e-8)  # weighted mean over frames
+    return loss.mean()
 
 
 def focal_ce(logits, targets, gamma, weight=None):
@@ -125,12 +153,12 @@ def main():
     train_files, val_files, _ = create_data_splits(chart_files, random_state=args.seed)
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         max_seq_len = yaml.safe_load(f)['classifier']['max_sequence_length']
-    ext41 = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
-    parser = StepManiaParser(max_simultaneous=4) if args.allow_hands else None
+    ext42 = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
+                                                     use_metric_phase=True, use_highres_onset=True))
     train_ds, val_ds, _ = create_datasets(train_files=train_files, val_files=val_files,
                                           test_files=[], audio_dir=args.audio_dir,
-                                          max_sequence_length=max_seq_len, parser=parser,
-                                          feature_extractor=ext41, cache_dir=args.cache_dir)
+                                          max_sequence_length=max_seq_len,
+                                          feature_extractor=ext42, cache_dir=args.cache_dir)
     print("Warming caches (cache/samples_v2; pre-warm with warm_cache_v2.py)...")
     train_ds.warm_cache(show_progress=True); val_ds.warm_cache(show_progress=True)
     print("Collecting typed samples...")
@@ -145,9 +173,25 @@ def main():
     except ImportError:
         mlflow_on = False
 
+    assert audio_dim == 42, f"expected 42-dim features (use_highres_onset), got {audio_dim}"
     model = LayeredTypedChartGenerator(audio_dim=audio_dim, d_model=128, num_layers=4, onset_layers=2).to(device)
-    ck = torch.load(FOCAL_CKPT, map_location='cpu', weights_only=False)
-    print(f"warm-started {model.load_from_factorized(ck['model_state_dict'])} tensors (incl. pattern_head)")
+    ck = torch.load(WARM_CKPT, map_location='cpu', weights_only=False)
+    sd = ck['model_state_dict']
+    print(f"warm-started {model.load_from_factorized(sd)} tensors from gen_stage1")
+    # Expand the first conv (41->42 input channels): copy the trained channels, and RANDOM-init the new
+    # column at the scale of the existing columns (v2: NOT zero — v1's zero-init never grew, KL=0). This
+    # makes the high-res feature affect the output from step 0, so training keeps-or-suppresses it.
+    with torch.no_grad():
+        old_w = sd[FIRST_CONV]                                   # (d_model, 41, k)
+        new_w = dict(model.named_parameters())[FIRST_CONV]       # (d_model, 42, k)
+        assert new_w.shape[1] == old_w.shape[1] + 1, (old_w.shape, new_w.shape)
+        new_w[:, :old_w.shape[1], :].copy_(old_w.to(new_w.device))
+        col_std = old_w.std()                                    # per-existing-column scale
+        new_w[:, old_w.shape[1], :].normal_(0.0, float(col_std))
+        new_col_norm = new_w[:, old_w.shape[1], :].norm()
+        print(f"expanded {FIRST_CONV}: {tuple(old_w.shape)} -> {tuple(new_w.shape)} "
+              f"(new column RANDOM-init, std={float(col_std):.4f}, norm={float(new_col_norm):.4f} "
+              f"vs existing-mean {float(old_w.norm(dim=(0,2)).mean()):.4f})")
     model.freeze_audio_encoder(True)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
@@ -171,20 +215,14 @@ def main():
         for i in range(0, len(idx), bs):
             yield [samples[j] for j in idx[i:i + bs]]
 
-    # L<->R mirror augmentation: panels [L,D,U,R] -> [R,D,U,L] = column perm [3,1,2,0]. Equally-musical
-    # for the same audio (the DDR "Mirror" mod); audio + radar invariant, pattern/type targets are derived
-    # from `states` so they auto-follow. Applied per-sample per-epoch (p=0.5) on TRAIN only.
-    LR_MIRROR = [3, 1, 2, 0]
-
-    def to_tensors(batch, mirror=False):
+    def to_tensors(batch):
         T = max(len(s['typed']) for s in batch); B = len(batch)
         audio = torch.zeros(B, T, audio_dim); states = torch.zeros(B, T, NUM_PANELS, dtype=torch.long)
         mask = torch.zeros(B, T, dtype=torch.bool); diff = torch.zeros(B, dtype=torch.long)
         radar = torch.zeros(B, 5)
         for b, s in enumerate(batch):
             t = len(s['typed'])
-            typed = s['typed'][:, LR_MIRROR] if (mirror and rng.random() < 0.5) else s['typed']
-            audio[b, :t] = torch.from_numpy(s['audio']); states[b, :t] = torch.from_numpy(typed)
+            audio[b, :t] = torch.from_numpy(s['audio']); states[b, :t] = torch.from_numpy(s['typed'])
             mask[b, :t] = True; diff[b] = s['difficulty']; radar[b] = torch.from_numpy(s['radar'])
         # pattern target (B,T) and type target (B,T,4)
         active = (states != 0)
@@ -195,7 +233,17 @@ def main():
 
     def losses(ol, pat_l, typ_l, states, mask, pat_t, typ_t, active):
         onset_t = (states != 0).any(-1).float()
-        o = focal_bce(ol[mask], onset_t[mask], args.focal_gamma)
+        # v4: weight POSITIVE notes by phase (penalize MISSING rare 8th/16th notes = recall). v3 weighted
+        # ALL 16th frames, which are ~50% of frames and mostly EMPTY -> reinforced "no 16th" -> p_on@16th
+        # went DOWN. Here negatives stay weight 1; positive 8ths -> w8, positive 16ths -> w16.
+        B, T = ol.shape
+        t = torch.arange(T, device=ol.device)
+        is8 = (t % 4 == 2).unsqueeze(0); is16 = ((t % 4 == 1) | (t % 4 == 3)).unsqueeze(0)
+        pos = onset_t.bool()
+        phase_w = torch.ones(B, T, device=ol.device)
+        phase_w = torch.where(pos & is8, float(args.w8), phase_w)
+        phase_w = torch.where(pos & is16, float(args.w16), phase_w)
+        o = focal_bce(ol[mask], onset_t[mask], args.focal_gamma, weight=phase_w[mask])
         sel = mask & (onset_t > 0.5)
         p = focal_ce(pat_l[sel], pat_t[sel], args.focal_gamma) if sel.any() else torch.zeros((), device=device)
         act = active & mask.unsqueeze(-1)
@@ -203,16 +251,16 @@ def main():
         return o, p, t
 
     Path(args.checkpoint_dir).mkdir(parents=True, exist_ok=True)
-    best = float('inf'); bad = 0; best_path = Path(args.checkpoint_dir) / "best_val.pt"
+    best = -1.0; bad = 0; best_path = Path(args.checkpoint_dir) / "best_val.pt"  # maximize val_f16
     if mlflow_on:
-        mlflow.start_run(run_name="gen-stage1"); mlflow.log_params({'epochs': args.epochs, 'lr': args.lr, 'features': '41-dim chroma+hpss+phase'})
+        mlflow.start_run(run_name="gen-highres-v5"); mlflow.log_params({'epochs': args.epochs, 'lr': args.lr, 'features': '42-dim: stage1 + high-res onset', 'warm_start': 'gen_stage1', 'w8': args.w8, 'w16': args.w16, 'new_col_init': 'random', 'select_metric': 'val_f16'})
 
     for epoch in range(args.epochs):
         if epoch == args.warmup_freeze:
             model.freeze_audio_encoder(False); print(f"  [epoch {epoch+1}] unfroze audio encoder")
         model.train(); tr = [0.0, 0.0, 0.0]; nb = 0
         for batch in batches(train, args.batch_size, True):
-            audio, states, mask, diff, pat_t, typ_t, active, radar = to_tensors(batch, mirror=args.mirror)
+            audio, states, mask, diff, pat_t, typ_t, active, radar = to_tensors(batch)
             optimizer.zero_grad()
             cond_radar = None if rng.random() < args.cfg_drop else radar  # CFG: drop conditioning sometimes
             ol, pat_l, typ_l = model(audio, states, diff, mask, radar=cond_radar)
@@ -221,26 +269,47 @@ def main():
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); optimizer.step()
             tr[0] += o.item(); tr[1] += p.item(); tr[2] += t.item(); nb += 1
         model.eval(); v = [0.0, 0.0, 0.0]; vnb = 0
+        pon_all, tru_all, is16_all = [], [], []  # for the 16th-phase F1 selection metric
         with torch.no_grad():
             for batch in batches(val, args.batch_size, False):
                 audio, states, mask, diff, pat_t, typ_t, active, radar = to_tensors(batch)
                 ol, pat_l, typ_l = model(audio, states, diff, mask, radar=radar)
                 o, p, t = losses(ol, pat_l, typ_l, states, mask, pat_t, typ_t, active)
                 v[0] += o.item(); v[1] += p.item(); v[2] += t.item(); vnb += 1
+                # accumulate masked-frame onset prob, truth, and 16th-phase flag
+                B, T = ol.shape
+                tphase = torch.arange(T, device=ol.device)
+                is16 = ((tphase % 4 == 1) | (tphase % 4 == 3)).unsqueeze(0).expand(B, T)
+                onset_t = (states != 0).any(-1)
+                m = mask
+                pon_all.append(torch.sigmoid(ol)[m].cpu().numpy())
+                tru_all.append(onset_t[m].cpu().numpy())
+                is16_all.append(is16[m].cpu().numpy())
         v = [x / max(1, vnb) for x in v]; vt = sum(v)
+        # 16th-phase F1 at the val-set operating threshold (quantile at real density) -- the metric the
+        # experiment is actually about (val_total is ~88% pattern loss and blind to rare 16ths).
+        pon = np.concatenate(pon_all); tru = np.concatenate(tru_all); is16 = np.concatenate(is16_all)
+        tau = float(np.quantile(pon, 1 - target_density))
+        pred = pon > tau
+        tp = int((pred & tru & is16).sum()); fp = int((pred & ~tru & is16).sum()); fn = int((~pred & tru & is16).sum())
+        prec16 = tp / (tp + fp) if (tp + fp) else 0.0
+        rec16 = tp / (tp + fn) if (tp + fn) else 0.0
+        f16 = 2 * prec16 * rec16 / (prec16 + rec16) if (prec16 + rec16) else 0.0
         print(f"  epoch {epoch+1}/{args.epochs}  train(o={tr[0]/max(1,nb):.3f} pat={tr[1]/max(1,nb):.3f} typ={tr[2]/max(1,nb):.3f})  "
-              f"val(o={v[0]:.3f} pat={v[1]:.3f} typ={v[2]:.3f} tot={vt:.3f})" + ("  *" if vt < best else ""))
-        if mlflow_on: mlflow.log_metrics({'val_onset': v[0], 'val_pattern': v[1], 'val_type': v[2], 'val_total': vt}, step=epoch)
-        if vt < best:
-            best = vt; bad = 0
-            torch.save({'model_state_dict': model.state_dict(), 'epoch': epoch, 'val_total': vt}, best_path)
+              f"val(o={v[0]:.3f} pat={v[1]:.3f} typ={v[2]:.3f} tot={vt:.3f})  "
+              f"f16={f16:.3f}(p={prec16:.2f} r={rec16:.2f})" + ("  *" if f16 > best else ""))
+        if mlflow_on: mlflow.log_metrics({'val_onset': v[0], 'val_pattern': v[1], 'val_type': v[2],
+                                          'val_total': vt, 'val_f16': f16, 'val_prec16': prec16, 'val_rec16': rec16}, step=epoch)
+        if f16 > best:
+            best = f16; bad = 0
+            torch.save({'model_state_dict': model.state_dict(), 'epoch': epoch, 'val_f16': f16, 'val_total': vt}, best_path)
         else:
             bad += 1
             if bad >= args.patience:
-                print(f"  early stop @ epoch {epoch+1}: no val_total improvement for {args.patience} epochs"); break
+                print(f"  early stop @ epoch {epoch+1}: no val_f16 improvement for {args.patience} epochs"); break
 
     # ---- eval ----
-    print(f"\nLoading best (val_total={best:.4f}) for eval...")
+    print(f"\nLoading best (val_f16={best:.4f}) for eval...")
     model.load_state_dict(torch.load(best_path, map_location=device)['model_state_dict']); model.eval()
     eval_set = val[:args.eval_songs]
     critic = DifficultyCritic(device=device)

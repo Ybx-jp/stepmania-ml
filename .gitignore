@@ -5487,3 +5487,14 @@ outputs/samples/
 # Generated typed sample folders (copied audio)
 outputs/typed_samples/
 outputs/sectional/
+outputs/chaos_groove/
+outputs/v4_chaos/
+outputs/v4_baseline/
+outputs/phase16_alloc/
+outputs/phase16_single/
+outputs/chaos_calib/
+outputs/chaos_global/
+outputs/chaos_mod/
+outputs/chaos_tame/
+outputs/chaos_fair/
+outputs/chaos_coherent/

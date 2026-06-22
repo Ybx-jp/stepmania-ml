@@ -57,6 +57,7 @@ for epoch in range(num_epochs):
 - `torch.no_grad()` wrapping all validation/inference
 - `optimizer.zero_grad()` before each forward pass
 - Save best model on **validation** metric, not training metric
+- **Early stopping**: stop after `--patience` (default 3) epochs with no validation-metric improvement
 
 ## Reproducibility
 

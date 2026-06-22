@@ -15,6 +15,107 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-22 — Moderate chaos conditioning (Hard) BROKE musicality: chaos = quarter→8th grid-fining smear
+
+### What was played
+`~/sm-generated/chaos_mod` (gen_highres_v4, --radar chaos=0.3, density-matched) vs `chaos_tame` (chaos=0.2).
+6 rich Hard songs. Dancing lovers, First of the Year. (NOTE flaw: BOTH sets were chaos≥0.2, already past the
+quarter→8th flip — no quarter-backbone reference was provided. Bad A/B design.)
+
+### Raw feedback (user)
+> "chaos_mod: Dancing lovers was just awful. the entire musicality broke. tried first of the year too.
+> horrible. **the bias for 1/8 instead of 1/4 notes is totally unjustified, both defaulted to 1/8 as the
+> main line.** the 16ths were awkward. i don't think we can math our way into this at decode time. we need
+> to look at the model."
+
+### Commentary / hypotheses
+- **H4/H6 CONFIRMED by ear, NOT resolved.** I mis-framed the conditioning sweep (quarter share ↓, 8th/16th
+  ↑) as "specific, not a smear." It IS the smear: chaos collapses the QUARTER BACKBONE into an 8th main line
+  (sweep: quarter 78.7%→32% by chaos 0.25; 8th becomes 63%). The model learned chaos = uniform global
+  grid-fining (quarters→8ths→16ths), exactly the H4/H6 degenerate mechanism — the high-res feature let it
+  PLACE 16ths but did NOT teach it structured syncopation. Posterior stats were blind to the backbone loss.
+- **The quarter→8th flip is hypersensitive**: even chaos=0.2 ("tame") is already 8th-dominant. Plain v4
+  (no chaos cond) is 69% quarters (correct backbone) — so the chaos CONDITIONING specifically destroys it.
+- **Decode/conditioning is exhausted as a lever for chaos (user directive).** calib/radar move the posterior
+  but can't impose musical structure (preserve backbone + syncopate tastefully). → pivot to the MODEL.
+- Suspected model root causes to probe: (1) radar "chaos" dim conflated with density/8th-ness in TRAINING
+  data → model learned "chaos = finer grid" but that's not what we want; (2) frame-wise onset objective has
+  no backbone-preservation term; (3) the taste critic (REAL>BASE>CHAOS, valid metric) already KNOWS these
+  are bad → Stage 2c critic-guided fine-tune is the model-level lever.
+
+### Action / next
+- [x] Diagnostic done (`diag_real_chaos_rhythm.py`, 264 real Medium+ charts): **real chaos ADDS density on
+  top of a preserved backbone.** density rises 0.226→0.341 with chaos (corr +0.63); quarter NOTE-RATE
+  ~flat 0.195→0.168 (corr only −0.37); 16th share 0.2%→12.3% (corr +0.61). Quarter SHARE falls (87%→49%)
+  only because the denominator grows. **The radar chaos is DEFINED as an off-beat sum (quarter 0 / 8th 0.5
+  / 16th 1.0), so "raise chaos" = "more off-beats" — and I held DENSITY FIXED while raising it, forcing the
+  model to DELETE quarters to fit off-beats = the backbone collapse the user heard. Self-inflicted setup
+  artifact, not (purely) a model defect.**
+- [x] FAIR re-test DONE (`--target_density 0.34`, chaos=0.3): **FAILED to rescue the backbone — it's the
+  MODEL.** Given the exact density real high-chaos charts use (0.34, ample budget for backbone + off-beats),
+  the model STILL guts quarters: q/frame 0.047 vs real 0.17 (notes on ~19% of quarter positions vs real
+  ~68%), 64% 8ths. My fixed-density setup made it worse but was NOT the cause. **DIAGNOSIS: the model has
+  no protected metric backbone** — rhythm is a per-frame probability soup; chaos conditioning SUPPRESSES
+  quarter p_on (0.625→0.564) while inflating off-beats, so off-beats crowd quarters out under any threshold.
+  Real charts treat the quarter pulse as a near-inviolable invariant and layer chaos ON TOP. Model never
+  learned that. (Did NOT hand off chaos_fair for play — numbers directly measure the "8th main line"
+  complaint and confirm it persists; would only reconfirm.)
+- [x] COHERENT re-test DONE (`--match_radar` on real high-chaos Hard songs, real density — the truly-fair
+  in-distribution test). **OVERTURNS the "model guts backbone" conclusion.** Backbone is PRESERVED: GEN
+  quarter/frame 0.129 vs REAL 0.154 (survival 0.83), quarter share 35–51% ≈ real 33–50%. The catastrophic
+  collapse (q/frame 0.047) was ENTIRELY my OOD conditioning (chaos high + density at mean — a combo real
+  data never has; chaos & density corr +0.63). I drew a model-defect conclusion from a rigged test — wrong,
+  and the prior commit ("no protected backbone") is SUPERSEDED.
+  **The REAL, narrower defect: 16th UNDER-COMMITMENT.** GEN runs 49–65% 8th / 0–19% 16th; REAL runs 35–43%
+  8th / 7–28% 16th. The model substitutes 8ths where real charts commit to 16ths — defaults to 8ths as its
+  "busy" rhythm even under coherent high-chaos conditioning. THIS is the "8th bias." Plus placement quality
+  ("awkward 16ths", AUC-0.742) is a separate model issue.
+- [ ] PLAYTEST `~/sm-generated/chaos_coherent` (GEN vs REAL per song, same high-chaos songs): does the
+  backbone-preserved version feel musical (vs the "awful" rigged set)? Is the 8th-over/16th-under gap the
+  audible deficiency? METHODOLOGY LESSON: stop testing the model with incoherent conditioning then blaming
+  it — condition in-distribution.
+- [ ] MODEL WORK (narrowed target): make the model COMMIT to 16ths where real charts do (not 8th-substitute)
+  + better 16th placement. Levers: Stage 2c critic-guided fine-tune; a 16th-recall-weighted objective at the
+  pattern/type level (v4 did it for onset; the substitution is downstream); revisit the high-res feature's
+  reach. NOT backbone-preservation (that works).
+
+---
+
+## 2026-06-21 — Chaos periodic-groove (MUTE test): model understands structure; generates NO 16ths (chaos=0)
+
+### What was played
+`~/sm-generated/chaos_groove_groove` (imposed audio-grounded periodic off-beat groove per section,
+3 accents/measure, on-beat backbone from p_on). Deja loin, **on mute** (isolates chart structure from
+music alignment).
+
+### Raw feedback (user)
+> "deja loin: played on mute and discovered something VERY INTERESTING! a very clear timing pattern
+> '1,2,3,4,5,6,_,8' with variations of note patterns that progressed in intensity. global song structure
+> is very well understood. intensity gradient for pattern escalation. wonderful variety of patterns.
+> HOWEVER it never chose to produce any 1/16ths." + "the groove radar shows ALL generated charts have no
+> chaos factor."
+
+### Commentary / hypotheses
+- **My "mechanical" prediction was WRONG (instructive).** Offline ac16=0.97 read as a rigid loop, but that
+  was only ONSET periodicity; the PATTERN head layered varied, escalating choreography on the periodic
+  skeleton → structured-and-musical, not robotic. Periodic onset skeleton + pattern variety is a PROMISING
+  combo. Metric missed the play-feel again.
+- **Model understands structure/intensity better than H5 credited.** The audio-driven p_on backbone tracks
+  energy → an intensity arc; H5's flat-density/end-fade was likely a decode artifact (global threshold).
+- **★★ THE finding: generated chaos ≈ 0 — the model NEVER produces 16ths.** The chaos problem from the
+  OUTPUT side: rhythmic vocabulary caps at quarters+8ths under ANY conditioning/decode → the chaos knob has
+  nothing to amplify. Connects to H4: the onset feature (~93ms ≈ one 8th) is 8th-resolved → p_on can't
+  resolve adjacent 16ths → thresholding never places a 16th. The high-res feature was the right lever but
+  H4-v2 didn't engage it (KL≈0).
+
+### Action / next
+- [ ] **Localization probe (next): WHY no 16ths?** note-fraction by metric phase (quarter/8th/16th) for
+  real vs gen_stage1 vs gen_highres; and p_on distribution by phase. p_on never high at 16ths → onset can't
+  represent them (H4/resolution); p_on high but decode skips → decode. Localizes the chaos fix.
+- [ ] Keep the periodic-groove skeleton (it worked structurally); the gap to fill is 16ths.
+
+---
+
 ## 2026-06-21 — Hold-fix on a freeze-validated Hard set (Dead Heat = WIN; KIM = data timing bug)
 
 ### What was played

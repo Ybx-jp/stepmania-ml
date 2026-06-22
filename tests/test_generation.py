@@ -303,6 +303,76 @@ def test_no_cross_during_hold():
         assert c_on < c_off, f"no_cross_during_hold did not reduce fast hold crosses: {c_off} -> {c_on}"
 
 
+def test_onset_phase_alloc():
+    # The phase-aware threshold steers the note rhythm distribution to the given shares while preserving
+    # the note budget. A single threshold buries 16ths; alloc must (a) place 16th-phase notes at ~the
+    # target share, and (b) keep total note count close to what the same threshold gives globally.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    from src.generation.typed import pair_holds
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 1, 400
+    audio = torch.randn(B, T, 23); diff = torch.tensor([3])
+    # sparse, selective regime (~20% density) so a single threshold is actually selective and buries the
+    # lower-confidence 16ths -- which is the regime real generation runs in.
+    with torch.no_grad():
+        p = torch.sigmoid(m.onset_logits(m.encode_audio(audio), diff))[0]
+    tau = float(torch.quantile(p, 1 - 0.20))
+    kw = dict(onset_threshold=tau, pattern_sample=True, pattern_temperature=0.7, type_sample=True,
+              type_temperature=0.4, hold_aware=True)
+
+    def phase_counts(g):
+        note = np.asarray((pair_holds(g[0].numpy()) != 0).any(1))
+        t = np.arange(T)
+        return note[t % 4 == 0].sum(), note[t % 4 == 2].sum(), note[(t % 4 == 1) | (t % 4 == 3)].sum()
+
+    torch.manual_seed(0); g_global = m.generate(audio, diff, **kw)
+    torch.manual_seed(0); g_alloc = m.generate(audio, diff, onset_phase_alloc=(0.7, 0.25, 0.05), **kw)
+    q0, e0, s0 = phase_counts(g_global)
+    q1, e1, s1 = phase_counts(g_alloc)
+    n_global, n_alloc = int(q0 + e0 + s0), int(q1 + e1 + s1)
+    # alloc never EXCEEDS the global budget (it redistributes; band caps can only shrink it -- and in the
+    # realistic low-density regime it's preserved, e.g. diag_phase_threshold showed 0.270 -> 0.267).
+    assert n_alloc <= n_global + 1, f"alloc exceeded note budget: {n_global} -> {n_alloc}"
+    # MECHANISM (model-independent): alloc steers the realized rhythm distribution toward the shares --
+    # quarters dominate and 16ths land near the requested 5% (loose: hold-pairing shifts counts a little).
+    # (That this BEATS a single threshold is a trained-model property, shown on the real model in
+    # diag_phase_threshold.py: 16ths 1.3% -> 4.1%; an untrained model has no phase bias to overcome.)
+    assert n_alloc > 0
+    assert q1 > e1 and q1 > s1, f"alloc quarter share not dominant: q={q1} e={e1} s={s1}"
+    assert 0.02 <= s1 / n_alloc <= 0.12, f"alloc 16th share off target (~0.05): {s1}/{n_alloc}"
+
+
+def test_onset_phase_calib():
+    # The per-phase calibration offset raises 16th onset confidence (b16 > 0) so more 16ths clear the SAME
+    # per-song threshold -- unlike the flat alloc quota, the count floats (here we just check it increases
+    # the 16th share vs no offset, at a fixed threshold derived from the offset probs).
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    from src.generation.typed import pair_holds
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 1, 400
+    audio = torch.randn(B, T, 23); diff = torch.tensor([3])
+
+    def run(calib):
+        # threshold computed from the SAME (calibrated) onset logits, as the exporter does
+        with torch.no_grad():
+            ol = m.onset_logits(m.encode_audio(audio), diff)[0]
+            if calib is not None:
+                ph = torch.arange(T) % 4
+                ol = ol + torch.where(ph == 2, calib[0], torch.where((ph == 1) | (ph == 3), calib[1], 0.0))
+            tau = float(torch.quantile(torch.sigmoid(ol), 1 - 0.20))
+        g = m.generate(audio, diff, onset_threshold=tau, onset_phase_calib=calib, pattern_sample=True,
+                       pattern_temperature=0.7, type_sample=True, type_temperature=0.4, hold_aware=True)
+        note = np.asarray((pair_holds(g[0].numpy()) != 0).any(1))
+        t = np.arange(T); n = max(int(note.sum()), 1)
+        return note[(t % 4 == 1) | (t % 4 == 3)].sum() / n  # 16th fraction
+
+    base = run(None)
+    boosted = run((0.0, 2.0))  # strong 16th offset
+    assert boosted > base, f"calib b16 did not raise 16th share: {base:.3f} -> {boosted:.3f}"
+
+
 def test_style_encoder_bottleneck_and_invariance():
     # The reference-chart style encoder pools over time to a single (B,d) latent, and
     # padded frames must not affect that latent (masked mean).

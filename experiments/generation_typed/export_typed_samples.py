@@ -46,7 +46,7 @@ def parse_args():
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--out_dir', default='outputs/typed_samples')
     p.add_argument('--checkpoint', default='checkpoints/gen_style/best_val.pt')
-    p.add_argument('--features', choices=['base', 'stage1'], default='base',
+    p.add_argument('--features', choices=['base', 'stage1', 'highres'], default='base',
                    help='base=23-dim (cache/samples); stage1=41-dim musical features (cache/samples_v2)')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
@@ -68,6 +68,19 @@ def parse_args():
     p.add_argument('--no_cross_during_hold', action='store_true',
                    help='forbid the free foot fast-crossing panels while a hold is open (the B4U one-foot '
                         'jacks-during-hold awkwardness; brings hold_burst ~6.9%%->4.7%% vs real 4.0%%)')
+    p.add_argument('--onset_phase_alloc', type=str, default=None,
+                   help='phase-aware onset threshold: target note shares "quarter,8th,16th" (real ~"0.707,0.252,0.041"). '
+                        'Redistributes the density budget across phases so the model\'s own 16th confidence wins 16th '
+                        'slots instead of losing to 8ths (which a single threshold buries). None = single threshold.')
+    p.add_argument('--onset_phase_calib', type=str, default=None,
+                   help='per-phase calibration offset "b8,b16" (logit space; e.g. "0,0.19") for VARIABLE '
+                        'per-song chaos: corrects the model\'s 16th under-confidence so the 16th count floats '
+                        'with the audio (chaotic songs get many, calm songs ~none). Preferred over the flat '
+                        '--onset_phase_alloc quota. None = single threshold.')
+    p.add_argument('--target_density', type=float, default=None,
+                   help='override per-chart density (notes/frame) for the onset threshold; default = match the '
+                        'source chart. Use to couple density to chaos (real high-chaos charts run ~0.34 vs ~0.22 '
+                        'baseline) so raising chaos ADDS off-beats instead of replacing the quarter backbone.')
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
@@ -109,14 +122,22 @@ def typed_binary(t):
 
 def main():
     args = parse_args(); set_seed(args.seed)
+    phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
+                   if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
+    phase_calib = (tuple(float(x) for x in args.onset_phase_calib.split(','))
+                   if args.onset_phase_calib else None)  # per-phase logit offset (b8, b16) for variable chaos
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cf = glob.glob(f"{args.data_dir}/**/*.sm", recursive=True) + glob.glob(f"{args.data_dir}/**/*.ssc", recursive=True)
     _, val_files, _ = create_data_splits(cf, random_state=args.seed)
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)['classifier']['max_sequence_length']
-    # feature set: base (23-dim) vs stage1 (41-dim musical features)
-    if args.features == 'stage1':
-        from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
+    # feature set: base (23-dim) vs stage1 (41-dim musical) vs highres (42-dim, + high-res onset)
+    from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
+    if args.features == 'highres':
+        feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
+                                                            use_metric_phase=True, use_highres_onset=True))
+        audio_dim, cache = 42, 'cache/samples_v3'
+    elif args.features == 'stage1':
         feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
         audio_dim, cache = 41, 'cache/samples_v2'
     else:
@@ -231,9 +252,23 @@ def main():
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
         diff = torch.tensor([diff_idx], device=device)
         with torch.no_grad():
-            p_onset = torch.sigmoid(model.onset_logits(model.encode_audio(audio), diff))[0].cpu().numpy()
+            # tau MUST be computed from the SAME conditioned logits generate() decodes from, else radar/style
+            # conditioning (which raises p broadly) floods past a tau calibrated on the unconditioned p.
+            memory = model.encode_audio(audio)
+            ol_onset = model.onset_logits(memory, diff, radar=radar_for_gen, style=style_for_gen)[0]
+            if args.guidance != 1.0 and (radar_for_gen is not None or style_for_gen is not None):
+                ol_u = model.onset_logits(memory, diff, radar=None, style=None)[0]
+                ol_onset = ol_u + args.guidance * (ol_onset - ol_u)
+            if phase_calib is not None:  # apply the SAME per-phase offset used inside generate() before tau
+                b8, b16 = phase_calib; ph = torch.arange(ol_onset.shape[0], device=device) % 4
+                ol_onset = ol_onset + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
+            p_onset = torch.sigmoid(ol_onset).cpu().numpy()
         real_density = float((orig_typed != 0).any(1).mean())
-        tau = float(np.quantile(p_onset, 1 - real_density)) if real_density > 0 else 0.5
+        # density target: the source chart's own density by default, OR a fixed override (--target_density).
+        # Raising chaos at FIXED density forces quarter->off-beat REPLACEMENT (backbone collapse); real charts
+        # raise density WITH chaos (corr +0.63), so a high-chaos export must lift density too.
+        gen_density = args.target_density if args.target_density is not None else real_density
+        tau = float(np.quantile(p_onset, 1 - gen_density)) if gen_density > 0 else 0.5
 
         gen = model.generate(audio, diff, lengths=torch.tensor([T], device=device),
                              onset_threshold=tau, type_sample=True,
@@ -244,6 +279,7 @@ def main():
                              no_jump_during_hold=args.no_jump_during_hold,
                              no_cross_during_hold=args.no_cross_during_hold,
                              onset_phase_penalty=args.onset_phase_penalty,
+                             onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
                              style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen)[0].cpu().numpy()
         gen = pair_holds(gen)
 
