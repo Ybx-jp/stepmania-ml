@@ -343,7 +343,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None,
-                 no_jump_during_hold=False, onset_phase_penalty=0.0):
+                 no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -408,8 +408,17 @@ class LayeredTypedChartGenerator(nn.Module):
         if pattern_bias is not None:
             pattern_bias = torch.as_tensor(pattern_bias, dtype=torch.float32, device=device)  # (15,)
         n_panels = panel_bits.sum(1)                                        # (15,) panels per pattern
+        # no_cross_during_hold state: while a hold pins one foot, the free foot handles other notes; a fast
+        # cross to the OPPOSITE panel (L<->R, D<->U) is un-dance-able (the B4U "jacks with one foot during a
+        # hold" — see notes/choreography_metrics_findings.md). Track the free foot's last panel + recency.
+        OPP = torch.tensor([3, 2, 1, 0], device=device)                     # opposite panel: L<->R, D<->U
+        single_panel = torch.where(n_panels == 1, panel_bits.float().argmax(1),
+                                   torch.full((NUM_PATTERNS,), -1, device=device).long())  # (15,) panel if single else -1
+        free_last = torch.full((B,), -1, dtype=torch.long, device=device)   # free foot's last panel (this hold)
+        free_gap = torch.full((B,), 99, dtype=torch.long, device=device)    # frames since free foot's last note
 
         for t in range(T):
+            held_start = held                                              # hold state at frame start (hold_aware rebinds held later)
             pe_t = self.pos_encoding.pe[:, t:t + 1]
             h = self._decoder_step_cached(prev_emb + pe_t + cond_emb, caches)[:, -1]
             pat_logits = self.pattern_head(h)                                  # (B,15)
@@ -436,6 +445,20 @@ class LayeredTypedChartGenerator(nn.Module):
                 fresh_cnt = (panel_bits.unsqueeze(0).bool() & (~held).unsqueeze(1)).sum(-1)  # (B,15) fresh presses per pattern
                 forbid = held.any(1, keepdim=True) & (fresh_cnt >= 2)        # (B,15)
                 pat_logits = pat_logits.masked_fill(forbid, float("-inf"))
+            if no_cross_during_hold:  # free foot fast-crossing panels while a hold pins the other foot (un-danceable)
+                in_hold = (free_last >= 0) & held_start.any(1)
+                g16 = in_hold & (free_gap <= 1)   # 16th gap (worst): forbid ALL different-panel singles (allow jack)
+                g8 = in_hold & (free_gap == 2)    # 8th gap: forbid only the OPPOSITE single (dist-2 cross)
+                SINGLE_IDX = (1 << torch.arange(NUM_PANELS, device=device)) - 1  # single-panel pattern idx per panel
+                if g16.any():
+                    rows = g16.nonzero(as_tuple=True)[0]
+                    for p in range(NUM_PANELS):                                # forbid single panel p where p != free_last
+                        bad = rows[free_last[rows] != p]
+                        if len(bad):
+                            pat_logits[bad, SINGLE_IDX[p]] = float("-inf")
+                if g8.any():
+                    rows = g8.nonzero(as_tuple=True)[0]
+                    pat_logits[rows, (1 << OPP[free_last[rows]]) - 1] = float("-inf")
             if pattern_sample or not greedy:
                 lg = pat_logits / (pattern_temperature if pattern_sample else temperature)
                 if pattern_top_k is not None:
@@ -471,6 +494,15 @@ class LayeredTypedChartGenerator(nn.Module):
             npc = n_panels[pat]                        # panels in the chosen pattern
             next_foot = torch.where(on & (npc == 1), 1 - next_foot, next_foot)   # alternate on singles
             next_foot = torch.where(on & (npc >= 2), torch.zeros_like(next_foot), next_foot)  # reset after jump
+            # free-foot tracking for no_cross_during_hold: a single note placed while a hold was already open
+            free_gap = free_gap + 1
+            sp = single_panel[pat]                                              # (B,) panel if single pattern else -1
+            is_free_single = on & (sp >= 0) & held_start.any(1)
+            free_last = torch.where(is_free_single, sp, free_last)
+            free_gap = torch.where(is_free_single, torch.zeros_like(free_gap), free_gap)
+            no_hold = ~held.any(1)                                              # hold closed (end of frame) -> reset
+            free_last = torch.where(no_hold, torch.full_like(free_last, -1), free_last)
+            free_gap = torch.where(no_hold, torch.full_like(free_gap, 99), free_gap)
 
         if lengths is not None:
             valid = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)

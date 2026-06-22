@@ -65,6 +65,9 @@ def parse_args():
     p.add_argument('--no_crossovers', action='store_true', help='forbid crossover steps (foot automaton)')
     p.add_argument('--no_jump_during_hold', action='store_true',
                    help='forbid jumps while a hold is open (one free foot); pad-playable holds')
+    p.add_argument('--no_cross_during_hold', action='store_true',
+                   help='forbid the free foot fast-crossing panels while a hold is open (the B4U one-foot '
+                        'jacks-during-hold awkwardness; brings hold_burst ~6.9%%->4.7%% vs real 4.0%%)')
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
@@ -72,11 +75,26 @@ def parse_args():
     p.add_argument('--radar', type=str, default=None,
                    help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
                         'e.g. "chaos=0.9,air=0.85"; unset dims default to the dataset mean. Use with --guidance to amplify.')
+    p.add_argument('--match_radar', action='store_true',
+                   help="condition each song's generation on its OWN source-chart radar (with --guidance) so "
+                        "the output matches the original's groove profile -- avoids profile drift when you "
+                        "selected/expected a specific feel. Overrides --radar; pair with --guidance 1.5-2.5.")
+    p.add_argument('--reference_self', action='store_true',
+                   help="per-song style conditioning: encode each song's OWN source chart as the StyleEncoder "
+                        "latent (the full-chart path vs match_radar's 5-dim summary). Pair with --guidance ~2.")
     p.add_argument('--max_len', type=int, default=1440)  # full 2-min songs (KV-cache makes it cheap)
     p.add_argument('--install', action='store_true',
                    help="After exporting, copy the set into the StepMania songs dir (no sudo).")
     p.add_argument('--songs_dir', default=None,
                    help="Destination for --install (default: $SM_SONGS_DIR or ~/sm-generated).")
+    p.add_argument('--groove_select', default='none',
+                   choices=['none', 'rich', 'stream', 'voltage', 'air', 'freeze', 'chaos'],
+                   help="GROOVE-VALIDATE the set: pick songs that read strongly on this axis so the set "
+                        "actually tests the hypothesis (freeze=holds, stream/voltage=density, air=jumps, "
+                        "chaos=syncopation; 'rich'=strong across all). Reports the chosen songs' radar. "
+                        "'none' = first-N by seed order (legacy).")
+    p.add_argument('--difficulty_select', default=None, choices=['Beginner', 'Easy', 'Medium', 'Hard'],
+                   help="Restrict groove-selected songs to this difficulty class (harder = more revealing).")
     return p.parse_args()
 
 
@@ -103,7 +121,10 @@ def main():
         audio_dim, cache = 41, 'cache/samples_v2'
     else:
         feat_ext, audio_dim, cache = None, 23, 'cache/samples'
-    ds = StepManiaDataset(chart_files=val_files[:args.num_songs * 8], audio_dir=args.audio_dir,
+    # widen the candidate pool when groove-selecting (parsing is cheap; audio is extracted only for the
+    # chosen songs) so the selector has enough songs to find strong-on-axis ones.
+    pool = args.num_songs * (40 if args.groove_select != 'none' else 8)
+    ds = StepManiaDataset(chart_files=val_files[:pool], audio_dir=args.audio_dir,
                           max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=cache)
 
     model = LayeredTypedChartGenerator(audio_dim=audio_dim, d_model=128, num_layers=4, onset_layers=2).to(device)
@@ -159,11 +180,25 @@ def main():
                     if (args.jump_bias or panel_prefs) else None)
 
     out_root = Path(args.out_dir); out_root.mkdir(parents=True, exist_ok=True)
+
+    # Groove-validate the set: pick songs that read strongly on the axis under test (else the playtest
+    # can't reveal the hypothesis -- e.g. B4U has 3 holds, useless for a hold fix). Report the profile.
+    if args.groove_select != 'none':
+        from src.data.song_selection import select_by_groove, radar_table, RADAR_DIMS
+        dcls = ['Beginner', 'Easy', 'Medium', 'Hard'].index(args.difficulty_select) if args.difficulty_select else None
+        order = select_by_groove(ds, n=args.num_songs, by=args.groove_select, difficulty=dcls)
+        print(f"\nGROOVE-SELECTED by '{args.groove_select}'"
+              f"{f' (difficulty={args.difficulty_select})' if args.difficulty_select else ''} "
+              f"-- {len(order)} songs, strongest first:")
+        print(radar_table(ds, order))
+    else:
+        order = range(len(ds.valid_samples))
+
     print(f"\n{'song':<34} {'diff':<8} {'gen_dens':>8} {'ref_dens':>8} {'holds':>6} {'critic':>9}")
     print("-" * 80)
 
     exported, seen = 0, set()
-    for i in range(len(ds.valid_samples)):
+    for i in order:
         if exported >= args.num_songs:
             break
         meta = ds.valid_samples[i]
@@ -177,6 +212,20 @@ def main():
         audio_np = sample['audio'][:T].numpy().astype(np.float32)
         orig_typed = ds.parser.convert_to_tensor_typed(meta['chart'], nd)[:T]
         diff_idx = meta['difficulty_class']
+
+        # radar conditioning: match this song's own source profile (so output ~ original feel), else the
+        # fixed --radar target (or none).
+        radar_for_gen = radar_vec
+        if args.match_radar:
+            radar_for_gen = torch.from_numpy(
+                meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
+        # style conditioning: per-song self-reference (encode this song's own source chart) vs global --reference
+        style_for_gen = style_vec
+        if args.reference_self:
+            ref_t = torch.from_numpy(np.asarray(orig_typed)).long().unsqueeze(0).to(device)
+            ref_mask = torch.ones(1, ref_t.shape[1], device=device)
+            with torch.no_grad():
+                style_for_gen = model.encode_style(ref_t, ref_mask)
 
         # onset threshold matched to THIS chart's real density
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
@@ -193,8 +242,9 @@ def main():
                              repetition_penalty=args.repetition_penalty,
                              pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                              no_jump_during_hold=args.no_jump_during_hold,
+                             no_cross_during_hold=args.no_cross_during_hold,
                              onset_phase_penalty=args.onset_phase_penalty,
-                             style=style_vec, guidance_scale=args.guidance, radar=radar_vec)[0].cpu().numpy()
+                             style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen)[0].cpu().numpy()
         gen = pair_holds(gen)
 
         chart_obj = meta['chart']

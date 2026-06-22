@@ -6,9 +6,90 @@ Each entry: **what was played → raw feedback → commentary/hypothesis → act
 
 Sample sets live under `outputs/` (gitignored). Generation: `export_typed_samples.py`.
 
+**METHODOLOGY (06-21, user directive): playtest sets must be GROOVE-VALIDATED.** A set only tests a
+hypothesis if its songs actually exercise the relevant axis — B4U with 3 holds can't test a hold fix.
+Going forward: (1) songs must be hard enough to reveal decoder/musicality subtleties; (2) MORE important,
+each set's songs must have strong, relevant groove-radar readings (`select_by_groove`), and the export
+must REPORT them so the set is a meaningful test. Deja loin is a good general test — strong stream,
+voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, high stream/voltage/chaos.
+
 ---
 
-## 2026-06-21 — Chaos gate A1 (selective off-beats land on audio events but DON'T feel musical)
+## 2026-06-21 — Hold-fix on a freeze-validated Hard set (Dead Heat = WIN; KIM = data timing bug)
+
+### What was played
+`~/sm-generated/holdfix2_fixed` — freeze-validated Hard songs (freeze 0.60–0.87, 5–25 holds), the first
+*real* hold test (vs B4U's 3 holds). `no_cross_during_hold` on.
+
+### Raw feedback (user)
+> "kim possible was such a weird song to play, almost like the audio was misaligned? seemed like 1/4 and
+> 1/8 noteskins were swapped."
+> "dead heat was a fun one! it had really interesting complexity, very intense jumps and jacks. it
+> definitely felt like a proper hard/expert. good note patterns during holds."
+
+### Commentary / hypotheses
+- **★ Dead Heat = the hold fix CONFIRMED on a valid test, and the model's ceiling is higher than the
+  easy tests showed.** "Proper hard/expert," "intense jumps and jacks," and crucially **"good note
+  patterns during holds"** — exactly what `no_cross_during_hold` targets. So on a freeze-validated,
+  properly-hard song the model produces a genuinely good expert chart. Two lessons: (a) the hold-cross
+  fix works where it matters; (b) **groove-validated selection reveals real quality** the under-grooved
+  easy songs (B4U) hid — vindicates the 06-21 methodology directive.
+  **Follow-up direct A/B (same song): "both fixed and baseline were really fun, fixed was better on the
+  basis of the hold decode changes."** Clean same-song confirmation — `no_cross_during_hold` is the cause
+  of the improvement. Fix conclusively validated; PR'd.
+- **KIM POSSIBLE = a DATA timing bug (audio↔OFFSET mismatch), NOT the model.** Diagnosed: BPM is CORRECT
+  (stored 122 ≈ librosa 123, ratio 0.99) — so NOT the 2×-BPM I first guessed. And the GENERATED chart is
+  properly on-grid (phase% 73 on the quarter / 27 on the 8th, even *more* on-beat than the original's 61).
+  So the chart is internally correct; the grid is just mis-aligned to *this audio file* — i.e. the audio
+  was re-encoded with different leading silence than the chart's `#OFFSET` expects, shifting everything
+  (original AND generated) against the music → "misaligned, colors swapped." A per-song data issue, common
+  in community packs. Implication beyond one song: audio↔offset mismatches are **label noise in the
+  audio↔chart alignment** — the model trains on mis-timed pairs and generates on a wrong grid for them. A
+  dataset-wide onset-vs-grid alignment audit could be a data-quality lever (the chaos/groove metrics all
+  assume correct beat alignment).
+
+### Action / next
+- [ ] Diagnose KIM POSSIBLE's parsed bpm/offset vs the audio's actual tempo (below). If 2× → confirms the
+  data-timing-bug class.
+- [ ] Consider a dataset-wide bpm-vs-librosa-tempo audit (how many charts are mis-timed = training noise).
+- [ ] Dead Heat win → the hold-cross decode fix is validated; ready to PR + fold into the default decode.
+- [ ] H11 (transitions) still the standing next-investigation.
+
+### What was played
+`~/sm-generated/holdfix_{baseline, fixed}` (gen_stage1, 6 songs, pattern_temp 0.7). baseline =
+`no_jump_during_hold`; fixed = + `no_cross_during_hold` (free foot can't fast-cross while a hold pins the
+other foot — the B4U one-foot-jacks-during-hold awkwardness). Offline: hold_burst 8.7%→4.7% (real 4.0%),
+density unchanged. See `hold_cross_decode.md`.
+
+### Raw feedback (user)
+> "B4U is too easy to tell anything — baseline only has 3 holds in all."
+> "deja loin (fixed) was better than baseline. both had awkward sequences in the beginning of the song
+> and during the bridge/breakdown. i sense the model does well continuing a sequence but struggles to
+> adapt to transitions."
+> "the other songs were not well suited to this test."
+
+### Commentary / hypotheses
+- **Hold-cross fix CONFIRMED (partial, on the one valid song):** deja loin fixed > baseline. The metric
+  (hold_burst) predicted the B4U complaint AND a fix that lands it on real felt better — the metric↔feel
+  link holds both ways. But only deja loin had enough holds to test; B4U (3 holds) and the rest were
+  un-validated for freeze → the methodology lesson above.
+- **★ H11 (new): the model handles STEADY-STATE well but fails at TRANSITIONS.** Awkwardness clustered at
+  the *start* and the *bridge/breakdown* — exactly the song-section boundaries where the music changes
+  character. "Does well continuing a sequence, struggles to adapt to transitions." This unifies the
+  long-standing "cold-start / awkward opening" thread with mid-song breakdowns: both are TRANSITIONS. The
+  AR pattern head continues a motif fine but has no signal for "the section just changed, re-choreograph."
+  Connects to H5 (no global/phrase structure) — H11 is the *local* symptom of it (transition points)
+  vs H5's *global* symptom (density arc). Likely root: frame-local features + no phrase/boundary signal
+  (audio novelty / self-similarity boundaries would mark transitions).
+
+### Action / next
+- [ ] **Build groove-validated song selection into the exporter** (the methodology directive) — select +
+  REPORT songs by groove radar; freeze for hold tests, rich/multi-dim for general. Re-export holdfix on
+  high-freeze songs for a real test. [in progress]
+- [ ] **Transition hypothesis (H11):** does awkwardness localize to audio section-boundaries? Measure
+  generated-error vs audio novelty/self-similarity boundaries. Fix levers: a boundary/novelty audio
+  feature, or phrase-position conditioning. Pairs with H5.
+- [ ] PR the hold-cross decode fix once confirmed on a freeze-validated set.
 
 ### What was played
 `~/sm-generated/chaos_gate_{gated, smear}` (from `chaos_gate.py`). **gated** = decode-time selective gate:
