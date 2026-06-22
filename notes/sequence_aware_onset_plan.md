@@ -30,10 +30,15 @@ Root insight (user): we measured the wrong objective — global/audio, not local
   vs real 1.0. Exposure bias the OTHER way: own context says "in a run, continue" → runaway streams. Audio
   anchor moderates (both<seq) but doesn't tame. So: signal real (teacher-forced 0.935), but naive AR
   unstable → **scheduled sampling is MANDATORY, not optional**, with residual risk it doesn't fully tame it.
-- [NEXT GATE] Scheduled-sampling de-risk (`diag_ar_stability.py --scheduled_sampling`): train on a mix of
-  teacher-forced + the model's OWN rolled-out context; re-measure AR density/run-lengths. Comes back to ~real
-  → the build will work → proceed. Still explodes → harder (need decode-time density control / a different
-  AR formulation) → reassess before the expensive generator integration.
+- [DONE — PARTIAL] Scheduled-sampling de-risk (`--scheduled_sampling`, one-step, eps→0.5): density 0.73→0.66,
+  mean-run 5.7→4.0 — HELPED but did NOT tame (still ~3.7× real density, stream-biased). The instability is
+  RUNAWAY SELF-FEEDBACK (place note → context says "in a run" → snowball); SS only dampens it. Says: the
+  FULLY-AR onset formulation is the wrong shape, not that the signal is bad (still 0.935 teacher-forced).
+- [PROPOSED PIVOT] NON-AR note-context / ITERATIVE REFINEMENT: first-pass onset from audio (current stable
+  head) → refine with note-context computed over the FIXED first-pass chart (not own streaming output) →
+  1-2 passes approximate the real-note context (0.935) with NO runaway loop. De-risk: 2-pass refine probe —
+  does it improve placement (run-lengths toward real) while staying stable? Alternatives if it fails:
+  density-budgeted AR decode (caps density, may stay stream-biased); full sequential SS with eps→1.
 - [ ] Build (only if scheduled-sampling gate passes): causal note-context branch on the onset head
   (warm-start v4 audio branch) + scheduled sampling + KV-cache the note branch. Eval on PLACEMENT (16th-AUC +
   run-length match) + taste critic + playtest. NOT per-song L1.

@@ -93,6 +93,10 @@ def main():
     ap.add_argument('--epochs', type=int, default=6); ap.add_argument('--max_len', type=int, default=512)
     ap.add_argument('--max_train', type=int, default=1500); ap.add_argument('--roll_songs', type=int, default=10)
     ap.add_argument('--bs', type=int, default=16); ap.add_argument('--lr', type=float, default=1e-3)
+    ap.add_argument('--scheduled_sampling', action='store_true',
+                    help='train on a mix of teacher-forced + the model OWN one-step predictions (anneal eps '
+                         '0->ss_max_eps) to cure the AR explosion (exposure bias).')
+    ap.add_argument('--ss_max_eps', type=float, default=0.5)
     args = ap.parse_args()
     set_seed(42); device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cf = glob.glob("data/**/*.sm", recursive=True) + glob.glob("data/**/*.ssc", recursive=True)
@@ -122,14 +126,24 @@ def main():
     real_dens = np.mean([y.mean() for _, y in roll]); real_runs = np.mean([run_stats(y)[0] for _, y in roll])
     real_iso = np.mean([run_stats(y)[1] for _, y in roll])
     print(f"onset rate {pr:.3f}; REAL roll: density {real_dens:.3f}, mean-run {real_runs:.2f}, isolated {real_iso:.0f}%\n", flush=True)
-    print(f"  {'head':<6} {'AR density':>11} {'mean-run':>9} {'isolated%':>10}  (REAL: d={real_dens:.3f} run={real_runs:.2f} iso={real_iso:.0f}%)")
-    for kind in ['both', 'seq']:
+    print(f"  {'head':<10} {'AR density':>11} {'mean-run':>9} {'isolated%':>10}  (REAL: d={real_dens:.3f} run={real_runs:.2f} iso={real_iso:.0f}%)")
+    kinds = ['both'] if args.scheduled_sampling else ['both', 'seq']
+    for kind in kinds:
         set_seed(42); m = OnsetAR(kind).to(device); opt = torch.optim.Adam(m.parameters(), lr=args.lr)
         for ep in range(args.epochs):
             m.train()
+            eps = args.ss_max_eps * ep / max(args.epochs - 1, 1) if args.scheduled_sampling else 0.0
             for X, Op, Y, M in batches(train):
                 opt.zero_grad()
-                loss = nn.functional.binary_cross_entropy_with_logits(m(X, Op)[M], Y[M], pos_weight=pw)
+                if eps > 0:  # one-step scheduled sampling: mix the model's OWN prev-onset into the context
+                    with torch.no_grad():
+                        oh = torch.bernoulli(torch.sigmoid(m(X, Op)))      # (B,T) own one-step samples
+                        hat_prev = torch.zeros_like(Op); hat_prev[:, 1:, 0] = oh[:, :-1]
+                        mix = (torch.rand_like(Op) < eps)
+                        Op_use = torch.where(mix, hat_prev, Op)
+                else:
+                    Op_use = Op
+                loss = nn.functional.binary_cross_entropy_with_logits(m(X, Op_use)[M], Y[M], pos_weight=pw)
                 loss.backward(); opt.step()
         # AR rollout (Bernoulli, feed own predictions)
         m.eval(); dens, runs, iso = [], [], []
@@ -144,7 +158,8 @@ def main():
                     if t + 1 < T:
                         og[0, t + 1, 0] = s
                 dens.append(act.mean()); r = run_stats(act); runs.append(r[0]); iso.append(r[1])
-        print(f"  {kind:<6} {np.mean(dens):>11.3f} {np.mean(runs):>9.2f} {np.mean(iso):>9.0f}%", flush=True)
+        label = kind + ('+ss' if args.scheduled_sampling else '')
+        print(f"  {label:<10} {np.mean(dens):>11.3f} {np.mean(runs):>9.2f} {np.mean(iso):>9.0f}%", flush=True)
     print(f"\n  both density~real & runs~real -> audio-anchored AR is STABLE+COHERENT -> build the head.")
     print(f"  both density->0 -> drift survives anchor -> scheduled sampling mandatory.")
     print(f"  seq collapses but both stable -> the audio anchor prevents collapse (design confirmed).")
