@@ -24,13 +24,19 @@ recall credit for the easy 8th; the coarse onset feature resolves 8ths, 16ths ne
 - 16th PLACEMENT quality ("awkward 16ths") — separate model issue, after commitment.
 - Radar-conditioning + heuristic tuning — the user's explicit "circle back AFTER the retrain."
 
-## Step 0 — confirm the mechanism (cheap, no retrain; ~15 min)
-Sharpen "knows-but-loses" before designing the loss. At frames where REAL places a 16th: model p_on there
-vs p_on at the 8th frames it picks instead (per-song, under coherent conditioning). And: do hands-filtered-
-OUT charts carry disproportionately more 16ths (data starvation overlap)?
-- knows-but-loses (expected) → OBJECTIVE lever (make 16ths win where the audio supports them).
-- can't-see → FEATURE lever (high-res reach; unlikely given AUC 0.742).
-- data-starved → DATA lever (overlaps the queued hands-filter work; would change scope).
+## Step 0 — confirm the mechanism (DONE, `diag_16th_commit.py`, 39 coherent-conditioned songs)
+**Result = KNOWS-BUT-LOSES (objective lever), with a placement ceiling.** Per-song threshold, coherent
+conditioning: recall of real-8th notes 0.741 vs real-16th notes **0.065** (16ths catastrophically dropped);
+p_on @ real-16th-notes 0.475 vs real-8th-notes 0.612 (under-scored ~0.14) vs no-note-16th 0.430; AUC @ 16th
+frames **0.671** (> chance → it DOES see them, moderately). The model identifies real 16ths but ranks them
+below 8ths, so the threshold drops them. → **OBJECTIVE lever** (raise 16th commitment RELATIVE to 8ths).
+(The script's auto-label "CANT-SEE" was an over-strict conjunction; AUC 0.67 is decisively > chance — read
+the numbers, don't trust the auto-verdict: [[experiment-design]] rule 1/8.)
+- **Placement ceiling:** AUC 0.67 (moderate) → the objective fix improves QUANTITY (how many real 16ths get
+  placed; the "8th bias") but caps PRECISION (where they land; the "awkward 16ths") → placement is a FEATURE
+  follow-on, separate from v6.
+- **Data sub-check INCONCLUSIVE:** the secondary mis-measured simultaneity (note-starts, not sustained hold
+  occupancy → "0 rejected", contradicting the known ~55% hands rejection). Not a finding; out of v6 scope.
 
 ## Step 1 — v6 retrain (ONE primary change, chosen by Step 0)
 Leading candidate (if knows-but-loses): an onset objective that stops rewarding 8th-substitution — make the
