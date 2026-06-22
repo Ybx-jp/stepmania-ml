@@ -343,7 +343,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None,
-                 no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False):
+                 no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
+                 boundary_reset=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -417,7 +418,15 @@ class LayeredTypedChartGenerator(nn.Module):
         free_last = torch.full((B,), -1, dtype=torch.long, device=device)   # free foot's last panel (this hold)
         free_gap = torch.full((B,), 99, dtype=torch.long, device=device)    # frames since free foot's last note
 
+        reset_at = set(int(x) for x in boundary_reset) if boundary_reset is not None else set()
         for t in range(T):
+            if t in reset_at:  # H11 boundary reset: drop note-history momentum (flush self-attn KV +
+                prev_emb = self.bos.expand(B, 1, -1)                       # BOS) so the pattern head
+                for c in caches:                                          # re-derives choreography from
+                    c.k = None; c.v = None                                # audio (cross-attn mem_k/v kept)
+                if do_cfg:
+                    for c in uncond_caches:
+                        c.k = None; c.v = None
             held_start = held                                              # hold state at frame start (hold_aware rebinds held later)
             pe_t = self.pos_encoding.pe[:, t:t + 1]
             h = self._decoder_step_cached(prev_emb + pe_t + cond_emb, caches)[:, -1]
