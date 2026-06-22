@@ -61,8 +61,14 @@ stays gen_highres_v4.
 ## De-risk ladder (cheap gates first — [[experiment-design]])
 - [x] Objective gate: critic sees placement -> PASSED.
 - [x] Data gate: multi-charting pool exists (484) -> PASSED (verify-differ TODO).
-- [ ] Multi-charting DIVERGENCE check: do the 484 independent chartings actually DIFFER (esp. in 16th
-  placement)? quantifies the ambiguity + validates distribution data. Cheap.
+- [x] Multi-charting DIVERGENCE check DONE (`diag_chart_divergence.py`, 228 title-pairs): only 14% COPIES
+  (86% independent); 79% differ at the GRID level (different BPM/length); of the 15 directly-comparable
+  pairs, onset-IoU median 0.60 and **16th-IoU median 0.325** — independent humans agree on only ~1/3 of 16th
+  placements. **PLACEMENT AMBIGUITY IS REAL AND LARGE.** This is the cleanest explanation of the whole arc:
+  there is NO single right 16th placement, so point-target training chased one arbitrary sample of a
+  high-variance distribution -> mush. Strongly validates modeling the DISTRIBUTION. (Caveat: N=15 comparable
+  pairs is small; but 86%-differ is robust and the comparable subset is the MOST similar -> likely understates
+  divergence. Also = a strong evaluation-thesis result: a quality axis that is inherently a distribution.)
 - [ ] Generation prototype: tiny mask-predict/diffusion on ONSET placement only — does joint denoising-from-
   noise beat refinement-from-bad-C0 (0.666) toward the 0.935 ceiling? The core paradigm test.
 - [ ] Then scope the full conditioned, critic-trained generative model.
