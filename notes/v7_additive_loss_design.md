@@ -45,6 +45,59 @@ problem, separate) — v7 can fix the RATE/quantity additively, not perfect plac
 4. **Density coupled to chaos at GENERATION (the additive mechanism):** generate high-chaos with
    --target_density on the real chaos→density curve (~0.22 low → ~0.34 high) so 16ths are ADDED, not traded.
 
+## REFINED (user direction 06-22) — reweighted BCE + the MUSICAL-LINKAGE feature path
+Decisions:
+- **Loss = reweighted BCE** (confirmed): modest w16, keep w8, paired with the additive per-phase-rate
+  selection metric. (Ranking loss dropped — v6 proved it untameable.)
+- **Density coupling is "too flat"** (user): a per-song scalar controls how MANY 16ths, never WHICH — it
+  can't fix the AUC-0.67 *localization* wall. The real lever is **musical linkage**: tie 16th placement to
+  audible cues. This is the mountaintop; decode/fine-tune is "fine-tuning at best."
+- **Sequencing change:** do NOT run reweighted-BCE v7 standalone (it fixes rate, inherits the placement
+  wall, and a feature change needs a retrain anyway). PROBE features first, then fold reweighted-BCE into
+  the ONE feature retrain.
+
+Candidate musical-linkage features (map of user's cues):
+- **perc_hr** — HPSS-PERCUSSIVE high-res onset (drum fills/runs = most 16th sources). NB H8 found HPSS
+  onsets redundant at COARSE res; fine-res percussive-only is untested — the probe settles it.
+- **harm_hr** — HPSS-HARMONIC high-res onset; **chroma_flux** — melodic note attacks (synth/lead accents).
+- **BPM** — currently IMPLICIT (baked into grid hop); add as explicit conditioning scalar so the model can
+  thin 16ths at high BPM like real charters do.
+- Pushback noted: AUC 0.67 may be ARCHITECTURE (per-frame conv can't see a 16th-RUN), not features — the
+  probe distinguishes (better features lift AUC => features; flat => architecture/audio-ambiguity).
+
+Plan:
+1. **Feature probe (cheap, no retrain) — `diag_16th_features.py`:** does perc_hr / harm_hr / chroma_flux
+   beat mixed_hr (AUC ~0.67) at 16th localization? + BPM vs real-16th-rate correlation.
+2. **Gate:** features lift AUC -> ONE retrain with winning feature(s) + reweighted-BCE + additive metric +
+   density-coupled generation. Flat -> architecture pivot (sequence-aware onset head) or accept the ceiling.
+3. **Eval on PLACEMENT** (16th-AUC / onset-F1-at-16th vs real 16ths), not just rate, + playtest.
+Expectation: even with features, placement has a real ceiling (audio is ambiguous — many valid chartings);
+aim to MEANINGFULLY raise AUC so 16ths land on audible events often enough to feel intentional.
+
+## PROBE RESULT (diag_16th_features.py) — musical-cue FEATURES REFUTED
+20 chaotic songs, 16th-localization AUC (real-16th-note vs no-note at 16th frames):
+```
+  mixed_hr  0.586 (current)   perc_hr 0.581   harm_hr 0.579   perc+harm 0.586
+  BPM vs real 16th-rate: Spearman -0.229  (predicted sign, weak)
+```
+- **HPSS percussive/harmonic high-res onsets do NOT beat the mixed onset** (all ~0.58, within noise). The
+  drums/synth-cue hypothesis (via HPSS) is refuted — separating sources adds no 16th-placement signal.
+- Raw-onset AUC (~0.59) is BELOW the model's learned p_on AUC (0.67): the model already extracts more from
+  context than any single raw onset cue → little headroom for new onset features; the bottleneck is how the
+  model USES signal, not the raw cue.
+- BPM weak (−0.23). chroma_flux (melodic) UNTESTED (chroma_* segfaults here, numba); harm_hr is a proxy and
+  didn't help, so melodic-onset is unlikely to either — small open gap.
+- **Gate result: FLAT → not a feature problem.** 16th placement is near an audio-ambiguity ceiling (many
+  valid chartings of the same fill — partly charter style) and/or an architecture limit (per-frame conv head
+  can't model a 16th RUN). Probe rules OUT hand-crafted features; can't fully separate ambiguity vs arch.
+
+## Decision (post-probe)
+Don't engineer features. Proceed with **reweighted-BCE additive retrain** (the loss already chosen) as the
+realistic, concrete win: gets the 8th/16th BALANCE real-like (additive — quarters+8ths preserved, 16ths
+added via density coupling), with 16th PLACEMENT at the model's existing ~0.67 quality (decent, not perfect —
+the audio ceiling). Honest expectation: this fixes the AMOUNT/feel, not perfect placement. Longer bet if
+placement still feels off in playtest: a sequence-aware onset head (architecture), NOT more features.
+
 ## Open questions for the user's review
 - Loss primitive: tamed ranking (2a) vs reweighted BCE (2b) vs direct rate-matching (2c)? (I lean 2b first —
   simplest, lowest-risk; v6 showed the ranking loss is hard to tame.)
