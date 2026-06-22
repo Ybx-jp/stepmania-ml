@@ -68,6 +68,10 @@ def parse_args():
     p.add_argument('--no_cross_during_hold', action='store_true',
                    help='forbid the free foot fast-crossing panels while a hold is open (the B4U one-foot '
                         'jacks-during-hold awkwardness; brings hold_burst ~6.9%%->4.7%% vs real 4.0%%)')
+    p.add_argument('--onset_phase_alloc', type=str, default=None,
+                   help='phase-aware onset threshold: target note shares "quarter,8th,16th" (real ~"0.707,0.252,0.041"). '
+                        'Redistributes the density budget across phases so the model\'s own 16th confidence wins 16th '
+                        'slots instead of losing to 8ths (which a single threshold buries). None = single threshold.')
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
@@ -109,6 +113,8 @@ def typed_binary(t):
 
 def main():
     args = parse_args(); set_seed(args.seed)
+    phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
+                   if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cf = glob.glob(f"{args.data_dir}/**/*.sm", recursive=True) + glob.glob(f"{args.data_dir}/**/*.ssc", recursive=True)
     _, val_files, _ = create_data_splits(cf, random_state=args.seed)
@@ -248,6 +254,7 @@ def main():
                              no_jump_during_hold=args.no_jump_during_hold,
                              no_cross_during_hold=args.no_cross_during_hold,
                              onset_phase_penalty=args.onset_phase_penalty,
+                             onset_phase_alloc=phase_alloc,
                              style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen)[0].cpu().numpy()
         gen = pair_holds(gen)
 
