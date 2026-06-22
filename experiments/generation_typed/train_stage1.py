@@ -34,6 +34,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits, create_datasets
 from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
+from src.data.stepmania_parser import StepManiaParser
 from src.generation.typed_model import LayeredTypedChartGenerator
 from src.generation.typed import (NUM_PATTERNS, NUM_TYPES, NUM_PANELS, SYMBOL_NAMES,
                                    symbol_histogram, pair_holds, panels_to_pattern)
@@ -63,6 +64,12 @@ def parse_args():
     p.add_argument('--checkpoint_dir', default='checkpoints/gen_stage1')
     p.add_argument('--cache_dir', default='cache/samples_v2', help='41-dim musical-feature cache (warm_cache_v2.py)')
     p.add_argument('--cfg_drop', type=float, default=0.15, help='classifier-free guidance: prob of dropping radar conditioning per batch')
+    p.add_argument('--mirror', action='store_true',
+                   help='L<->R mirror augmentation on TRAIN (per-sample p=0.5). ~2x data; attacks panel-bias. '
+                        'Default off reproduces gen_stage1 exactly (one-variable comparison).')
+    p.add_argument('--allow_hands', action='store_true',
+                   help='admit hands/quads (max_simultaneous=4), +55%% of real Hard charts. MUST match the '
+                        'cache_dir built with the same flag (index-based cache).')
     return p.parse_args()
 
 
@@ -118,9 +125,10 @@ def main():
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         max_seq_len = yaml.safe_load(f)['classifier']['max_sequence_length']
     ext41 = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
+    parser = StepManiaParser(max_simultaneous=4) if args.allow_hands else None
     train_ds, val_ds, _ = create_datasets(train_files=train_files, val_files=val_files,
                                           test_files=[], audio_dir=args.audio_dir,
-                                          max_sequence_length=max_seq_len,
+                                          max_sequence_length=max_seq_len, parser=parser,
                                           feature_extractor=ext41, cache_dir=args.cache_dir)
     print("Warming caches (cache/samples_v2; pre-warm with warm_cache_v2.py)...")
     train_ds.warm_cache(show_progress=True); val_ds.warm_cache(show_progress=True)
@@ -162,14 +170,20 @@ def main():
         for i in range(0, len(idx), bs):
             yield [samples[j] for j in idx[i:i + bs]]
 
-    def to_tensors(batch):
+    # L<->R mirror augmentation: panels [L,D,U,R] -> [R,D,U,L] = column perm [3,1,2,0]. Equally-musical
+    # for the same audio (the DDR "Mirror" mod); audio + radar invariant, pattern/type targets are derived
+    # from `states` so they auto-follow. Applied per-sample per-epoch (p=0.5) on TRAIN only.
+    LR_MIRROR = [3, 1, 2, 0]
+
+    def to_tensors(batch, mirror=False):
         T = max(len(s['typed']) for s in batch); B = len(batch)
         audio = torch.zeros(B, T, audio_dim); states = torch.zeros(B, T, NUM_PANELS, dtype=torch.long)
         mask = torch.zeros(B, T, dtype=torch.bool); diff = torch.zeros(B, dtype=torch.long)
         radar = torch.zeros(B, 5)
         for b, s in enumerate(batch):
             t = len(s['typed'])
-            audio[b, :t] = torch.from_numpy(s['audio']); states[b, :t] = torch.from_numpy(s['typed'])
+            typed = s['typed'][:, LR_MIRROR] if (mirror and rng.random() < 0.5) else s['typed']
+            audio[b, :t] = torch.from_numpy(s['audio']); states[b, :t] = torch.from_numpy(typed)
             mask[b, :t] = True; diff[b] = s['difficulty']; radar[b] = torch.from_numpy(s['radar'])
         # pattern target (B,T) and type target (B,T,4)
         active = (states != 0)
@@ -197,7 +211,7 @@ def main():
             model.freeze_audio_encoder(False); print(f"  [epoch {epoch+1}] unfroze audio encoder")
         model.train(); tr = [0.0, 0.0, 0.0]; nb = 0
         for batch in batches(train, args.batch_size, True):
-            audio, states, mask, diff, pat_t, typ_t, active, radar = to_tensors(batch)
+            audio, states, mask, diff, pat_t, typ_t, active, radar = to_tensors(batch, mirror=args.mirror)
             optimizer.zero_grad()
             cond_radar = None if rng.random() < args.cfg_drop else radar  # CFG: drop conditioning sometimes
             ol, pat_l, typ_l = model(audio, states, diff, mask, radar=cond_radar)

@@ -58,6 +58,16 @@ cause of "generated Hard feels too tame for an 11."
   already models holds + 15-way patterns, so simply removing the guard is defensible.
 - **It's a stale Phase-1 guard the typed model outgrew:** `NUM_PATTERNS=15` represents hands/quads and
   the hold-aware decode handles overlapping holds. The max-2 check predates both.
+- **CORRECTION (2026-06-21): the recoverable data is MUCH smaller than 55%.** The 55% was measured on RAW
+  charts (`diag_hands_filter`) WITHOUT the song-length (75–130s) / BPM (60–200) filters. Applying those (as
+  the real dataset does), relaxing max-2 → 4 adds only: **Hard 910→997 (+87, +9.6%)**, Medium +87, Easy +9,
+  Beginner +0; total 3820→4003 (+4.8%). Most hands-heavy expert/hardcore charts are LONG (>130s) and the
+  length filter excludes them anyway — max-2 and length were culling largely the SAME charts. So the
+  parser change is plumbed (`StepManiaParser(max_simultaneous=4)`, `--allow_hands` on warm_cache_v2 +
+  train_stage1) but the EV is low: +10% Hard data, and mirror (2× data) was already neutral. The hands ARE
+  a new pattern (not pure more-of-same) so a small intensity effect is possible, but uncertain. **If the
+  goal is Hard-intensity data, the bigger lever is the song-LENGTH filter** (admit the long expert charts),
+  which is a larger distribution shift. Decision deferred — see below.
 - **Fix (cheap, no representation change):** stop rejecting >2; either keep hands as-is (model already
   supports 15-way patterns) or cap-by-difficulty. Then rebuild the cache and retrain. The only real cost
   is re-extraction + retrain, and it directly targets Hard quality.

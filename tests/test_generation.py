@@ -260,6 +260,49 @@ def test_no_jump_during_hold():
                     held[p] = False
 
 
+def test_no_cross_during_hold():
+    # While a hold pins one foot, the free foot must not fast-cross panels (the B4U "jacks with one
+    # foot during a hold"). The flag must REDUCE (never increase) the count of fast free-foot panel
+    # changes during an open hold. Comparative test (same seed off vs on) -> robust to the exact
+    # free-foot bookkeeping.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 200
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 3])
+    ov = torch.ones(B, T, dtype=torch.bool)  # force onsets so holds and notes appear
+    kw = dict(onset_override=ov, pattern_sample=True, pattern_temperature=1.5, type_sample=True,
+              type_temperature=1.0, hold_aware=True, no_jump_during_hold=True)
+
+    def fast_hold_crosses(g):
+        cnt = 0
+        for b in range(B):
+            held = [False, False, False, False]; last_p, last_t = -1, -99
+            for tt in range(T):
+                held_open = any(held); row = g[b, tt]
+                taps = [p for p in range(4) if row[p] == 1 and not held[p]]  # free-panel taps
+                if held_open and len(taps) == 1:
+                    p = taps[0]
+                    if last_p >= 0 and (tt - last_t) <= 1 and p != last_p:
+                        cnt += 1                       # fast free-foot panel change during a hold
+                    last_p, last_t = p, tt
+                elif not held_open:
+                    last_p = -1
+                for p in range(4):
+                    if row[p] in (2, 4):
+                        held[p] = True
+                    elif row[p] == 3:
+                        held[p] = False
+        return cnt
+
+    torch.manual_seed(0); g_off = m.generate(audio, diff, no_cross_during_hold=False, **kw).numpy()
+    torch.manual_seed(0); g_on = m.generate(audio, diff, no_cross_during_hold=True, **kw).numpy()
+    c_off, c_on = fast_hold_crosses(g_off), fast_hold_crosses(g_on)
+    assert c_on <= c_off, f"no_cross_during_hold increased fast hold crosses: {c_off} -> {c_on}"
+    if c_off > 0:                                       # if there were crosses to fix, it should fix some
+        assert c_on < c_off, f"no_cross_during_hold did not reduce fast hold crosses: {c_off} -> {c_on}"
+
+
 def test_style_encoder_bottleneck_and_invariance():
     # The reference-chart style encoder pools over time to a single (B,d) latent, and
     # padded frames must not affect that latent (masked mean).

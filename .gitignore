@@ -96,6 +96,9 @@ mlflow.db
 outputs/reranked_samples/
 outputs/reranked_hard/
 outputs/chaos_gate/
+outputs/groove_decode/
+outputs/holdfix*/
+outputs/match_test/
 outputs/stage1_samples/
 outputs/style_samples/
 outputs/radar_samples/

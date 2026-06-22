@@ -67,16 +67,22 @@ class StepManiaParser:
                  min_song_length: float = 75.0,
                  max_song_length: float = 130.0,
                  min_bpm: float = 60.0,
-                 max_bpm: float = 200.0):
+                 max_bpm: float = 200.0,
+                 max_simultaneous: int = 2):
         """
         Initialize parser with optional config dict.
 
         Args:
             config: Optional dict from data_config.yaml['data']['stepmania']
                    Keys: min_song_length, max_song_length, min_bpm, max_bpm
+            max_simultaneous: reject difficulties whose tensor has any frame with more than this many
+                   simultaneously-occupied panels. Default 2 (the stale Phase-1 jump constraint, which
+                   excludes 55% of real Hard charts — see notes/constraint_relaxation_roadmap.md). Pass 4
+                   to admit hands/quads (the typed model's 15-way pattern head supports them).
         """
         self.target_sample_rate = target_sample_rate
         self.timesteps_per_beat = timesteps_per_beat
+        self.max_simultaneous = max_simultaneous
 
         # Use config values if provided, otherwise use defaults
         if config:
@@ -554,14 +560,14 @@ class StepManiaParser:
 
     def validate_pattern_quality(self, chart_tensor: np.ndarray) -> bool:
         """
-        Validate chart meets Phase 1 quality requirements:
-        - Max 2 simultaneous steps (jump constraint)
+        Validate chart meets quality requirements:
+        - At most self.max_simultaneous simultaneously-occupied panels (default 2; set 4 to allow hands)
         - Reasonable step density
         - No impossible patterns
         """
         # Check maximum simultaneous steps
         max_simultaneous = np.max(np.sum(chart_tensor, axis=1))
-        if max_simultaneous > 2:
+        if max_simultaneous > self.max_simultaneous:
             return False
 
         active_timesteps = np.sum(np.sum(chart_tensor, axis=1) > 0)
