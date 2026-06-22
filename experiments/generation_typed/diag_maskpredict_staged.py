@@ -34,8 +34,15 @@ from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
 from src.generation.typed_model import LayeredTypedChartGenerator
 from src.generation.typed import pair_holds
 from src.models import LateFusionClassifier
+from src.generation.sm_writer import charts_to_sm
+from src.data.dataset import DIFFICULTY_NAMES
+import re, shutil
 
 AD = 42
+
+
+def safe_name(s):
+    return re.sub(r'[^\w\-]+', '_', str(s)).strip('_')[:50] or 'song'
 V4 = "checkpoints/gen_highres_v4/best_val.pt"; CRITIC = "checkpoints/realism_critic/best_val.pt"
 
 
@@ -136,8 +143,69 @@ def gen_staged(m, audio, real_onset, device):
     return onset
 
 
+def _gen_v4_panels(v4, A42, T, diff, R, onset_override, device):
+    return pair_holds(v4.generate(A42, diff, lengths=torch.tensor([T], device=device),
+                                  onset_override=onset_override, type_sample=True, type_temperature=0.4,
+                                  hold_aware=True, pattern_sample=True, pattern_temperature=0.7,
+                                  no_jump_during_hold=True, radar=R)[0].cpu().numpy())
+
+
+def export_playtest(m, v4, ds, args, device, rng):
+    """STAGED mask-predict vs v4-baseline charts on chaotic Hard songs -> playable folders + install (A/B)."""
+    # groove-validate: Hard songs with real 16ths, ranked by chaos
+    cands = []
+    for i in range(len(ds.valid_samples)):
+        meta = ds.valid_samples[i]
+        if meta['difficulty_class'] < 3: continue
+        cands.append((float(meta['groove_radar'].chaos), i))
+    cands.sort(reverse=True)
+    out_stg = Path(args.export_dir); out_v4 = Path(args.export_dir + '_v4')
+    out_stg.mkdir(parents=True, exist_ok=True); out_v4.mkdir(parents=True, exist_ok=True)
+    print(f"\n=== exporting STAGED vs v4 (chaotic Hard) ===")
+    n = 0
+    for chaos, i in cands:
+        if n >= args.export_songs: break
+        meta = ds.valid_samples[i]; s = ds[i]; T = min(int(s['mask'].sum().item()), args.max_len)
+        nd = next((x for x in meta['chart'].note_data if x.difficulty_name == meta['difficulty_name']
+                   and x.difficulty_value == meta['difficulty_value']), None)
+        if nd is None or T < 256: continue
+        orig = np.asarray(ds.parser.convert_to_tensor_typed(meta['chart'], nd))[:T]
+        real_on = (orig != 0).any(1).astype(np.float32)
+        if real_on.sum() < 32 or (real_on & ((np.arange(T) % 4 == 1) | (np.arange(T) % 4 == 3))).sum() / max(real_on.sum(), 1) < 0.05:
+            continue
+        a = s['audio'][:T, :AD].numpy().astype(np.float32); A42 = torch.from_numpy(a).unsqueeze(0).to(device)
+        diff = torch.tensor([meta['difficulty_class']], device=device)
+        R = torch.from_numpy(meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
+        with torch.no_grad():
+            stg_on = gen_staged(m, a, real_on, device)
+            stg = _gen_v4_panels(v4, A42, T, diff, R, torch.from_numpy(stg_on).bool().unsqueeze(0).to(device), device)
+            p = torch.sigmoid(v4.onset_logits(v4.encode_audio(A42), diff, radar=R))[0].cpu().numpy()
+            v4_on = (p > np.quantile(p, 1 - float(real_on.mean()))).astype(np.float32)
+            v4c = _gen_v4_panels(v4, A42, T, diff, R, torch.from_numpy(v4_on).bool().unsqueeze(0).to(device), device)
+        chart_obj = meta['chart']; music = os.path.basename(meta['audio_file'])
+        title = chart_obj.title or Path(meta['chart_file']).stem; dname = DIFFICULTY_NAMES[meta['difficulty_class']]
+        for genc, root, tag in [(stg, out_stg, 'staged'), (v4c, out_v4, 'v4')]:
+            folder = root / f"{n:02d}_{safe_name(title)}"; folder.mkdir(parents=True, exist_ok=True)
+            if os.path.exists(meta['audio_file']):
+                try: shutil.copy2(meta['audio_file'], folder / music)
+                except Exception: pass
+            sm = charts_to_sm(charts=[
+                {"chart": genc, "difficulty_name": "Challenge", "difficulty_value": nd.difficulty_value, "author": tag},
+                {"chart": orig, "difficulty_name": dname, "difficulty_value": nd.difficulty_value, "author": "original"}],
+                bpm=float(chart_obj.bpm), title=f"{title} ({tag})", artist=chart_obj.artist or "",
+                music=music, offset=float(chart_obj.offset), typed=True)
+            (folder / "chart.sm").write_text(sm, encoding="utf-8")
+        s16 = lambda o: 100 * (o.astype(bool) & ((np.arange(T) % 4 == 1) | (np.arange(T) % 4 == 3))).sum() / max(o.sum(), 1)
+        print(f"  {safe_name(title)[:28]:<30} chaos {chaos:5.1f}  16th%: real {s16(real_on):.0f} staged {s16(stg_on):.0f} v4 {s16(v4_on):.0f}", flush=True)
+        n += 1
+    from src.utils.sm_install import install_to_stepmania
+    install_to_stepmania(str(out_stg), None); install_to_stepmania(str(out_v4), None)
+    print(f"  installed {n} songs: {out_stg} (staged) + {out_v4} (v4 baseline)")
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--export_dir', default=None); ap.add_argument('--export_songs', type=int, default=6)
     ap.add_argument('--epochs', type=int, default=8); ap.add_argument('--max_len', type=int, default=768)
     ap.add_argument('--max_train', type=int, default=1500); ap.add_argument('--gen_songs', type=int, default=40)
     ap.add_argument('--bs', type=int, default=16); ap.add_argument('--lr', type=float, default=1e-3)
@@ -185,6 +253,9 @@ def main():
             loss.backward(); opt.step()
 
     m.eval()
+    if args.export_dir:
+        export_playtest(m, v4, va_ds, args, device, rng); return
+
     # STAGED onset gen -> v4 panels (onset_override) -> taste critic. Compare REAL / shuf16 / v4-gen / staged.
     real_s, shuf_s, v4_s, st_s = [], [], [], []; st_ph, st_d = [], []
     real_ph = np.mean([phase_frac(y) for _, y, *_ in gen], 0)
