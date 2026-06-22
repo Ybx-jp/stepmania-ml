@@ -62,7 +62,7 @@ Read roughly in this order:
 - `phase_aware_threshold_findings.md` — decode: calib (variable per-song chaos) vs alloc (smearing quota).
 - `chaos_retrain_scope.md` — v6 scope (Step-0: 16th under-commitment = knows-but-loses).
 - `v7_additive_loss_design.md` — v6 failed (additive trade); v7 reweighted-BCE additive design + result.
-- `chaos_placement_ceiling_findings.md` — ⚠️ **SUPERSEDED** (its "audio-ambiguity ceiling" conclusion was
+- `chaos_placement_ceiling_SUPERSEDED.md` — ⚠️ **SUPERSEDED** (its "audio-ambiguity ceiling" conclusion was
   refuted by the corrected sequence probe; kept as record).
 - `sequence_aware_onset_plan.md` — placement is SEQUENCE-determined (AUC 0.935); AR explodes, refinement can't
   bootstrap from v4's anti-correlated C0 → not cheaply exploitable. Critic-guided refinement idea recorded.
@@ -73,14 +73,12 @@ Read roughly in this order:
 ## Roadmaps / standing plans
 - `augmentation_roadmap.md` — on-the-fly augmentation ideas (mirror, etc.).
 - `constraint_relaxation_roadmap.md` — when to relax max-2/variable-BPM/finer-res (data-layer v2).
-- `next_steps_2-23.md` — (older next-steps scratch).
 
 ## Meta
 - `ml_glossary.md` — ML jargon glossary (gloss-on-first-use; maintained by the ml-gloss skill).
+- `archive/` — superseded scratch (e.g. `next_steps_2-23.md`).
 
 ---
-### Candidate cleanups — would clear with you before editing existing notes
-- `chaos_placement_ceiling_findings.md`: title still states the now-refuted conclusion (has a SUPERSEDED
-  banner). Rename / fold into the chaos arc?
-- `next_steps_2-23.md`: appears stale (no heading, older). Archive or delete?
-- The chaos-arc notes (8 files) could optionally be consolidated into one arc-summary; currently kept granular.
+### Standing cleanup note
+The chaos-arc notes (8 files) are kept granular for provenance; could optionally fold into one arc-summary
+later. (Done 06-22: superseded ceiling note renamed; stale next-steps archived.)
