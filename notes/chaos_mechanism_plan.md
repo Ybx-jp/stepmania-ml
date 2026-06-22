@@ -127,6 +127,48 @@ periodic WITH variation/development/grounding, just as per-frame *selectivity* w
 generation (variation + grounding), i.e. the objective/architecture route, not a decode template. Playtest
 (`chaos_groove_{baseline,groove}`, esp. deja loin) is the arbiter; offline predicts mechanical.
 
+## NO-16THS LOCALIZATION (2026-06-21, `diag_no16ths.py`) — chaos=0 is "model produces no 16ths"; threads converge
+
+Note-fraction by phase: REAL quarter/8th/16th = 70.7/25.2/**4.1**; gen_stage1 = 86.7/13.3/**0.0**;
+gen_highres = 86.8/13.2/**0.0**. Model over-quarters, under-8ths, ZERO 16ths.
+p_on by phase: gen_stage1 quarter/8th/16th = 0.616/0.434/**0.169** (16th>τ = **0.0%**); gen_highres
+0.606/0.451/**0.204** (16th>τ 0.0%).
+
+Localized — chaos=0 has FOUR converging causes:
+1. **Posterior under-weights 16ths** (p_on 0.169 vs 0.43/0.62) — rhythm simpler than real.
+2. **Density threshold structurally excludes 16ths** (16th>τ = 0%): 16ths are the lowest-p_on frames, so
+   the top-density selection (quarters+8ths) never reaches them.
+3. **High-res feature directionally right but insufficient** (16th p_on 0.169→0.204) and unengaged (H4-v2
+   KL≈0 — 16ths too rare to move the average loss).
+4. **Data is 16th-sparse** (filtered real = 4.1% 16ths; max-2/length filters cut the 16th-heavy charts).
+
+**Keystone vindicated:** chaos (16ths) is where H4 (resolution) + constraint-relaxation (data) + objective
+(16ths too rare) ALL converge. **Decode can't fix it** (16th posterior is weak AND 8th-resolved-noisy →
+forcing 16ths = arbitrary, the gate lesson). **Chaos needs a RETRAIN** combining: high-res feature ENGAGED
+(heavy 16th-frame loss weight, not the 3× off-beat — 16ths need a big weight), + ideally de-filtered
+16th-richer data. Cheap targeted test: retrain gen_highres on the warm cache_v3 with a heavy 16th loss
+weight (does the high-res feature, strongly incentivized, finally place 16ths?). Bigger: + de-filtered data.
+
+## 16th-WEIGHTED RETRAIN (2026-06-21) — v3 FAILED (weighting bug), v4 WORKS: model now produces 16ths
+
+Goal: force the model to produce 16ths (chaos=0 root). Both warm-start gen_stage1 + random-init high-res
+column on warm cache_v3.
+- **v3 (`train_highres_v3.py`, --w16 15 on all 16th FRAMES): FAILED.** 16ths stayed 0.1%; p_on@16th went
+  DOWN (0.169→0.153). Bug: 16th positions are ~50% of frames and mostly EMPTY, so weighting all 16th frames
+  amplified the "no-note" negatives → reinforced no-16ths.
+- **v4 (`train_highres_v4.py`, weight POSITIVE 16th notes only = recall): WORKS.** note-fraction
+  quarter/8th/16th: gen_stage1 86.7/13.3/**0.0** → v4 69.1/30.1/**0.8** (REAL 70.7/25.2/4.1). p_on@16th
+  0.169→**0.415** (high-res feature ENGAGED at last), 16th>τ 0.0%→0.5%. crit_adj **0.969** (best),
+  onset_F1 0.708. Early stopping fired @ epoch 4.
+
+**The keystone cracks: the model went from STRUCTURALLY incapable of 16ths to producing them, with
+real-matched rhythm balance (quarter-dominance 87%→69%).** chaos radar now > 0. Gap to real 4.1% is a
+TUNING problem (16ths still mostly below the density threshold), not a wall. Levers to push toward 4.1%:
+higher --w16, a phase-aware DECODE threshold (lower bar for 16ths so p_on 0.415 gets selected), more epochs
+(early-stop@4 may cut 16th-recall short — val_total isn't the 16th metric), de-filtered 16th-rich data.
+**NEXT: playtest gen_highres_v4 vs gen_stage1 — does the rebalanced rhythm + nascent 16ths feel more
+musical/complex?**
+
 ## Recommended sequence
 1. **A1 decode-time selective chaos gate** — cheap, no retrain, model-agnostic, directly tests "does
    selective off-beat placement (vs uniform smear) recover musical syncopation?" Try `sal = p_base` first

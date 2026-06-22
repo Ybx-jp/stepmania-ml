@@ -32,7 +32,8 @@ from src.generation.typed import pair_holds
 
 MODELS = {'gen_stage1': ("checkpoints/gen_stage1/best_val.pt", 41),
           'gen_highres': ("checkpoints/gen_highres/best_val.pt", 42),
-          'gen_highres_v3': ("checkpoints/gen_highres_v3/best_val.pt", 42)}
+          'gen_highres_v3': ("checkpoints/gen_highres_v3/best_val.pt", 42),
+          'gen_highres_v4': ("checkpoints/gen_highres_v4/best_val.pt", 42)}
 DECODE = dict(type_sample=True, type_temperature=0.4, hold_aware=True, pattern_sample=True,
               pattern_temperature=0.7, no_jump_during_hold=True)
 
