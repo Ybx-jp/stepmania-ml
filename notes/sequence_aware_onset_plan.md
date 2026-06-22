@@ -59,6 +59,25 @@ onset); the critic is the guide + stopping rule on top. Caveats: critic grades w
 (windowed) scores to target regeneration; iterating toward a critic risks GAMING it (ours is a validated
 taste metric REAL>BASE>CHAOS, but cap iterations + keep a playtest in the loop).
 
+## Refinement-mechanism de-risk (DONE — POSITIVE, `diag_refine_probe.py`)
+Non-causal frozen-context refiner (denoising: audio + noisy-chart context -> real onset), iterated:
+```
+  pass        16th-AUC  run-mean  density  Δ      (REAL: density 0.198, run 1.02)
+  C0 (input)   0.734     1.12     0.199    —      corrupted rough chart
+  refine 1     0.865     1.01     0.198    0.078  big lift, stays real-shaped
+  refine 2     0.704     1.01     0.198    0.008  degrades (OOD: own output != training corruption)
+  refine 3     0.653     1.01     0.198    0.002
+```
+- **STABLE — no explosion** (density/run hold at real across passes, Δ->0/converges) — the decisive contrast
+  with AR (0.73 density, run 5.7). Breaking the loop into frozen passes works.
+- **One pass lifts placement 0.734 -> 0.865** (toward the 0.93 ceiling). Frozen-context refinement recovers
+  good placement from a rough chart -> THIS is the architecture.
+- Wrinkle: passes 2-3 degrade (refiner only saw synthetic corruption, not its OWN output -> OOD). Fix: train
+  on own pass-1 outputs (scheduled-sampling family), or just use ONE pass.
+- CAVEAT: the synthetic corruption KEEPS ~half the real 16ths in context, so some of 0.865 reads off
+  surviving real notes. The audio-only C0 errs differently (WRONG placement, not drops). -> last cheap gate:
+  transfer to a REAL audio-only C0 (train refiner on v4 audio-only outputs -> real) before the full build.
+
 ## Risks / open questions
 - AR-drift survival under generation (the gate above settles direction).
 - Cost: causal note branch + scheduled sampling is a real architecture change to the generator (Phase 2.6),
