@@ -78,6 +78,28 @@ Non-causal frozen-context refiner (denoising: audio + noisy-chart context -> rea
   surviving real notes. The audio-only C0 errs differently (WRONG placement, not drops). -> last cheap gate:
   transfer to a REAL audio-only C0 (train refiner on v4 audio-only outputs -> real) before the full build.
 
+## TRANSFER gate (DONE — SOBERING, `diag_refine_probe.py --real_c0`)
+Refiner trained on v4's REAL audio-only C0 (not synthetic corruption), iterated:
+```
+  pass     16th-AUC  run-mean  density   (REAL: density 0.198, run 1.02)
+  C0 (v4)   0.456     1.02     0.198      v4's real rough pass — BELOW chance (its 16ths ANTI-correlate w/ real)
+  refine 1  0.666     1.00     0.198      marginal: ~= audio-only ceiling (0.649), NOT the 0.935 ceiling
+  refine 2  0.592     ...      ...
+```
+- STABLE (no explosion, converges) — mechanism robust regardless of C0 source. But placement gain MARGINAL.
+- The synthetic test (0.73→0.865) was OPTIMISTIC — it leaked ~half the real 16ths into the context. The REAL
+  v4 C0 scores 0.456 (anti-correlated: places 16ths in WRONG spots), so the context is MISLEADING and the
+  refiner falls back to ~audio-only (0.666). **Refinement CANNOT bootstrap good placement from a bad C0**, and
+  audio-only is our only C0 — circular. The 0.935 ceiling needs good context we can't produce from audio.
+
+## VERDICT (06-22): sequence signal is REAL but NOT cheaply exploitable
+AR onset explodes; refinement is stable but can't bootstrap from v4's anti-correlated C0; iterating doesn't
+climb. Reaching the 0.935 ceiling requires good context (near-real notes) that audio alone can't produce.
+Placement excellence needs a different paradigm (learn the placement DISTRIBUTION from multiple human
+chartings; or a much stronger first-pass model), not these levers. **Step back: ship-state = v4 +
+amount-control (calib/conditioning); this rigorous bounding is the thesis deliverable.** The critic-guided
+loop COULD iteratively improve context but starts from anti-correlated C0 (steep, uncertain) — only if pushing.
+
 ## Risks / open questions
 - AR-drift survival under generation (the gate above settles direction).
 - Cost: causal note branch + scheduled sampling is a real architecture change to the generator (Phase 2.6),
