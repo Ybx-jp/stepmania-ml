@@ -70,6 +70,15 @@ Read roughly in this order:
   structured transformer, critic objective). Objective gate PASSED (critic sees placement), data gate PASSED
   (484 multi-charted songs).
 
+## Manifold conditioning + guidance tuning (2026-06-22/23)
+- `radar_manifold_findings.md` — the 5 radar dims are ~rank-2 (intensity cluster + freeze); manifold-aware
+  steering (conditional-fill + project) + source-chart-free density. `src/generation/radar_manifold.py`.
+- `h14_guidance_sweep_findings.md` — guidance is per-axis; g=5 overshoots chaos into the H4 smear.
+- `h16_harmonic_findings.md` — "harmonic guidance" FALSIFIED vs sampling noise; it's a monotonic
+  backbone-dissolution, sweet spot = a KNEE. First genuinely-good chart by ear (OH WORLD glitch g3.5).
+- `h15_motif_handoff.md` — ★ NEXT SESSION STARTS HERE: train the pattern head on groove-correlated MOTIFS
+  (the "vibe" lever). Phased plan, Phase-0 cheap de-risk gate first.
+
 ## Roadmaps / standing plans
 - `augmentation_roadmap.md` — on-the-fly augmentation ideas (mirror, etc.).
 - `constraint_relaxation_roadmap.md` — when to relax max-2/variable-BPM/finer-res (data-layer v2).
