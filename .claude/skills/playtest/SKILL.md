@@ -12,6 +12,30 @@ description: >
 
 # playtest
 
+## ⛔ MANDATORY pad-playability constraints — NON-NEGOTIABLE, code-enforced
+EVERY chart the user plays MUST be generated with these decode constraints ON. Each traces to a specific
+"unplayable on pad" playtest finding. Shipping a chart without them silently CONFOUNDS the user's subjective
+evaluation (the project's primary signal) and ruins the experiment — this has happened; do not repeat it.
+
+| constraint | value | why (finding) |
+|---|---|---|
+| `hold_aware` | `True` | coherent holds / no orphans (the automaton the others ride on) |
+| `no_jump_during_hold` | `True` | pad has ONE free foot while holding → a jump-during-hold is unhittable ("Will Smith meme") |
+| `no_cross_during_hold` | `True` | the free foot can't fast-cross/jack while a hold pins the other foot (the B4U finding) |
+| `max_jack_run` | `1` (positive cap) | one foot hammering one arrow at 16th speed is brutal; real charts never do it (H13, "6-note 1/16 jack"). Playtest-confirmed |
+| `pattern_temperature` | ~0.6–0.85 (def 0.7) | arrow-coherence sweet spot — greedy collapses, >1.0 over-randomizes (H2) |
+
+**RULES:**
+1. The mandatory set is **code-enforced**: every export path runs its `generate()` kwargs through
+   `src/generation/playtest_export.py::enforce_playability()`, which FORCES the constraints on and RAISES if
+   they're explicitly disabled. `export_typed_samples.py` does this by default. **Any NEW export/generation
+   script you write for a playtest MUST call `enforce_playability(gen_kwargs)` before `generate()`.**
+2. **ANY deviation from this list requires EXPLICIT user approval**, passed as
+   `--override_playability "<reason>"` (exporter) / `override_reason=...` (`enforce_playability`). Never
+   deviate silently. When in doubt, ASK the user before exporting.
+3. If you add a new pad-playability constraint from a playtest finding, add it to `MANDATORY_PLAYABILITY`
+   here AND in `playtest_export.py` — the skill and the code stay in sync.
+
 Close the loop between the generator and the user's hands. Two jobs:
 
 1. **Export sample sets** the user can drop into StepMania, varying control knobs so each set

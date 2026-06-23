@@ -21,6 +21,11 @@ Each time a cheap, fair re-test overturned the "it's the model" conclusion.
 measurement are verified fair and in-distribution. Phrase findings as *"under condition X, observed Y"* —
 not *"the model can't Z"* — until the setup is cleared.
 
+📎 **Resource: `failure_modes_postmortem.md`** — a catalog of HOW experiments went wrong across a full
+session (~24 probes), each with the concrete preventive check, plus a 30-second pre-commit gate. Read it
+when designing a metric/comparison or before committing a conclusion; it's the "what bites in practice"
+companion to the rules below.
+
 ## PRE-FLIGHT — before running a probe / sweep / retrain
 
 1. **What property am I actually testing, and does my metric see it?** A summary statistic can move the
@@ -52,6 +57,26 @@ not *"the model can't Z"* — until the setup is cleared.
    test clears the harness. Overturning a committed "model defect" conclusion is a tell you skipped step 7.
 10. **State what would change the conclusion.** If a confound is still untested, say so and test it before
     escalating to expensive model work — the confound often changes *which* fix is needed.
+
+## Added 06-22 (session post-mortem — see `failure_modes_postmortem.md` for examples)
+
+11. **Isolate the variable; confirm dynamic range.** When comparing A vs B, change ONE thing, hold all else
+    IDENTICAL, and check the metric can actually MOVE on that thing — if A and B crush to the same value
+    (e.g. a critic dominated by a shared panel fingerprint), the metric is blind to what you're testing.
+12. **Stratify before you pool.** Don't calibrate/average over a heterogeneous population — bucket by the
+    relevant covariate (difficulty, rating/foot, chaos) first. A global threshold across difficulties
+    confounds expert charts with beginner ones; an average over trivial cases hides the regime that matters.
+13. **Beware the GLOBAL-QUOTA anti-pattern (H12).** Imposed per-unit COUNTS (flat shares, fixed density,
+    oracle budgets) consistently damaged LOCAL coherence and forced unplayable spots. Prefer LOCAL/EMERGENT
+    mechanisms (per-frame confidence thresholds) — let the amount emerge; calibrate a threshold, not a count.
+14. **Route through shared, code-enforced infra; never ad-hoc.** Standing constraints (e.g. pad-playability)
+    live in one enforced helper. A bespoke generate()/export path that re-implements them WILL silently drop
+    one and confound a playtest (it did). New paths call the shared helper; deviations need explicit approval.
+
+## The single highest-leverage habit
+Before you believe/commit ANY result, ask **"what would make this conclusion wrong?"** and run THAT first.
+Every overturned conclusion this session was caught by a cheap fair test we eventually ran — the only error
+was running it second instead of first.
 
 ## Evidence (this project's chaos work — why each rule exists)
 
