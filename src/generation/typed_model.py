@@ -511,9 +511,10 @@ class LayeredTypedChartGenerator(nn.Module):
                 forbid_panel = torch.where(next_foot == 0, 3, 0)             # left->R, right->L
                 forbid_idx = (1 << forbid_panel) - 1                         # single-panel pattern index
                 pat_logits[torch.arange(B, device=device), forbid_idx] = float("-inf")
-            if no_jump_during_hold:  # one foot pinned by an open hold -> no >=2 fresh presses on free panels
+            if no_jump_during_hold:  # the pad has 2 feet: total occupancy (held + fresh presses) must not exceed 2,
                 fresh_cnt = (panel_bits.unsqueeze(0).bool() & (~held).unsqueeze(1)).sum(-1)  # (B,15) fresh presses per pattern
-                forbid = held.any(1, keepdim=True) & (fresh_cnt >= 2)        # (B,15)
+                n_held = held.sum(1, keepdim=True)                           # (B,1) feet already pinned by open holds
+                forbid = (n_held + fresh_cnt) > 2                            # more presses than free feet (incl. note-during-2holds)
                 pat_logits = pat_logits.masked_fill(forbid, float("-inf"))
             if no_cross_during_hold:  # free foot fast-crossing panels while a hold pins the other foot (un-danceable)
                 in_hold = (free_last >= 0) & held_start.any(1)
@@ -529,11 +530,14 @@ class LayeredTypedChartGenerator(nn.Module):
                 if g8.any():
                     rows = g8.nonzero(as_tuple=True)[0]
                     pat_logits[rows, (1 << OPP[free_last[rows]]) - 1] = float("-inf")
-            if max_jack_run is not None:  # H13 exertion: forbid extending a fast same-panel jack past the cap
-                at_cap = (since_onset == 1) & (jack_panel >= 0) & (jack_len >= max_jack_run)
+            if max_jack_run is not None:  # H13 exertion: forbid a FRESH single press that extends a fast jack
+                at_cap = (since_onset == 1) & (jack_panel >= 0) & (jack_len >= max_jack_run)  # (B,)
                 if at_cap.any():
-                    rows = at_cap.nonzero(as_tuple=True)[0]
-                    pat_logits[rows, SINGLE_IDX[jack_panel[rows]]] = float("-inf")  # force a different panel
+                    fresh = panel_bits.unsqueeze(0).bool() & (~held).unsqueeze(1)             # (B,15,4) fresh per pattern
+                    on_jack = fresh.gather(2, jack_panel.clamp(min=0).view(B, 1, 1)
+                                           .expand(B, NUM_PATTERNS, 1)).squeeze(-1)           # (B,15) jack_panel pressed?
+                    forbid = at_cap.unsqueeze(1) & (fresh.sum(-1) == 1) & on_jack             # fresh SINGLE on jack_panel
+                    pat_logits = pat_logits.masked_fill(forbid, float("-inf"))               # (incl. {jack, hold-close} jumps)
             if pattern_sample or not greedy:
                 lg = pat_logits / (pattern_temperature if pattern_sample else temperature)
                 if pattern_top_k is not None:
@@ -559,8 +563,10 @@ class LayeredTypedChartGenerator(nn.Module):
                 state = torch.where(close, torch.full_like(state, 3), state)  # tail closes the hold
                 state = torch.where(free_act, prop, state)                    # tap/head/roll on free panels
                 held = (held & ~close) | (free_act & ((prop == 2) | (prop == 4)))
+                fresh_press = free_act                                        # panels FRESHLY pressed (what a foot hits)
             else:
                 state = torch.where(active, typ + 1, torch.zeros_like(typ))   # stateless per-panel symbol
+                fresh_press = active                                          # no holds -> every active panel is fresh
 
             gen[:, t] = state
             prev_emb = self._state_emb(state.unsqueeze(1))
@@ -578,15 +584,18 @@ class LayeredTypedChartGenerator(nn.Module):
             no_hold = ~held.any(1)                                              # hold closed (end of frame) -> reset
             free_last = torch.where(no_hold, torch.full_like(free_last, -1), free_last)
             free_gap = torch.where(no_hold, torch.full_like(free_gap, 99), free_gap)
-            # H13 jack tracking: extend the run if this single is 16th-adjacent & same panel; jumps reset it.
-            csp = single_panel[pat]                                             # (B,) panel if single pattern else -1
-            is_single_on = on & (csp >= 0)
-            extend = is_single_on & (since_onset == 1) & (jack_panel == csp)    # reads start-of-frame since_onset
-            jack_len = torch.where(is_single_on, torch.where(extend, jack_len + 1, torch.ones_like(jack_len)), jack_len)
-            jack_panel = torch.where(is_single_on, csp, jack_panel)
-            is_jump_on = on & (csp < 0)
-            jack_panel = torch.where(is_jump_on, torch.full_like(jack_panel, -1), jack_panel)
-            jack_len = torch.where(is_jump_on, torch.zeros_like(jack_len), jack_len)
+            # H13 jack tracking on FRESH single presses (NOT the pattern): a {tap, hold-close} jump reads as a
+            # single in the chart, so counting the pattern leaks jacks -- count what a foot actually re-hits.
+            nfresh = fresh_press.sum(1)                                         # (B,) fresh presses this frame
+            fsp = torch.where(nfresh == 1, fresh_press.float().argmax(1),       # panel of the lone fresh press, else -1
+                              torch.full((B,), -1, dtype=torch.long, device=device))
+            is_fs = on & (nfresh == 1)                                          # exactly one fresh press = a single
+            extend = is_fs & (since_onset == 1) & (jack_panel == fsp)           # reads start-of-frame since_onset
+            jack_len = torch.where(is_fs, torch.where(extend, jack_len + 1, torch.ones_like(jack_len)), jack_len)
+            jack_panel = torch.where(is_fs, fsp, jack_panel)
+            reset = on & (nfresh != 1)                                          # jump (>=2 fresh) or pure hold-close breaks it
+            jack_panel = torch.where(reset, torch.full_like(jack_panel, -1), jack_panel)
+            jack_len = torch.where(reset, torch.zeros_like(jack_len), jack_len)
             since_onset = torch.where(on, torch.ones_like(since_onset), since_onset + 1)
 
         if lengths is not None:
