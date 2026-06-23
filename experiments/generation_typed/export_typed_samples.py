@@ -89,6 +89,10 @@ def parse_args():
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
+    p.add_argument('--max_jack_run', type=int, default=1,
+                   help='H13 exertion cap: max consecutive same-panel 16th-jack presses. A fast one-foot jack '
+                        'is brutal; real charts alternate (jack-pair-rate ~0.006, max run ~1). =1 matches real '
+                        '(strict alternation); 0/negative = off. Default on (the exertion fix).')
     p.add_argument('--prefer', type=str, default=None, help='panel preference, e.g. "U,R" to favor Up+Right')
     p.add_argument('--radar', type=str, default=None,
                    help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
@@ -279,6 +283,7 @@ def main():
                           type_temperature=args.type_temperature,
                           pattern_sample=True, pattern_temperature=args.pattern_temperature,
                           repetition_penalty=args.repetition_penalty,
+                          max_jack_run=(args.max_jack_run if args.max_jack_run and args.max_jack_run > 0 else None),
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
                           onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,

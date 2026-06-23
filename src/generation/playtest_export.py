@@ -15,6 +15,11 @@ MANDATORY_PLAYABILITY = {
     "no_jump_during_hold": True,   # pad has ONE free foot while holding -> jump-during-hold unhittable ("Will Smith meme")
     "no_cross_during_hold": True,  # free foot can't fast-cross/jack while a hold pins the other (B4U; notes/hold_cross_decode.md)
 }
+# hard-required exertion cap (H13): a fast same-panel jack is one foot hammering one arrow at 16th speed =
+# brutal/un-danceable; real charts never do it (jack-pair-rate ~0.006, max run ~1 over 786 charts). A finite
+# cap MUST be present. Default injected = 1 (strict foot alternation, matches real). >1 allowed (still a cap).
+# Playtest-confirmed 2026-06-22 (night in motion: "AWESOME"; notes/h13_exertion_findings.md).
+MANDATORY_JACK_CAP = 1
 # soft (warn, not fail): the arrow-coherence sweet spot (H2: greedy collapses, 1.0 over-randomizes)
 PATTERN_TEMP_RANGE = (0.6, 0.85)
 
@@ -39,6 +44,13 @@ def enforce_playability(gen_kwargs: dict, override_reason: str | None = None) ->
             gen_kwargs[k] = v
         elif gen_kwargs[k] != v:
             violations.append(f"{k}={gen_kwargs[k]!r} (MUST be {v!r}: {_WHY[k]})")
+    # exertion cap (H13): a finite positive cap MUST be present (None/0 = disabled = brutal fast jacks).
+    mjr = gen_kwargs.get("max_jack_run")
+    if "max_jack_run" not in gen_kwargs:
+        gen_kwargs["max_jack_run"] = MANDATORY_JACK_CAP
+    elif mjr is None or mjr < 1:
+        violations.append(f"max_jack_run={mjr!r} (MUST be a positive cap, default {MANDATORY_JACK_CAP}: "
+                          f"fast same-panel jacks are unplayably brutal — H13)")
     if violations:
         if override_reason:
             print("⚠️  PLAYABILITY OVERRIDE (user-approved): " + "; ".join(violations)

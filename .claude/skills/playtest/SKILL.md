@@ -22,6 +22,7 @@ evaluation (the project's primary signal) and ruins the experiment — this has 
 | `hold_aware` | `True` | coherent holds / no orphans (the automaton the others ride on) |
 | `no_jump_during_hold` | `True` | pad has ONE free foot while holding → a jump-during-hold is unhittable ("Will Smith meme") |
 | `no_cross_during_hold` | `True` | the free foot can't fast-cross/jack while a hold pins the other foot (the B4U finding) |
+| `max_jack_run` | `1` (positive cap) | one foot hammering one arrow at 16th speed is brutal; real charts never do it (H13, "6-note 1/16 jack"). Playtest-confirmed |
 | `pattern_temperature` | ~0.6–0.85 (def 0.7) | arrow-coherence sweet spot — greedy collapses, >1.0 over-randomizes (H2) |
 
 **RULES:**

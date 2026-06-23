@@ -45,6 +45,7 @@ AD = 42
 def safe_name(s):
     return re.sub(r'[^\w\-]+', '_', str(s)).strip('_')[:50] or 'song'
 V4 = "checkpoints/gen_highres_v4/best_val.pt"; CRITIC = "checkpoints/realism_critic/best_val.pt"
+MP_CKPT = PROJECT_ROOT / "checkpoints/gen_staged_onset/maskpredict.pt"  # persisted staged onset model (new default)
 
 
 def to_binary(t):
@@ -184,10 +185,10 @@ def calibrate_threshs(m, calib, device):
     return threshs
 
 
-def _gen_v4_panels(v4, A42, T, diff, R, onset_override, device):
+def _gen_v4_panels(v4, A42, T, diff, R, onset_override, device, max_jack_run=1, override_reason=None):
     kw = dict(onset_override=onset_override, type_sample=True, type_temperature=0.4,
-              pattern_sample=True, pattern_temperature=0.7, radar=R)
-    enforce_playability(kw)   # MANDATORY pad-playability (hold_aware + no_jump/no_cross_during_hold)
+              pattern_sample=True, pattern_temperature=0.7, radar=R, max_jack_run=max_jack_run)
+    enforce_playability(kw, override_reason)   # MANDATORY pad-playability (holds + H13 exertion cap)
     return pair_holds(v4.generate(A42, diff, lengths=torch.tensor([T], device=device), **kw)[0].cpu().numpy())
 
 
@@ -228,12 +229,13 @@ def export_playtest(m, v4, ds, args, device, rng, gen_calib):
         a = s['audio'][:T, :AD].numpy().astype(np.float32); A42 = torch.from_numpy(a).unsqueeze(0).to(device)
         diff = torch.tensor([meta['difficulty_class']], device=device)
         R = torch.from_numpy(meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
+        mjr = args.max_jack_run if args.max_jack_run and args.max_jack_run > 0 else None  # H13 exertion cap
         with torch.no_grad():
             stg_on = gen_staged(m, a, real_on, device) if threshs is None else gen_staged_thresh(m, a, T, threshs, device)
-            stg = _gen_v4_panels(v4, A42, T, diff, R, torch.from_numpy(stg_on).bool().unsqueeze(0).to(device), device)
+            stg = _gen_v4_panels(v4, A42, T, diff, R, torch.from_numpy(stg_on).bool().unsqueeze(0).to(device), device, max_jack_run=mjr)
             p = torch.sigmoid(v4.onset_logits(v4.encode_audio(A42), diff, radar=R))[0].cpu().numpy()
             v4_on = (p > np.quantile(p, 1 - float(real_on.mean()))).astype(np.float32)
-            v4c = _gen_v4_panels(v4, A42, T, diff, R, torch.from_numpy(v4_on).bool().unsqueeze(0).to(device), device)
+            v4c = _gen_v4_panels(v4, A42, T, diff, R, torch.from_numpy(v4_on).bool().unsqueeze(0).to(device), device, max_jack_run=mjr)
         chart_obj = meta['chart']; music = os.path.basename(meta['audio_file'])
         title = chart_obj.title or Path(meta['chart_file']).stem; dname = DIFFICULTY_NAMES[meta['difficulty_class']]
         for genc, root, tag in [(stg, out_stg, 'staged'), (v4c, out_v4, 'v4')]:
@@ -264,6 +266,9 @@ def main():
     ap.add_argument('--max_train', type=int, default=1500); ap.add_argument('--gen_songs', type=int, default=40)
     ap.add_argument('--bs', type=int, default=16); ap.add_argument('--lr', type=float, default=1e-3)
     ap.add_argument('--steps', type=int, default=10)
+    ap.add_argument('--max_jack_run', type=int, default=1,
+                    help='H13 exertion cap: max consecutive same-panel 16th-jack presses (=1 matches real, '
+                         'strict alternation; 0/negative = off). The new default includes this.')
     args = ap.parse_args()
     set_seed(42); device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cf = glob.glob("data/**/*.sm", recursive=True) + glob.glob("data/**/*.ssc", recursive=True)
@@ -298,13 +303,20 @@ def main():
         return (torch.from_numpy(X).to(device), torch.from_numpy(C).to(device),
                 torch.from_numpy(Y).to(device), torch.from_numpy(LM).to(device))
     nb = (len(train) + args.bs - 1) // args.bs
-    for ep in range(args.epochs):
-        m.train()
-        for _ in range(nb):
-            X, C, Y, LM = batch()
-            opt.zero_grad()
-            loss = nn.functional.binary_cross_entropy_with_logits(m(X, C)[LM], Y[LM], pos_weight=pw)
-            loss.backward(); opt.step()
+    if MP_CKPT.exists():                                  # locked-in new default: reuse the persisted onset model
+        m.load_state_dict(torch.load(MP_CKPT, map_location=device)['model_state_dict'])
+        print(f"loaded MaskPredict from {MP_CKPT}", flush=True)
+    else:
+        for ep in range(args.epochs):
+            m.train()
+            for _ in range(nb):
+                X, C, Y, LM = batch()
+                opt.zero_grad()
+                loss = nn.functional.binary_cross_entropy_with_logits(m(X, C)[LM], Y[LM], pos_weight=pw)
+                loss.backward(); opt.step()
+        MP_CKPT.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({'model_state_dict': m.state_dict(), 'arch': 'MaskPredict', 'd': 96, 'audio_dim': AD}, MP_CKPT)
+        print(f"saved MaskPredict -> {MP_CKPT}", flush=True)
 
     m.eval()
     if args.export_dir:
