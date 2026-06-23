@@ -15,6 +15,63 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-22 — Manifold conditioning is COHERENT (augments the representation) but SUB-THRESHOLD (H14) + the "vibe" gap (H15)
+
+### What was played
+The 3 manifold-aware style sets (`style_glitch_tech` / `style_stream_machine` / `style_hold_ballad`), same
+4 groove-rich Hard songs (Heart Attack, nightbird lost wing, Deja loin, IN BETWEEN), guidance 1.5,
+pattern_temperature 0.7, density manifold-derived (source-chart-free). A/B = the SAME song across styles.
+
+### Raw feedback (user)
+- **glitch_tech** — "basically worked." Idea: "train the pattern head on motifs correlated with the groove
+  profile. glitch tech is a stompy ornamental vibe that works really well for crunchy edm/dubstep tracks…
+  these charts weren't bad, but they failed to capture the glitch tech vibe properly."
+- **stream_machine: Heart Attack** — "basically the same chart as its glitch tech version, but a noticeable
+  notch streamier! if nothing else, this shows that **conditioning is actually augmenting the output from the
+  representation, not some incoherent decode bull shit**." nightbird lost wing similar.
+- **hold_ballad: Heart Attack** — "very similar… the conditioning was directionally correct, but **too weak
+  to get the model to diverge from its belief of what the chart should be. I wonder if there is some decision
+  boundary we need to cross** for the conditioning to have a major effect."
+
+### Commentary / hypotheses
+- **H14 (NEW) — manifold conditioning is COHERENT but SUB-THRESHOLD.** The key positive: the same song
+  (Heart Attack) is *noticeably streamier* under stream_machine than glitch_tech, in a coherent direction →
+  the radar conditioning genuinely augments the learned representation (it's not decode noise, and not OOD
+  breakage — the manifold kept it in-distribution). BUT cross-style divergence is small (hold_ballad ≈
+  glitch_tech on Heart Attack): the audio prior dominates and gentle (g=1.5, 0.85-quantile) on-manifold
+  targets don't move the chart far. The user's "decision boundary" intuition = the conditioning may be
+  roughly LINEAR-but-shallow; it needs more push to visibly diverge. **Cheap levers (no retrain):** (a) CFG
+  guidance 1.5→2→3, (b) more extreme on-manifold targets (vhigh/max quantiles vs 0.85), swept on one song.
+  Mirror image of the chaos-OOD lesson: there, pushing a point too FAR off-manifold broke musicality; here,
+  on-manifold is coherent but too SOFT — so there's a usable middle band to find.
+- **H15 (NEW) — "vibe" = groove-correlated MOTIFS the pattern head lacks (the user's training idea).** glitch
+  tech "failed to capture the vibe" because vibe is characteristic PATTERN MOTIFS (stompy ornamental figures
+  for crunchy edm/dubstep), not density/distribution. The pattern head conditions on the radar SCALAR but has
+  no vocabulary of style-specific motifs, so steering shifts *quantities* (streamier, more holds) but not the
+  *character*. Idea: mine recurring pattern motifs from real charts, correlate them with the groove profile,
+  and condition/train the pattern head on motif identity. Model-level lever (vs H14's decode-level push) —
+  the path from "right numbers" to "right character." Same "quantity solved, character is the frontier"
+  pattern as choreography (H1/H4) and the taste critic.
+
+### Connecting thread
+Two layers, cleanly separated by this A/B. (1) DECODE/strength (H14): conditioning works and is coherent;
+it's just gentle — a guidance/extremity sweep should find where styles visibly diverge without going OOD.
+(2) REPRESENTATION/character (H15): even at full strength, the model can only move quantities it already
+knows; capturing a *vibe* needs groove-correlated motif vocabulary it was never trained on. The manifold
+made the ASK coherent and proved conditioning is real — the remaining gap is exactly the project's standing
+theme (quantity is handled; musical character isn't, and the offline metrics can't see it).
+
+### Action / next
+- [ ] **H14 cheap sweep (first):** one song, all 3 styles, guidance ∈ {1.5, 2, 3} × target extremity ∈
+  {high(0.85), vhigh(0.95), max(0.98)} → find the "decision boundary" where styles visibly diverge; watch
+  musicality so we stop before OOD. No retrain.
+- [ ] **H15 scope (the model bet):** plan note for mining groove-correlated pattern motifs + conditioning the
+  pattern head on them. The "vibe" lever; pairs with the taste critic.
+- [ ] Integrate manifold steering into the staged (new-default) generator (its onset isn't radar-conditioned
+  yet — panels only) so density/stream steering is fully live there too.
+
+---
+
 ## 2026-06-22 — H13 exertion cap CONFIRMED by ear ("AWESOME") → promoted to MANDATORY
 
 ### What was played
