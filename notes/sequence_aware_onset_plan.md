@@ -6,7 +6,7 @@ audio-only **0.649** → causal note-sequence-only **0.935** → both **0.944**.
 carries the placement signal; audio is nearly secondary once note context is present. Our current onset head
 is **audio-only + non-causal** (a deliberate Stage-2 anti-drift choice) → it discards the 0.93 signal → places
 isolated audio-salient 16ths instead of coherent runs → the "awkward" play-feel (v7). This supersedes the
-"audio-ambiguity ceiling" conclusion ([[chaos_placement_ceiling_findings]], now banner-superseded).
+"audio-ambiguity ceiling" conclusion ([[chaos_placement_ceiling_SUPERSEDED]], now banner-superseded).
 Root insight (user): we measured the wrong objective — global/audio, not local note-sequence coherence.
 
 ## The program (3 coordinated pieces; architecture is the de-risked headline)

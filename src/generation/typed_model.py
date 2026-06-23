@@ -344,7 +344,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
-                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None):
+                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, max_jack_run=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -383,7 +383,16 @@ class LayeredTypedChartGenerator(nn.Module):
         16th count floats with the audio -- chaotic songs get many 16ths, calm songs ~none -- per-song
         normalized (vs the flat `onset_phase_alloc` quota). The caller's threshold must be computed from the
         same offset logits. Validated in diag_song_chaos.py (variable, real-range; corr-capped by the
-        model's frame-local song-level signal ~0.4). None = off."""
+        model's frame-local song-level signal ~0.4). None = off.
+
+        `max_jack_run` (H13 EXERTION): cap on consecutive same-single-panel presses at FAST (16th-adjacent)
+        spacing -- one foot hammering one arrow at 16th speed is physically brutal (playtest: "a 6-note jack
+        on 1/16s is crazy"). Real Hard charts essentially never do this (jack-pair-rate ~0.006, max fast run
+        ~1; measured over 786 charts) -- they ALTERNATE panels so the feet alternate. The pattern head,
+        sampled per-frame, repeats a panel ~28% of fast pairs (diag_exertion_h13.py). When set, once a fast
+        same-panel run reaches the cap, that panel is forbidden on the next 16th-adjacent single onset,
+        forcing a different panel (foot alternation). =1 matches real (strict alternation); only 16th-adjacent
+        runs are capped (normal slower jacks untouched); jumps reset the run. None = off."""
         self.eval()
         device = audio.device
         B, T, _ = audio.shape
@@ -464,6 +473,11 @@ class LayeredTypedChartGenerator(nn.Module):
                                    torch.full((NUM_PATTERNS,), -1, device=device).long())  # (15,) panel if single else -1
         free_last = torch.full((B,), -1, dtype=torch.long, device=device)   # free foot's last panel (this hold)
         free_gap = torch.full((B,), 99, dtype=torch.long, device=device)    # frames since free foot's last note
+        SINGLE_IDX = (1 << torch.arange(NUM_PANELS, device=device)) - 1      # single-panel pattern idx per panel
+        # H13 exertion: track the running FAST (16th-adjacent) same-single-panel jack to cap it (max_jack_run).
+        since_onset = torch.full((B,), 99, dtype=torch.long, device=device)  # frames since last onset (==1 -> 16th-adj)
+        jack_panel = torch.full((B,), -1, dtype=torch.long, device=device)   # panel of the current fast same-panel run
+        jack_len = torch.zeros(B, dtype=torch.long, device=device)           # length of that run
 
         reset_at = set(int(x) for x in boundary_reset) if boundary_reset is not None else set()
         for t in range(T):
@@ -515,6 +529,11 @@ class LayeredTypedChartGenerator(nn.Module):
                 if g8.any():
                     rows = g8.nonzero(as_tuple=True)[0]
                     pat_logits[rows, (1 << OPP[free_last[rows]]) - 1] = float("-inf")
+            if max_jack_run is not None:  # H13 exertion: forbid extending a fast same-panel jack past the cap
+                at_cap = (since_onset == 1) & (jack_panel >= 0) & (jack_len >= max_jack_run)
+                if at_cap.any():
+                    rows = at_cap.nonzero(as_tuple=True)[0]
+                    pat_logits[rows, SINGLE_IDX[jack_panel[rows]]] = float("-inf")  # force a different panel
             if pattern_sample or not greedy:
                 lg = pat_logits / (pattern_temperature if pattern_sample else temperature)
                 if pattern_top_k is not None:
@@ -559,6 +578,16 @@ class LayeredTypedChartGenerator(nn.Module):
             no_hold = ~held.any(1)                                              # hold closed (end of frame) -> reset
             free_last = torch.where(no_hold, torch.full_like(free_last, -1), free_last)
             free_gap = torch.where(no_hold, torch.full_like(free_gap, 99), free_gap)
+            # H13 jack tracking: extend the run if this single is 16th-adjacent & same panel; jumps reset it.
+            csp = single_panel[pat]                                             # (B,) panel if single pattern else -1
+            is_single_on = on & (csp >= 0)
+            extend = is_single_on & (since_onset == 1) & (jack_panel == csp)    # reads start-of-frame since_onset
+            jack_len = torch.where(is_single_on, torch.where(extend, jack_len + 1, torch.ones_like(jack_len)), jack_len)
+            jack_panel = torch.where(is_single_on, csp, jack_panel)
+            is_jump_on = on & (csp < 0)
+            jack_panel = torch.where(is_jump_on, torch.full_like(jack_panel, -1), jack_panel)
+            jack_len = torch.where(is_jump_on, torch.zeros_like(jack_len), jack_len)
+            since_onset = torch.where(on, torch.ones_like(since_onset), since_onset + 1)
 
         if lengths is not None:
             valid = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)

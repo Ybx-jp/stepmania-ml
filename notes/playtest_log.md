@@ -15,6 +15,164 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-22 — H13 exertion cap CONFIRMED by ear ("AWESOME") → promoted to MANDATORY
+
+### What was played
+`~/sm-generated/h13_jackcap` — the new-default staged quota-free generator WITH the H13 exertion cap
+(`max_jack_run=1`: forbid extending a same-single-panel run on 16th-adjacent frames → forces foot
+alternation like real charts). Chaotic Hard songs; **night in motion** (where the 6-note 1/16 jack was
+flagged) and **get it all**.
+
+### Raw feedback (user)
+- **night in motion** — > "AWESOME! hit all the patterns and musicality I was looking for!"
+- **get it all** — > "very smooth. I would want to see more chaotic patterns derived from the drumline on a
+  greater intensity. it may have been fine for the settings, not necessarily a flaw in the model."
+
+### Commentary / hypotheses
+- **H13 CONFIRMED BY EAR — the fix lands.** The exact song that exposed the brutal 6-note jack last session
+  is now "AWESOME." The offline probe (`notes/h13_exertion_findings.md`) said the cap drops fast-jack-pair
+  rate 0.284→0.031 (real ~0) and the exported night-in-motion .sm measures jack-rate 0.000 / max-run 1; the
+  ear agrees. This closes H13 as a SOLVED decode-time issue. **→ PROMOTED to the code-enforced MANDATORY
+  playability set** (`enforce_playability` now injects `max_jack_run` and refuses None/0 without override;
+  skill table updated) alongside no_jump/no_cross_during_hold. Another **decode-time fix win** — continues
+  the project's standing thread (the base model is under-served by its default decode; squeeze decode first).
+- **"get it all" = a CHAOS-INTENSITY knob observation, NOT a defect (user agrees).** The export conditions
+  each song on its OWN groove radar at guidance=1, so it renders that song at its baseline intensity. Wanting
+  "more chaotic patterns derived from the drumline" = dial the chaos radar UP (validated: chaos conditioning
+  moves realized 16th share 0.3%→26% monotonically, `notes/chaos_conditioning_findings.md`). The lever exists
+  and is shippable; this is a settings/intent choice, not a model failure. Connects to the post-exertion
+  frontier: now that AMOUNT, COHERENCE, and EXERTION are handled, the live dial is intensity/chaos *intent*.
+
+### Connecting thread
+The defect hierarchy keeps getting peeled from the bottom by DECODE-time fixes: timing (solved) → amount
+(H12 quota-free) → exertion (H13 cap, now solved) — none needed a retrain. What remains is upper-layer
+*intent/musicality*: choreographic phrasing (H1/H4: dancing lovers' backbone+accents) and chaos-INTENSITY
+steering (get it all's drumline) — the latter already has a working knob (chaos conditioning), the former is
+the open critic/objective problem. The offline metrics still can't see any of this; the playtest log is
+where each layer gets confirmed peeled.
+
+### Action / next
+- [x] Promote `max_jack_run=1` to MANDATORY (`enforce_playability` + skill table + test). Default-on in both
+  export paths.
+- [ ] **get it all (optional):** export a higher-chaos variant (`--radar "chaos=0.7"` or `--match_radar
+  --guidance ~1.5`) so the drumline drives more 16ths — confirm the intensity dial feels right by ear.
+- [ ] Still queued: funky summer beach BPM de-confound (88 vs ~176 + trim silent tail); dancing lovers
+  catalogued as the H1/H4 phrasing case for the critic/objective work.
+
+---
+
+## 2026-06-22 — QUOTA-FREE staged generation SUCCEEDED — "WE HAVE EVOLVED" (H12 vindicated; new H13 exertion)
+
+### What was played
+`quotafree` staged generation (per-phase CONFIDENCE THRESHOLD, no global count quota; difficulty-bucketed
+calibration; mandatory playability set ON) on three songs: **night in motion, dancing lovers, funky summer
+beach**. Also tried `quotafree_v4` (v4 panels under the same quota-free decode).
+
+### Raw feedback (user)
+- **night in motion** — > "TOTALLY SUCCEEDED! global structure preserved. coherent patterns. tasteful
+  application of 1/16s." Revealed a cross-session pattern: > "the model doesn't have any representation of
+  exertion intensity, like doing a 6-note jack on 1/16s is crazy haha — that was really the only significant
+  issue."
+- **dancing lovers** — > "the 1/16s were fine respective to the rest of the chart, but the whole chart
+  didn't represent the music very well. I would have expected a chaotic pattern more like '1, 2, 3-4, 5-6,
+  1, 2, 3-4, 5-6' — that's what the song really wanted as a backbone with some chaotic accents to shake up
+  the pattern as the music invites."
+- **funky summer beach** — > "pretty good! global structure is there, but the model doesn't seem to feel the
+  drum fills or synth leads quite right in a choreographic sense." (Likely confounded: BPM probably misread
+  88 vs true ~176, and the audio has a long untrimmed silent ending.)
+- > "I tried quotafree_v4, it's not better. **WE HAVE EVOLVED.**"
+
+### Commentary / hypotheses
+- **H12 VINDICATED BY EAR — the win is real.** Replacing the oracle global per-phase budget with a per-phase
+  *confidence threshold* (amount emerges locally per-frame given context) preserved global structure AND
+  produced coherent patterns AND tasteful 1/16s on night in motion — exactly the failure mode (smeared
+  16ths, quota-driven incoherence) that global counts caused. Confirms the standing thread across the WHOLE
+  project: **global quotas/counts damage coherence; the amount must emerge locally.** This is the first
+  staged-generation set to land a clean "totally succeeded."
+- **quotafree_v4 ≠ better** → the win is the QUOTA-FREE DECODE, not the v4 panel set. The staged
+  mask-predict placement (Phase-3) under local thresholds is the live direction. ("WE HAVE EVOLVED" = the
+  staged + quota-free combo is now our best-feeling generator, past v4.)
+- **H13 (NEW) — the model has no representation of EXERTION / physical intensity.** A 6-note jack on 1/16s
+  is musically placeable but humanly brutal — the model optimizes note↔audio fit with zero notion of how
+  hard the resulting pattern is on the legs/feet. This is distinct from H2 (arrow coherence) and the
+  playability constraints (which are *legality*, not *effort*). It's a recurring cross-session smell, now
+  named. Mechanism: nothing in the objective or decode scores cumulative physical load (jack length, stamina
+  density, foot-speed). Lever candidates: a decode-time exertion penalty (cap jack run length / foot-speed
+  on fine grids), or an effort-aware term in selection. Cheapest first probe: a 16th-grid jack-run-length cap.
+- **dancing lovers complicates H1/H4 (choreography), NOT the quota fix.** The 16ths were locally fine but the
+  chart didn't capture the song's wanted *backbone-with-accents* structure ('1,2,3-4,5-6…'). This is the
+  same choreography/syncopation gap (right notes, wrong WHERE / no structured accenting) — the model places
+  on a metrical+density prior, not event-driven phrasing. Quota-free fixed AMOUNT/coherence; it does not add
+  musical phrasing. Consistent with H4-resolved-as-conditioning/objective problem.
+- **funky summer beach — drum fills / synth leads not felt choreographically (H1 thread), but CONFOUNDED.**
+  Before trusting this as a model signal, the BPM (88 vs likely 176) and untrimmed silent tail must be ruled
+  out — a halved BPM would scramble the grid alignment that choreography rides on. Treat as suggestive, not
+  evidence, until re-run with corrected BPM + trimmed audio.
+
+### Connecting thread
+Three sessions of staged work converge: **(1)** global quotas hurt (H12) → confirmed by ear here; the fix
+was local thresholds, not a better quota. **(2)** Once AMOUNT and COHERENCE are handled locally, the
+remaining gaps are the *upper* layers of the defect hierarchy — choreography/phrasing (H1/H4: dancing
+lovers' backbone, funky's drum fills) and a brand-new one, **exertion/effort (H13)** — never quantity or
+legality. The decode-time wins keep coming (H12, playability); the open frontier is musical *meaning* and
+human *playability-of-effort*, neither of which the offline metrics see.
+
+### Action / next
+- [x] Lock in quota-free staged decode as the new default (supersedes v4). Staged onset model persisted to
+  `checkpoints/gen_staged_onset/maskpredict.pt` (train-or-load); per-phase thresholds calibrated on the Hard
+  bucket (q≈0.82/8th≈0.64/16th≈0.23). Export = `diag_maskpredict_staged.py --export_dir`.
+- [x] **H13 probe + fix DONE (offline) — `notes/h13_exertion_findings.md`.** CONFIRMED by data: deployment
+  fast-jack-pair-rate 0.284 vs REAL 0.000 (786-chart reference); ISOLATED to the PATTERN head (control on
+  real onsets jacks identically → not onset placement). Fix = `generate(max_jack_run=1)` speed-conditioned
+  anti-jack cap (forces foot alternation like real). Drops 0.284→0.031, kills all 4+ jacks (max run 3→1.5).
+  Default-on in both export paths; test added. **PLAYTEST-CONFIRMED 2026-06-22** (night in motion "AWESOME")
+  → PROMOTED to the code-enforced MANDATORY playability set. See the newer entry above.
+- [ ] **funky summer beach re-test (de-confound):** fix BPM (try 176) + trim the silent tail, re-export
+  before concluding anything about drum-fill/synth-lead choreography.
+- [ ] dancing lovers: catalog as a clean H1/H4 phrasing case (wanted backbone+accents, got flat-ish) for the
+  choreography/critic work — quota-free is not the lever here.
+
+---
+
+## 2026-06-22 — Phase-3 staged mask-predict > v4 (BUT infra failure: dropped no_cross_during_hold)
+
+### What was played
+`~/sm-generated/phase3_staged` (staged mask-predict onset, oracle per-phase budget, v4 panels) vs
+`phase3_staged_v4` (v4 baseline), chaotic Hard songs. **INFRA FAILURE: both used an ad-hoc export
+(`_gen_v4_panels`) that DROPPED `no_cross_during_hold`** → streams-during-hold (unplayable on pad).
+
+### Raw feedback (user)
+> "it has come to my attention that you have not been carrying forward critical pieces of infra... i noticed
+> that this gen had streams during a hold, which i've already surfaced as unplayable on pad... [run an audit
+> + assert the control knobs in the skill + add code assertions]. phase3_staged seems to be an improvement
+> over phase3_staged_v4. i suspect that the oracle budget is interfering with the model's sense of global
+> structure. global quotas have consistently damaged pattern coherence in all tests we've run."
+
+### Commentary / hypotheses
+- **★ PROCESS FAILURE (mine), now fixed.** A custom export bypassed the canonical exporter's playability
+  flags and dropped `no_cross_during_hold` → unplayable streams-during-hold in BOTH sets. Tainted the
+  absolute feel (the relative staged-vs-v4 comparison is still ~fair since both had the same handicap). FIX:
+  `src/generation/playtest_export.py::enforce_playability()` is now CODE-ENFORCED in every export path
+  (forces hold_aware + no_jump/no_cross_during_hold on; raises if disabled without `--override_playability`);
+  the playtest skill now leads with a NON-NEGOTIABLE constraints table. **Audit'd mandatory set:** hold_aware,
+  no_jump_during_hold, no_cross_during_hold, pattern_temperature ~0.7.
+- **Phase-3 direction is PROMISING:** staged mask-predict placement > v4 EVEN confounded by unplayability →
+  the joint generative paradigm's placement is on the right track (the unconfounded re-export should confirm).
+- **H12 (new, user: confirmed across ALL tests): GLOBAL QUOTAS damage pattern coherence.** The oracle
+  per-phase budget (a global count quota) is suspected to interfere with the model's global structure — same
+  pattern as `onset_phase_alloc` (smearing), fixed-density chaos, and forced per-phase shares. The amount
+  should emerge LOCALLY (per-frame confidence given context), not be imposed as a global count. The quota was
+  a crutch to escape the 0%-16th starvation; the real fix is a per-phase CONFIDENCE THRESHOLD in the staged
+  16th pass so 16ths are placed where the model is confident (local, coherent), not to hit a quota.
+
+### Action / next
+- [x] Audit playtest feedback for mandatory control knobs; assert in skill + code (`enforce_playability`).
+- [ ] Re-export `phase3_staged` playability-fixed (no_cross_during_hold on) for a clean re-play.
+- [ ] QUOTA-FREE staged generation (H12): replace the oracle top-K per-phase count with a per-phase
+  confidence threshold (amount emerges locally). Re-feel coherence.
+
+---
+
 ## 2026-06-22 — v7 additive retrain: right 16th AMOUNT, WRONG placement + cold-start regression (approach exhausted)
 
 ### What was played

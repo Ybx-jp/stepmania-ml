@@ -303,6 +303,53 @@ def test_no_cross_during_hold():
         assert c_on < c_off, f"no_cross_during_hold did not reduce fast hold crosses: {c_off} -> {c_on}"
 
 
+def test_max_jack_run_caps_fast_jacks():
+    # H13 EXERTION: one foot hammering one panel at 16th speed is brutal; real charts alternate panels
+    # (jack-pair-rate ~0.006, max fast run ~1 over 786 charts). With onsets forced every frame (all
+    # 16th-adjacent) and max_jack_run=1, no two consecutive single-panel frames may share a panel.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 200
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 3])
+    ov = torch.ones(B, T, dtype=torch.bool)             # every frame an onset -> all pairs are 16th-adjacent
+    kw = dict(onset_override=ov, pattern_sample=True, pattern_temperature=1.5)
+
+    def fast_jack_pairs(g):                              # adjacent single-panel frames on the SAME panel
+        n = 0                                            # (count ANY active symbol: the cap masks at the
+        for b in range(B):                               # pattern/which-panel level, so with hold_aware off
+            for tt in range(T - 1):                      # an active panel == a pattern panel regardless of type)
+                pa = [p for p in range(4) if g[b, tt][p] != 0]
+                pc = [p for p in range(4) if g[b, tt + 1][p] != 0]
+                if len(pa) == 1 and len(pc) == 1 and pa[0] == pc[0]:
+                    n += 1
+        return n
+
+    torch.manual_seed(0); g_off = m.generate(audio, diff, **kw).numpy()
+    torch.manual_seed(0); g_on = m.generate(audio, diff, max_jack_run=1, **kw).numpy()
+    assert fast_jack_pairs(g_on) == 0, f"max_jack_run=1 should yield 0 fast same-panel jacks, got {fast_jack_pairs(g_on)}"
+    assert (g_on != 0).any(), "cap collapsed generation to empty"
+    if fast_jack_pairs(g_off) > 0:                       # if there were jacks to fix, the cap fixed them
+        assert fast_jack_pairs(g_on) < fast_jack_pairs(g_off)
+
+
+def test_enforce_playability_jack_cap():
+    # The H13 exertion cap is MANDATORY: enforce_playability injects max_jack_run when missing and
+    # REFUSES to ship a chart with it disabled (None/0) unless a deviation reason is given.
+    import pytest
+    from src.generation.playtest_export import enforce_playability, MANDATORY_JACK_CAP
+    kw = enforce_playability({})                          # missing -> injected at the default cap
+    assert kw["max_jack_run"] == MANDATORY_JACK_CAP
+    assert enforce_playability({"max_jack_run": 2})["max_jack_run"] == 2   # a looser positive cap is allowed
+    with pytest.raises(SystemExit):                       # disabled (None) -> refuse without an override
+        enforce_playability({"max_jack_run": None})
+    with pytest.raises(SystemExit):                       # disabled (0) -> refuse without an override
+        enforce_playability({"max_jack_run": 0})
+    # explicit, user-approved deviation is allowed (e.g. an offline diagnostic measuring the uncapped baseline)
+    assert enforce_playability({"max_jack_run": None}, override_reason="diagnostic")["max_jack_run"] is None
+
+
 def test_onset_phase_alloc():
     # The phase-aware threshold steers the note rhythm distribution to the given shares while preserving
     # the note budget. A single threshold buries 16ths; alloc must (a) place 16th-phase notes at ~the
