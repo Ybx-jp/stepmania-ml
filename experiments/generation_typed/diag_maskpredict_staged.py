@@ -144,33 +144,44 @@ def gen_staged(m, audio, real_onset, device):
     return onset
 
 
+def _phase_bands(T):
+    t = np.arange(T); return [t % 4 == 0, t % 4 == 2, (t % 4 == 1) | (t % 4 == 3)]   # quarter, 8th, 16th
+
+
 @torch.no_grad()
-def gen_staged_thresh(m, audio, T, thresh, device):
-    """QUOTA-FREE staged gen (H12): staged backbone->16ths order, but each frame is committed where the model
-    is CONFIDENT (p > thresh) -- the AMOUNT emerges per-song from the audio, no imposed count. thresh is a
-    single global confidence cutoff (calibrated so AGGREGATE density ~ real; per-song amount varies)."""
-    A = torch.from_numpy(audio).unsqueeze(0).to(device); t = np.arange(T)
-    bands = [t % 4 == 0, t % 4 == 2, (t % 4 == 1) | (t % 4 == 3)]
+def gen_staged_thresh(m, audio, T, threshs, device):
+    """QUOTA-FREE staged gen (H12): staged backbone->16ths order; commit each frame where the model is
+    CONFIDENT (p > per-phase threshold). PER-PHASE thresholds (tq, te, ts) -- a lower bar for 16ths so they
+    aren't starved by a single cutoff. AMOUNT emerges per-song (no imposed count); thresholds are calibration
+    constants for ONE difficulty bucket (so expert charts aren't confounded by beginner ones)."""
+    A = torch.from_numpy(audio).unsqueeze(0).to(device)
     onset = np.zeros(T); revealed = np.zeros(T, bool)
-    for band in bands:
+    for band, th in zip(_phase_bands(T), threshs):
         ctx = np.stack([onset * revealed, revealed.astype(np.float32)], -1)[None].astype(np.float32)
         p = torch.sigmoid(m(A, torch.from_numpy(ctx).to(device)))[0].cpu().numpy()
-        onset[band & (p > thresh)] = 1.0
+        onset[band & (p > th)] = 1.0
         revealed[band] = True
     return onset
 
 
-def calibrate_thresh(m, calib, device):
-    """single global confidence threshold so MEAN gen density ~ MEAN real density (per-song amount emerges).
-    NOT a per-song quota -- one constant; each song's count varies with its audio."""
-    target = float(np.mean([y.mean() for _, y, *_ in calib]))
-    lo, hi = 0.2, 0.97
-    for _ in range(14):
-        mid = (lo + hi) / 2
-        d = float(np.mean([gen_staged_thresh(m, a, len(y), mid, device).mean() for a, y, *_ in calib]))
-        if d > target: lo = mid          # too dense -> raise threshold
-        else: hi = mid
-    return (lo + hi) / 2, target
+def calibrate_threshs(m, calib, device):
+    """PER-PHASE thresholds (tq, te, ts), calibrated SEQUENTIALLY (staged order) so each phase's aggregate
+    PLACED-rate ~ the real placed-rate FOR THIS BUCKET. `calib` MUST be one difficulty bucket. Not a per-song
+    quota -- each song's count still varies with its audio; these 3 constants only fix the aggregate balance."""
+    threshs = [0.5, 0.5, 0.5]
+    for pi in range(3):                                  # quarter -> 8th -> 16th (staged dependency order)
+        band_of = lambda T: _phase_bands(T)[pi]
+        target = float(np.mean([(y.astype(bool) & band_of(len(y))).sum() / max(band_of(len(y)).sum(), 1)
+                                for _, y, *_ in calib]))  # real fraction of phase-pi frames that are notes
+        lo, hi = 0.05, 0.98
+        for _ in range(14):
+            threshs[pi] = (lo + hi) / 2
+            rate = float(np.mean([(gen_staged_thresh(m, a, len(y), threshs, device).astype(bool) & band_of(len(y))).sum()
+                                  / max(band_of(len(y)).sum(), 1) for a, y, *_ in calib]))
+            if rate > target: lo = threshs[pi]           # placing too many in this phase -> raise the bar
+            else: hi = threshs[pi]
+        threshs[pi] = (lo + hi) / 2
+    return threshs
 
 
 def _gen_v4_panels(v4, A42, T, diff, R, onset_override, device):
@@ -180,9 +191,18 @@ def _gen_v4_panels(v4, A42, T, diff, R, onset_override, device):
     return pair_holds(v4.generate(A42, diff, lengths=torch.tensor([T], device=device), **kw)[0].cpu().numpy())
 
 
-def export_playtest(m, v4, ds, args, device, rng, thresh=None):
+def export_playtest(m, v4, ds, args, device, rng, gen_calib):
     """STAGED mask-predict vs v4-baseline charts on chaotic Hard songs -> playable folders + install (A/B).
-    thresh None = oracle per-phase budget; else QUOTA-FREE confidence threshold (amount emerges per-song)."""
+    --oracle = per-phase budget; else QUOTA-FREE per-phase confidence thresholds (amount emerges per-song),
+    calibrated on the Hard difficulty BUCKET (so expert charts aren't confounded by beginner charts)."""
+    threshs = None
+    if not args.oracle:
+        hard = [g for g in gen_calib if g[3] >= 3]        # SAME difficulty bucket as the export (Hard)
+        if len(hard) < 6:
+            hard = sorted(gen_calib, key=lambda g: -g[3])[:max(8, len(gen_calib) // 2)]
+        threshs = calibrate_threshs(m, hard, device)
+        print(f"QUOTA-FREE (Hard bucket, {len(hard)} calib songs): per-phase thresholds "
+              f"q={threshs[0]:.3f} 8th={threshs[1]:.3f} 16th={threshs[2]:.3f}", flush=True)
     # groove-validate: Hard songs with real 16ths, ranked by chaos
     cands = []
     for i in range(len(ds.valid_samples)):
@@ -209,7 +229,7 @@ def export_playtest(m, v4, ds, args, device, rng, thresh=None):
         diff = torch.tensor([meta['difficulty_class']], device=device)
         R = torch.from_numpy(meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
         with torch.no_grad():
-            stg_on = gen_staged(m, a, real_on, device) if thresh is None else gen_staged_thresh(m, a, T, thresh, device)
+            stg_on = gen_staged(m, a, real_on, device) if threshs is None else gen_staged_thresh(m, a, T, threshs, device)
             stg = _gen_v4_panels(v4, A42, T, diff, R, torch.from_numpy(stg_on).bool().unsqueeze(0).to(device), device)
             p = torch.sigmoid(v4.onset_logits(v4.encode_audio(A42), diff, radar=R))[0].cpu().numpy()
             v4_on = (p > np.quantile(p, 1 - float(real_on.mean()))).astype(np.float32)
@@ -288,11 +308,7 @@ def main():
 
     m.eval()
     if args.export_dir:
-        thresh = None
-        if not args.oracle:
-            thresh, tgt = calibrate_thresh(m, gen, device)
-            print(f"QUOTA-FREE: calibrated global confidence threshold {thresh:.3f} (target density {tgt:.3f})", flush=True)
-        export_playtest(m, v4, va_ds, args, device, rng, thresh); return
+        export_playtest(m, v4, va_ds, args, device, rng, gen); return
 
     # STAGED onset gen -> v4 panels (onset_override) -> taste critic. Compare REAL / shuf16 / v4-gen / staged.
     real_s, shuf_s, v4_s, st_s = [], [], [], []; st_ph, st_d = [], []
