@@ -76,8 +76,15 @@ Read roughly in this order:
 - `h14_guidance_sweep_findings.md` — guidance is per-axis; g=5 overshoots chaos into the H4 smear.
 - `h16_harmonic_findings.md` — "harmonic guidance" FALSIFIED vs sampling noise; it's a monotonic
   backbone-dissolution, sweet spot = a KNEE. First genuinely-good chart by ear (OH WORLD glitch g3.5).
-- `h15_motif_handoff.md` — ★ NEXT SESSION STARTS HERE: train the pattern head on groove-correlated MOTIFS
-  (the "vibe" lever). Phased plan, Phase-0 cheap de-risk gate first.
+- `h15_motif_handoff.md` — train the pattern head on groove-correlated MOTIFS (the "vibe" lever). Phased
+  plan, Phase-0 cheap de-risk gate first.
+- `h15_motif_findings.md` — ★ Phase-0 gate RESULT (faithful, note-pattern motifs): PASS. PART 1 — note-pattern
+  motif histograms separate groove ≫ shuffled (all axes, strongest W=3). PART 2 — vs the FULL radar: radar
+  pins R²0.61 of motif usage (common filler) but ~39% residual; radar-twins more motif-similar than same-song
+  charter-twins → vocabulary is a DISTRIBUTION. PART 3 (crux) — same ≈0 radar → UUUU vs LLLL vs LRLR signature
+  figures the radar can't see. LEVER = a characteristic motif CODEBOOK sampled as a distribution + taste
+  critic; NOT freeze (already a knob). `diag_motif_gate.py`. [first pass had an exp-design failure — strawman
+  density floor + rhythm-variant drift → postmortem'd into the experiment-design skill, §10 / Rules 15–16.]
 
 ## Roadmaps / standing plans
 - `augmentation_roadmap.md` — on-the-fly augmentation ideas (mirror, etc.).
