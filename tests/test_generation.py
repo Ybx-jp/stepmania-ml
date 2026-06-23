@@ -260,6 +260,39 @@ def test_no_jump_during_hold():
                     held[p] = False
 
 
+def test_no_note_while_both_feet_held_and_jack_cap_survives_holds():
+    # Two gaps that CONDITIONING exposed (playtest 2026-06-23): (1) a single fresh press while BOTH feet are
+    # pinned by holds is unhittable (total occupancy > 2 feet) -- no_jump_during_hold must count FEET, not just
+    # forbid >=2 fresh; (2) a {tap, hold-close} jump reads as a single in the chart, so max_jack_run must cap
+    # FRESH single presses, not the pattern, or fast jacks leak through hold-close frames.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 3, 300
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 3, 3])
+    ov = torch.ones(B, T, dtype=torch.bool)                      # dense onsets -> many holds + adjacency
+    g = m.generate(audio, diff, onset_override=ov, pattern_sample=True, pattern_temperature=1.5,
+                   type_sample=True, type_temperature=1.5, hold_aware=True,   # high type temp -> lots of holds
+                   no_jump_during_hold=True, no_cross_during_hold=True, max_jack_run=1).numpy()
+    for b in range(B):
+        held = [False] * 4; prev_fresh_single = -1
+        for tt in range(T):
+            row = g[b, tt]
+            fresh = [p for p in range(4) if row[p] in (1, 2, 4) and not held[p]]   # panels a foot freshly hits
+            occupied = set(p for p in range(4) if held[p]) | set(fresh)             # feet needed this instant
+            assert len(occupied) <= 2, f"{len(occupied)} feet required at b={b} t={tt} (note while both feet held)"
+            cur = fresh[0] if len(fresh) == 1 else -1                               # a fresh SINGLE press
+            if cur >= 0 and cur == prev_fresh_single:
+                raise AssertionError(f"fast same-panel fresh jack at b={b} t={tt} despite max_jack_run=1")
+            prev_fresh_single = cur                                                 # -1 (jump/hold-close/empty) breaks the run
+            for p in range(4):
+                if row[p] in (2, 4):
+                    held[p] = True
+                elif row[p] == 3:
+                    held[p] = False
+
+
 def test_no_cross_during_hold():
     # While a hold pins one foot, the free foot must not fast-cross panels (the B4U "jacks with one
     # foot during a hold"). The flag must REDUCE (never increase) the count of fast free-foot panel
@@ -268,8 +301,8 @@ def test_no_cross_during_hold():
     import torch
     from src.generation.typed_model import LayeredTypedChartGenerator
     m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
-    B, T = 2, 200
-    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 3])
+    B, T = 8, 200                                # batch big enough that the off-vs-on count is robust to
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 3] * 4)   # sampling noise at the tiny per-seq counts
     ov = torch.ones(B, T, dtype=torch.bool)  # force onsets so holds and notes appear
     kw = dict(onset_override=ov, pattern_sample=True, pattern_temperature=1.5, type_sample=True,
               type_temperature=1.0, hold_aware=True, no_jump_during_hold=True)

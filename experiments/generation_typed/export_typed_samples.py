@@ -104,6 +104,12 @@ def parse_args():
     p.add_argument('--reference_self', action='store_true',
                    help="per-song style conditioning: encode each song's OWN source chart as the StyleEncoder "
                         "latent (the full-chart path vs match_radar's 5-dim summary). Pair with --guidance ~2.")
+    p.add_argument('--style', type=str, default=None,
+                   help="MANIFOLD-AWARE groove steering: a PARTIAL spec over named axes, e.g. "
+                        "\"stream=high,chaos=low,air=low\". Unspecified dims are conditional-filled from the real "
+                        "covariance and the whole point is projected onto the manifold, so coupled dims stay "
+                        "coherent (vs --radar's pin-others-at-mean, which goes OOD). Levels low/mod/high (or "
+                        "q0.9 / a raw 0-1 value); per-song difficulty. Pair with --guidance ~1.5. Overrides --radar.")
     p.add_argument('--max_len', type=int, default=1440)  # full 2-min songs (KV-cache makes it cheap)
     p.add_argument('--install', action='store_true',
                    help="After exporting, copy the set into the StepMania songs dir (no sudo).")
@@ -197,6 +203,20 @@ def main():
         radar_vec = torch.from_numpy(base).unsqueeze(0).to(device)  # (1,5), reused for every song
         print(f"\ngroove radar target: {dict(zip(RADAR_DIMS, base.round(2).tolist()))}  guidance={args.guidance}")
 
+    # manifold-aware steering: load the fitted manifold (cache, else fit from this dataset) for --style
+    manifold = None
+    if args.style:
+        from src.generation.radar_manifold import RadarManifold
+        mp = Path('cache/radar_manifold.npz')
+        if mp.exists():
+            manifold = RadarManifold.load(mp)
+        else:
+            manifold = RadarManifold.from_loaded_datasets(ds)
+            print("⚠️  cache/radar_manifold.npz missing; fit from this split only "
+                  "(run diag_radar_manifold.py to persist the full-data manifold).")
+        manifold.parse_spec(args.style)  # validate axis names up front
+        print(f"\nmanifold style: '{args.style}'  guidance={args.guidance} (per-song, difficulty-bucketed)")
+
     # build pattern-preference bias from CLI knobs
     from src.generation.typed import make_pattern_bias
     panel_prefs = None
@@ -246,6 +266,16 @@ def main():
         # radar conditioning: match this song's own source profile (so output ~ original feel), else the
         # fixed --radar target (or none).
         radar_for_gen = radar_vec
+        style_density = None
+        if manifold is not None:  # manifold-aware: build a coherent on-manifold target for THIS difficulty
+            tvec, tinfo = manifold.build_target(args.style, diff_idx)
+            radar_for_gen = torch.from_numpy(tvec).unsqueeze(0).to(device)
+            style_density = tinfo['density']     # SOURCE-CHART-FREE density target (difficulty + style)
+            if exported == 0:  # print the resolved target once (it varies slightly by difficulty)
+                print(f"  -> target ({DIFFICULTY_NAMES[diff_idx]}): "
+                      + " ".join(f"{d}={tvec[k]:.2f}" for k, d in enumerate(RADAR_DIMS))
+                      + f"  Mahal d={tinfo['mahalanobis']:.2f}{' (projected)' if tinfo['projected'] else ''}"
+                      + (f"  density~{style_density:.3f} (manifold, no source chart)" if style_density else ""))
         if args.match_radar:
             radar_for_gen = torch.from_numpy(
                 meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
@@ -273,10 +303,17 @@ def main():
                 ol_onset = ol_onset + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
             p_onset = torch.sigmoid(ol_onset).cpu().numpy()
         real_density = float((orig_typed != 0).any(1).mean())
-        # density target: the source chart's own density by default, OR a fixed override (--target_density).
+        # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
+        # E[density | difficulty, style], so stream-as-a-knob works and no source chart is needed) > the
+        # source chart's own density (eval convenience for A/B, NOT available for a brand-new song).
         # Raising chaos at FIXED density forces quarter->off-beat REPLACEMENT (backbone collapse); real charts
-        # raise density WITH chaos (corr +0.63), so a high-chaos export must lift density too.
-        gen_density = args.target_density if args.target_density is not None else real_density
+        # raise density WITH chaos (corr +0.63) -- the manifold density couples them so high-chaos lifts density.
+        if args.target_density is not None:
+            gen_density = args.target_density
+        elif style_density is not None:
+            gen_density = style_density
+        else:
+            gen_density = real_density
         tau = float(np.quantile(p_onset, 1 - gen_density)) if gen_density > 0 else 0.5
 
         gen_kwargs = dict(onset_threshold=tau, type_sample=True,

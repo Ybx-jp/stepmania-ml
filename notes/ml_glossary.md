@@ -51,3 +51,16 @@ Format per entry: **term** — plain meaning *(how it shows up here)*.
 - **bottleneck** — deliberately squeezing information through a small representation (here: pooling a whole chart to one vector) so the model can only keep the gist (global feel) and not memorize/copy the details.
 - **mean-pooling** — collapsing a sequence (B,L,d) to one vector per item (B,d) by averaging over time; the simplest way to summarize variable-length input into a fixed-size latent.
 - **autoencoder-style conditioning** — at training, the conditioning reference IS the target itself (encode the target → condition on it → reconstruct it). The bottleneck stops trivial copying, forcing the encoder to learn transferable style; at inference you swap in a *different* reference.
+
+## Added 2026-06-22
+
+- **jack** — domain (rhythm-game) term: consecutive presses on the SAME single arrow/panel. At 16th spacing it's one foot hammering fast = physically brutal; real charters break runs by alternating panels (the H13 exertion finding).
+- **out-of-distribution (OOD)** — an input or conditioning target the model never saw in training; behavior there is unreliable. Here: cranking one groove-radar dim while pinning the correlated ones requests a combo absent from real data.
+- **manifold** — the lower-dimensional surface that real data actually occupies inside the full space. The 5-dim groove radar really lives on a ~2-dim surface (one intensity axis + freeze); "on-manifold" = realistic combo, "off-manifold" = a combo real charts avoid.
+- **covariance / correlation matrix** — how dimensions move together across the data. Covariance is the raw co-variation; correlation normalizes it to [−1, 1] (here: stream↔chaos r=0.80 means they rise together). The basis for the [[manifold]].
+- **Mahalanobis distance** — distance from a point to a distribution that accounts for its spread and correlations (roughly "how many typical std-devs away, along the data's own axes"), unlike plain straight-line distance. Our "how unusual is this groove combo" meter.
+- **Gaussian conditional / conditional expectation E[·|·]** — fit a multivariate normal, fix some variables, and read off the expected values of the rest (`E[free | fixed]`). Used to auto-fill the radar dims the user didn't set, coherently with the ones they did.
+- **projection (onto the manifold / covariance ellipsoid)** — snapping an off-[[manifold]] point back to the nearest plausible on-manifold point (shrink along the [[Mahalanobis distance]] ray) so contradictory requests still cohere.
+- **rank / low-rank** — the number of genuinely independent axes of variation. "Rank-2" = despite 5 named radar knobs, there are effectively only ~2 free directions (intensity + freeze); the rest are correlated.
+- **k-nearest-neighbors (k-NN)** — find the k closest real examples to a query point; here, the nearest real charts to a target groove, to check whether that combo actually exists.
+- **PCA / factor** — finding the few orthogonal axes that capture most of the variation in correlated data (an alternative way to turn the 5 coupled radar dims into ~2 independent steering coordinates).

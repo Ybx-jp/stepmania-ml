@@ -15,6 +15,182 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-23 — ★ BEST CHART YET (OH WORLD glitch g3.5) + "harmonic guidance" hypothesis (H16) + song-style fit (H17)
+
+### What was played
+glitch conditioning (chaos=high,air=low,stream=mod) at g=3.5/4/4.5, Deja loin + OH WORLD. Controls verified
+clean (max_jack=1, no note-during-2holds, no hands) on all.
+
+### Raw feedback (user)
+- **OH WORLD g3.5** — > "OH MY GOD!! THIS WAS ACTUALLY AN INCREDIBLE CHART! A human would feel good about
+  having composed this one. it was choreographed, there was a 1/16 storm and some sweeps, global structure
+  was preserved with a satisfying climax. local structures with symmetry emerged and were varied from each
+  other. a genuinely good chart. wow." (off-beat-16th 0.16)
+- **OH WORLD g4** — > "felt like a DEGRADED version of g35. still had local and global structure, but it
+  became 1/8 biased and the choreography and symmetry were ruined." (off16 0.33)
+- **OH WORLD g4.5** — > "BETTER than g4 while still being 1/8 biased! how interesting! perhaps this guidance
+  metric is HARMONIC — like vibrating a string at the right frequencies produces still points with a unique
+  signature and intermediate frequencies are garbage." (off16 0.42) — i.e. **non-monotonic** in g.
+- **Deja loin g3.5** — struggled; suspects the AUDIO may be slightly misaligned (unusual cluster of 'great'
+  ratings vs the normal 'flawless'/'perfect'). **g4.5** — "actually decent. I realized I struggled with g35
+  because this song is so 1/4-DOMINANT and not very ornamental — unnatural to chart this way; the model was
+  desperate for musical events to latch onto." (off16 forced to 0.31→0.59, high for a 1/4 song)
+
+### Commentary / hypotheses
+- **★ THE BREAKTHROUGH.** OH WORLD g3.5 is the FIRST chart the user has called genuinely good/human-quality —
+  choreography, local symmetry that varies, preserved global arc with a climax, a tasteful 16th storm. This
+  validates the whole stack by ear: the model's representation + manifold conditioning + the now-robust
+  decode CAN produce a musically excellent chart at the right operating point. The thesis (controllable,
+  human-quality generation) has its first existence proof.
+- **H16 (NEW) — guidance may be NON-MONOTONIC / "harmonic."** g3.5 great → g4 degraded (1/8-biased,
+  choreography ruined) → g4.5 partially recovers (still 1/8-biased). The user's resonance metaphor: discrete g
+  values are "nodes" of coherent output; intermediates degrade. **MUST be falsified against sampling noise
+  FIRST** (generation is stochastic; one good g3.5 draw vs one bad g4 draw could be luck, not a node) —
+  [[experiment-design]] rule 11. Plausible MECHANISM if real: at fixed manifold density, tau is recomputed
+  per g, so CFG shifts WHICH frames clear threshold; certain g may lock the selected onsets onto the
+  metrical grid (quarter/8th/16th emphasis) coherently, others land 1/8-biased. Test: fine g sweep × multiple
+  SEEDS on OH WORLD, measure the rhythm distribution (catch the 1/8-bias node) + seed variance.
+- **H17 (NEW) — song↔style FIT gates the result.** Same guidance, opposite outcomes: OH WORLD (ornamental →
+  off16 0.16 natural) sang; Deja loin (1/4-dominant → off16 forced to 0.31) fought the glitch style ("model
+  desperate for events to latch onto"). The off16 the audio yields at a given g is the tell — a style only
+  works where the SONG affords it. Implies: pick the style to the song (or warn when a style is off-fit for
+  the audio), don't force ornamental conditioning onto a 1/4 song. Connects to the manifold realizability
+  idea but at the AUDIO level, not just the radar level.
+- **Deja loin AUDIO-MISALIGNMENT suspicion** (separate, check before trusting Deja loin play-feel): the
+  'great'-rating cluster suggests a timing offset on this song's audio/chart sync. Could confound every Deja
+  loin evaluation this whole arc. Worth verifying the offset/BPM.
+
+### Connecting thread
+The same per-axis-guidance tuning (H14) that looked like a simple "push harder" knob turns out to have
+STRUCTURE (H16, if real) and to interact with song character (H17). And the breakthrough chart needed BOTH
+the right operating point AND a song that affords the style — plus the now-fixed decode floor. The offline
+metrics still can't see any of "choreography/symmetry/climax"; only the ear found g3.5. The harmonic test is
+the rare case where a quantitative proxy (rhythm distribution) might finally track a felt-quality cliff.
+
+### Action / next
+- [ ] **H16 falsification (cheap, first):** OH WORLD, fine g sweep (3.0..5.0 step 0.25) × 3 seeds; measure
+  quarter/8th/16th shares + a repetition/symmetry proxy; is the non-monotonic 1/8-bias REPRODUCIBLE beyond
+  seed noise (→ harmonic) or within it (→ a lucky draw)? Don't commit "harmonic" until this clears.
+- [ ] **H17:** characterize style-fit by the off16 the audio yields per g; flag off-fit (forcing ornamental
+  on a 1/4 song). Maybe an audio-ornamentality measure to pick/warn styles.
+- [ ] Deja loin audio sync check (offset/BPM) — rule out the misalignment confound.
+- [ ] Save OH WORLD g3.5 as the project's reference "good chart" exemplar.
+
+---
+
+## 2026-06-23 — Guidance is a per-axis knob (H14) + TWO mandatory-control GAPS caught by ear (now fixed)
+
+### What was played
+The g=3 vs g=5 A/B (same song Deja loin), 3 styles × 2 guidances, manifold-conditioned.
+
+### Raw feedback (user)
+- **glitch g3** — "pretty bad. felt awkward, never got into rhythm." **g5** — "actually… better than g3
+  surprisingly. maybe this is a very SENSITIVE parameter where there's some magic range that just works. g3
+  felt uncertain. g5 was actually musical, but 1/16s were the primary line so it was too unintuitive to
+  groove to."
+- **hold g3** — "pretty fun! HOWEVER, notes were put down when both feet were occupied by hold arrows. aren't
+  we controlling for that? I also noticed glitch g3 had **illegal 1/16 jack sequences**." **hold g5** — "also
+  quite fun! no illegal sequences."
+- **stream g3/g5** — "fine / basically the same but some awkward sequences more filled in. maybe even higher
+  conditioning would be better."
+- Takeaway: "**guidance effect is a parameter worth tuning PER AXIS.** I think the model has a strong enough
+  representation with a robust enough decode that tuning guidance will be worthwhile."
+
+### Commentary / hypotheses
+- **H14 refined — per-axis guidance, and chaos has a narrow "magic range."** The sweep + ear agree: density
+  steering is guidance-independent (target-pinned); freeze tolerates guidance gracefully; CHAOS is sensitive
+  — g=3 under-commits (awkward/uncertain, off16~0.11), g=5 floods 16ths as the primary line (off16 0.71, the
+  H4 smear edge). The good band is BETWEEN (→ this session's g=3.5/4/4.5 test). So conditioning IS a usable
+  control surface per the user's read; it just needs per-axis tuning. NOT a global guidance default.
+- **★ TWO MANDATORY-CONTROL GAPS, caught by ear, CONFIRMED by audit, now FIXED.** The user's instinct ("ensure
+  controls are truly in place; if they were but still broken, that's useful info") was exactly right — the
+  controls WERE applied (enforce_playability), but conditioning exposed logic gaps:
+  1. **note-during-2holds** (hold_g3: 7 frames). `no_jump_during_hold` only forbade ≥2 FRESH presses while a
+     hold was open — a SINGLE fresh press while BOTH feet are hold-pinned (no free foot) slipped through, and
+     3–4-panel "hands" were allowed entirely when no hold was open. FIX: occupancy-based — forbid any pattern
+     where `held + fresh > 2` (the pad has 2 feet). 
+  2. **fast jack leak** (glitch_g3: max-run 3 despite max_jack_run=1). A `{tap, hold-close}` jump reads as a
+     SINGLE in the chart, but the cap tracked the PATTERN (a 2-panel jump) and reset the jack counter, so
+     consecutive same-panel singles leaked across hold-close frames. FIX: track + cap on FRESH single presses
+     (what a foot actually re-hits), not the pattern. Manifests only at full song length / higher density
+     (768-frame regen got lucky; the 1440 export didn't) — a why-test-at-deployment-scale lesson.
+  Both verified gone at g=3, full length, on Deja loin + IN BETWEEN; tests added. **Useful info confirmed:
+  decode constraints written against the PATTERN can be bypassed by the hold automaton's pattern→symbol
+  remap; constraints must be expressed on the FINAL playable symbols (fresh presses / occupancy).**
+
+### Connecting thread
+The "robust decode" the user is counting on for guidance tuning had two holes that only a hard conditioning
+push (more holds + denser 16ths) surfaced — consistent with the standing lesson that each new regime
+(here: strong CFG) re-stresses the decode. With the holes closed, the per-axis guidance program (H14) rests
+on a now-actually-enforced playability floor. Chaos's "magic range" is the immediate test; the deeper vibe
+gap is still H15 (motifs).
+
+### Action / next
+- [ ] **This session:** glitch at g=3.5/4/4.5 on Deja loin + IN BETWEEN (controls verified in place) — find
+  the chaos magic range between under-commit (g3) and 16th-flood (g5).
+- [ ] Per-axis guidance: stream maybe wants HIGHER conditioning (user: "even higher would be better"); freeze
+  ~g3; chaos in the 3.5–4.5 band. Codify per-axis guidance once the bands are confirmed by ear.
+- [ ] H15 motif work still the real chaos/vibe lever (guidance alone tops out at the smear).
+
+---
+
+## 2026-06-22 — Manifold conditioning is COHERENT (augments the representation) but SUB-THRESHOLD (H14) + the "vibe" gap (H15)
+
+### What was played
+The 3 manifold-aware style sets (`style_glitch_tech` / `style_stream_machine` / `style_hold_ballad`), same
+4 groove-rich Hard songs (Heart Attack, nightbird lost wing, Deja loin, IN BETWEEN), guidance 1.5,
+pattern_temperature 0.7, density manifold-derived (source-chart-free). A/B = the SAME song across styles.
+
+### Raw feedback (user)
+- **glitch_tech** — "basically worked." Idea: "train the pattern head on motifs correlated with the groove
+  profile. glitch tech is a stompy ornamental vibe that works really well for crunchy edm/dubstep tracks…
+  these charts weren't bad, but they failed to capture the glitch tech vibe properly."
+- **stream_machine: Heart Attack** — "basically the same chart as its glitch tech version, but a noticeable
+  notch streamier! if nothing else, this shows that **conditioning is actually augmenting the output from the
+  representation, not some incoherent decode bull shit**." nightbird lost wing similar.
+- **hold_ballad: Heart Attack** — "very similar… the conditioning was directionally correct, but **too weak
+  to get the model to diverge from its belief of what the chart should be. I wonder if there is some decision
+  boundary we need to cross** for the conditioning to have a major effect."
+
+### Commentary / hypotheses
+- **H14 (NEW) — manifold conditioning is COHERENT but SUB-THRESHOLD.** The key positive: the same song
+  (Heart Attack) is *noticeably streamier* under stream_machine than glitch_tech, in a coherent direction →
+  the radar conditioning genuinely augments the learned representation (it's not decode noise, and not OOD
+  breakage — the manifold kept it in-distribution). BUT cross-style divergence is small (hold_ballad ≈
+  glitch_tech on Heart Attack): the audio prior dominates and gentle (g=1.5, 0.85-quantile) on-manifold
+  targets don't move the chart far. The user's "decision boundary" intuition = the conditioning may be
+  roughly LINEAR-but-shallow; it needs more push to visibly diverge. **Cheap levers (no retrain):** (a) CFG
+  guidance 1.5→2→3, (b) more extreme on-manifold targets (vhigh/max quantiles vs 0.85), swept on one song.
+  Mirror image of the chaos-OOD lesson: there, pushing a point too FAR off-manifold broke musicality; here,
+  on-manifold is coherent but too SOFT — so there's a usable middle band to find.
+- **H15 (NEW) — "vibe" = groove-correlated MOTIFS the pattern head lacks (the user's training idea).** glitch
+  tech "failed to capture the vibe" because vibe is characteristic PATTERN MOTIFS (stompy ornamental figures
+  for crunchy edm/dubstep), not density/distribution. The pattern head conditions on the radar SCALAR but has
+  no vocabulary of style-specific motifs, so steering shifts *quantities* (streamier, more holds) but not the
+  *character*. Idea: mine recurring pattern motifs from real charts, correlate them with the groove profile,
+  and condition/train the pattern head on motif identity. Model-level lever (vs H14's decode-level push) —
+  the path from "right numbers" to "right character." Same "quantity solved, character is the frontier"
+  pattern as choreography (H1/H4) and the taste critic.
+
+### Connecting thread
+Two layers, cleanly separated by this A/B. (1) DECODE/strength (H14): conditioning works and is coherent;
+it's just gentle — a guidance/extremity sweep should find where styles visibly diverge without going OOD.
+(2) REPRESENTATION/character (H15): even at full strength, the model can only move quantities it already
+knows; capturing a *vibe* needs groove-correlated motif vocabulary it was never trained on. The manifold
+made the ASK coherent and proved conditioning is real — the remaining gap is exactly the project's standing
+theme (quantity is handled; musical character isn't, and the offline metrics can't see it).
+
+### Action / next
+- [ ] **H14 cheap sweep (first):** one song, all 3 styles, guidance ∈ {1.5, 2, 3} × target extremity ∈
+  {high(0.85), vhigh(0.95), max(0.98)} → find the "decision boundary" where styles visibly diverge; watch
+  musicality so we stop before OOD. No retrain.
+- [ ] **H15 scope (the model bet):** plan note for mining groove-correlated pattern motifs + conditioning the
+  pattern head on them. The "vibe" lever; pairs with the taste critic.
+- [ ] Integrate manifold steering into the staged (new-default) generator (its onset isn't radar-conditioned
+  yet — panels only) so density/stream steering is fully live there too.
+
+---
+
 ## 2026-06-22 — H13 exertion cap CONFIRMED by ear ("AWESOME") → promoted to MANDATORY
 
 ### What was played
