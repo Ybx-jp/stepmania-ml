@@ -144,6 +144,35 @@ def gen_staged(m, audio, real_onset, device):
     return onset
 
 
+@torch.no_grad()
+def gen_staged_thresh(m, audio, T, thresh, device):
+    """QUOTA-FREE staged gen (H12): staged backbone->16ths order, but each frame is committed where the model
+    is CONFIDENT (p > thresh) -- the AMOUNT emerges per-song from the audio, no imposed count. thresh is a
+    single global confidence cutoff (calibrated so AGGREGATE density ~ real; per-song amount varies)."""
+    A = torch.from_numpy(audio).unsqueeze(0).to(device); t = np.arange(T)
+    bands = [t % 4 == 0, t % 4 == 2, (t % 4 == 1) | (t % 4 == 3)]
+    onset = np.zeros(T); revealed = np.zeros(T, bool)
+    for band in bands:
+        ctx = np.stack([onset * revealed, revealed.astype(np.float32)], -1)[None].astype(np.float32)
+        p = torch.sigmoid(m(A, torch.from_numpy(ctx).to(device)))[0].cpu().numpy()
+        onset[band & (p > thresh)] = 1.0
+        revealed[band] = True
+    return onset
+
+
+def calibrate_thresh(m, calib, device):
+    """single global confidence threshold so MEAN gen density ~ MEAN real density (per-song amount emerges).
+    NOT a per-song quota -- one constant; each song's count varies with its audio."""
+    target = float(np.mean([y.mean() for _, y, *_ in calib]))
+    lo, hi = 0.2, 0.97
+    for _ in range(14):
+        mid = (lo + hi) / 2
+        d = float(np.mean([gen_staged_thresh(m, a, len(y), mid, device).mean() for a, y, *_ in calib]))
+        if d > target: lo = mid          # too dense -> raise threshold
+        else: hi = mid
+    return (lo + hi) / 2, target
+
+
 def _gen_v4_panels(v4, A42, T, diff, R, onset_override, device):
     kw = dict(onset_override=onset_override, type_sample=True, type_temperature=0.4,
               pattern_sample=True, pattern_temperature=0.7, radar=R)
@@ -151,8 +180,9 @@ def _gen_v4_panels(v4, A42, T, diff, R, onset_override, device):
     return pair_holds(v4.generate(A42, diff, lengths=torch.tensor([T], device=device), **kw)[0].cpu().numpy())
 
 
-def export_playtest(m, v4, ds, args, device, rng):
-    """STAGED mask-predict vs v4-baseline charts on chaotic Hard songs -> playable folders + install (A/B)."""
+def export_playtest(m, v4, ds, args, device, rng, thresh=None):
+    """STAGED mask-predict vs v4-baseline charts on chaotic Hard songs -> playable folders + install (A/B).
+    thresh None = oracle per-phase budget; else QUOTA-FREE confidence threshold (amount emerges per-song)."""
     # groove-validate: Hard songs with real 16ths, ranked by chaos
     cands = []
     for i in range(len(ds.valid_samples)):
@@ -179,7 +209,7 @@ def export_playtest(m, v4, ds, args, device, rng):
         diff = torch.tensor([meta['difficulty_class']], device=device)
         R = torch.from_numpy(meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
         with torch.no_grad():
-            stg_on = gen_staged(m, a, real_on, device)
+            stg_on = gen_staged(m, a, real_on, device) if thresh is None else gen_staged_thresh(m, a, T, thresh, device)
             stg = _gen_v4_panels(v4, A42, T, diff, R, torch.from_numpy(stg_on).bool().unsqueeze(0).to(device), device)
             p = torch.sigmoid(v4.onset_logits(v4.encode_audio(A42), diff, radar=R))[0].cpu().numpy()
             v4_on = (p > np.quantile(p, 1 - float(real_on.mean()))).astype(np.float32)
@@ -198,7 +228,8 @@ def export_playtest(m, v4, ds, args, device, rng):
                 music=music, offset=float(chart_obj.offset), typed=True)
             (folder / "chart.sm").write_text(sm, encoding="utf-8")
         s16 = lambda o: 100 * (o.astype(bool) & ((np.arange(T) % 4 == 1) | (np.arange(T) % 4 == 3))).sum() / max(o.sum(), 1)
-        print(f"  {safe_name(title)[:28]:<30} chaos {chaos:5.1f}  16th%: real {s16(real_on):.0f} staged {s16(stg_on):.0f} v4 {s16(v4_on):.0f}", flush=True)
+        print(f"  {safe_name(title)[:26]:<28} chaos {chaos:5.1f}  dens real {real_on.mean():.2f} staged {stg_on.mean():.2f}  "
+              f"16th%: real {s16(real_on):.0f} staged {s16(stg_on):.0f} v4 {s16(v4_on):.0f}", flush=True)
         n += 1
     from src.utils.sm_install import install_to_stepmania
     install_to_stepmania(str(out_stg), None); install_to_stepmania(str(out_v4), None)
@@ -208,6 +239,7 @@ def export_playtest(m, v4, ds, args, device, rng):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--export_dir', default=None); ap.add_argument('--export_songs', type=int, default=6)
+    ap.add_argument('--oracle', action='store_true', help='use the oracle per-phase budget (H12 quota) instead of the quota-free confidence threshold')
     ap.add_argument('--epochs', type=int, default=8); ap.add_argument('--max_len', type=int, default=768)
     ap.add_argument('--max_train', type=int, default=1500); ap.add_argument('--gen_songs', type=int, default=40)
     ap.add_argument('--bs', type=int, default=16); ap.add_argument('--lr', type=float, default=1e-3)
@@ -256,7 +288,11 @@ def main():
 
     m.eval()
     if args.export_dir:
-        export_playtest(m, v4, va_ds, args, device, rng); return
+        thresh = None
+        if not args.oracle:
+            thresh, tgt = calibrate_thresh(m, gen, device)
+            print(f"QUOTA-FREE: calibrated global confidence threshold {thresh:.3f} (target density {tgt:.3f})", flush=True)
+        export_playtest(m, v4, va_ds, args, device, rng, thresh); return
 
     # STAGED onset gen -> v4 panels (onset_override) -> taste critic. Compare REAL / shuf16 / v4-gen / staged.
     real_s, shuf_s, v4_s, st_s = [], [], [], []; st_ph, st_d = [], []
