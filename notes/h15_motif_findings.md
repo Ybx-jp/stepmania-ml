@@ -116,8 +116,56 @@ are split-half STABLE (|cos|>0.7) and radar-orthogonal, each with a contrast lab
 radar)` → 12-d z-scored motif knobs (training target, autoencoder-style; at inference the user SETS a target).
 **The 12 knobs are interpretable figure contrasts, all maxcorr_radar 0.00, stab 0.86–0.99:** jack↔sweep,
 jump/bracket, step↔candle/cross, trill↔jump/bracket, jack↔trill, … (the auto-labeler is crude on some — the
-stored pos/neg motif lists carry the real meaning). **NEXT (Phase 2 = model):** add `motif_proj`+`null_motif`
-to `LayeredTypedChartGenerator._cond` (alongside difficulty+radar+style) with CFG dropout; `train_motif.py`
-warm-start from `gen_style`, self-condition each chart on its own motif-knob vector; then steerability eval +
-playtest (does moving a motif axis change the FEEL?). Pair selection with the taste critic (per-frame CE can't
-reward characteristic figures).
+stored pos/neg motif lists carry the real meaning).
+
+## PHASE 2 — model wired + trained + steerability tested (2026-06-23)
+Wired `motif_proj`+`null_motif` into `LayeredTypedChartGenerator._cond` (zero-init proj → warm-start is an
+exact no-op at step 0; CFG-amplifiable like radar/style). `train_motif.py` warm-started from **gen_style**
+(Track B, 23-dim — the OH WORLD lineage; see [[two-generator-tracks]]), self-conditioned each chart on its own
+motif vector, CFG-dropout radar/style/motif. 12 epochs → `checkpoints/gen_motif/best_val.pt`, **val_total
+1.213 (≈ warm-start; quality preserved)**.
+
+**Steerability (eval_motif.py single-knob + eval_motif_transfer.py on-manifold exemplar, 20 songs):**
+- **A real but PARTIAL lever.** **step↔candle (knob 3) steers well** (on-manifold exemplar transfer +0.27,
+  own-axis Δ **+1.60** at g=3); **jack↔trill (knob 10) weakly** (Δ+0.51); **jack↔sweep (knob 0) not at all**
+  (Δ+0.15, transfer +0.04). Quality intact throughout (onset_F1 0.73–0.77, density matched).
+- **Two confounds tested (Rule 7):** (a) the H13 `max_jack_run=1` cap — REFUTED as the cause (disabling it
+  didn't rescue knob 0); (b) single-knob ±3z is OFF-MANIFOLD (cross-talk 1.82 ≫ self 0.19 at g=3) — SUPPORTED;
+  the on-manifold exemplar test helped (transfer rose, guidance amplified) but did NOT rescue the jack axes.
+- **ROOT CAUSE (training signal, visible):** the motif vector reduced TRAIN pattern-loss only 1.054→1.038
+  (~1.5%). It's a GLOBAL chart descriptor added to PER-FRAME conditioning → a global figure-mix barely helps
+  predict which-panel-at-frame-t → weak per-frame gradient → weak learned control. (Same global-bottleneck
+  that made style-transfer work for density but not finer structure.) Jacks fail worst because the AR pattern
+  head was tuned to AVOID jacks (the old always-Left fix) so overcoming it needs signal the global vec lacks.
+
+**Where this leaves H15:** the conditioning surface is sound (interpretable, radar-orthogonal, quality-safe)
+and one characteristic-figure axis (candle/cross) genuinely steers with guidance. The PARTIAL result is a
+GLOBAL-DESCRIPTOR limit, not a dead end. Two forward paths: (1) cheap — PLAYTEST the working candle knob (does
+the measurable steer change the FEEL? — the validated instrument; offline metrics are blind to vibe); (2)
+bigger — give the motif lever a per-frame/LOCAL signal (local motif targets, or a hierarchical
+"pick-motif-then-realize" decode) so control isn't bottlenecked by a single global vector. Pair selection with
+the taste critic (per-frame CE can't reward characteristic figures).
+
+## PHASE 2b — base-swap test: motif on TRACK A (42-dim high-res base) (2026-06-24)
+**Question (after reconciling the Track A/B divergence):** the two generators are the SAME class
+(`LayeredTypedChartGenerator`); they differ ONLY in `audio_dim` (Track A 42-dim = 23 base +12 chroma +2 HPSS +4
+metric-phase +1 high-res onset; Track B 23-dim). Conditioning experiments landed on B by PATH DEPENDENCE (the
+gen_radar→gen_style→gen_motif warm-start chain was built on 23-dim), NOT architecture — radar already runs on A.
+So: does a richer LOCAL-audio base (A carries high-res onset + metric phase) lift the GLOBAL motif descriptor's
+realization, or is the Phase-2 partial result base-invariant (→ purely the global-descriptor mechanism)?
+- `train_motif_hr.py` = train_motif.py with ONE change: warm-start **gen_highres_v4** (42-dim), cache/samples_v3.
+  **STYLE OFF (radar+motif only)** — Track A's lineage never fed `reference=` so its style encoder is UNTRAINED
+  (turning it on = a 2nd changed variable); and eval generates with style=null anyway, so off is both clean AND
+  how the lever is used. 12 ep → `checkpoints/gen_motif_hr/best_val.pt`, **val_total 1.216** (< base 1.265; ≈
+  Track B's 1.213 — quality preserved). `eval_motif.py` got `--ckpt`/`--highres` flags to drive both tracks.
+- **RESULT (own-axis Δ at g=3, single-knob ±3z, 20 songs) — Track B → Track A:**
+  - knob 3 step↔candle: **+1.60 → +2.57** (richer base AMPLIFIES the already-working axis; even g=1 Δ+1.18)
+  - knob 10 jack↔trill: +0.51 → **+0.23** (NOT rescued; weaker)
+  - knob 0 jack↔sweep: +0.15 → **−0.16** (NOT rescued; still dead)
+  - Quality intact (onset_F1 0.68–0.73, density matched ~0.19).
+- **CONCLUSION — base-INVARIANT for the failing axes ⇒ Phase-2 root cause CONFIRMED.** If richer per-frame
+  audio could fix jacks it would have here; it didn't. It only sharpened the axis the per-frame head can already
+  render (candle = a spatial figure). So the bottleneck is the GLOBAL-DESCRIPTOR mechanism, not the audio input.
+  We've now ruled out BOTH the playability cap (Phase 2) AND the audio base (here) as the cause.
+- **DECISION:** per-frame/LOCAL motif conditioning is now the EVIDENCED next step (the only lever that can move
+  jacks), and **Track A is its home** (candle steers harder, 16th-note capability already present, quality safe).

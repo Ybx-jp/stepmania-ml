@@ -510,6 +510,38 @@ def test_style_guidance_runs_and_shapes():
     assert (g1 != g3).any(), "style guidance had no effect on the generated chart"
 
 
+def test_motif_per_frame_schedule_and_onset_decouple():
+    # H15 local-motif: motif accepts a per-frame schedule (B,T,K) as well as a global (B,K) vector, and is
+    # DECOUPLED from the onset head (motif shapes which-panels, not density).
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator, MOTIF_DIM
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    m.motif_proj.weight.data += 0.1 * torch.randn_like(m.motif_proj.weight)   # off the zero-init no-op
+    m.motif_proj.bias.data += 0.1 * torch.randn_like(m.motif_proj.bias)
+    B, T, K = 2, 32, MOTIF_DIM
+    audio = torch.randn(B, T, 23); states = torch.randint(0, 5, (B, T, 4)); diff = torch.tensor([1, 2])
+    mask = torch.ones(B, T, dtype=torch.bool)
+    sched = torch.randn(B, T, K)                                              # varying per-frame schedule
+
+    ol_s, pat_s, typ_s = m(audio, states, diff, mask, motif=sched)
+    assert ol_s.shape == (B, T) and pat_s.shape[:2] == (B, T) and typ_s.shape[:2] == (B, T)
+    ov = torch.ones(B, T, dtype=torch.bool)
+    assert m.generate(audio, diff, onset_override=ov, motif=sched).shape == (B, T, 4)
+
+    # back-compat: a CONSTANT schedule must equal the equivalent global (B,K) vector
+    gv = torch.randn(B, K); sched_const = gv.unsqueeze(1).expand(B, T, K).contiguous()
+    ol_g, pat_g, _ = m(audio, states, diff, mask, motif=gv)
+    ol_c, pat_c, _ = m(audio, states, diff, mask, motif=sched_const)
+    assert torch.allclose(pat_g, pat_c, atol=1e-5), "constant schedule != equivalent global vector"
+
+    ol0, pat0, _ = m(audio, states, diff, mask, motif=None)                   # null-motif (CFG token)
+    assert not torch.allclose(pat0, pat_s, atol=1e-4), "per-frame motif did not change pattern logits"
+    # onset head is DECOUPLED from motif (#1): every motif variant leaves onset logits identical
+    assert torch.allclose(ol0, ol_s, atol=1e-6) and torch.allclose(ol0, ol_g, atol=1e-6), \
+        "motif leaked into the onset head (must be decoupled)"
+
+
 def test_hold_aware_decoding_valid():
     # Hold-aware decoding's automaton guarantees no orphan tails (a tail only ever
     # closes an open head) and at most one open hold per panel at a time.
