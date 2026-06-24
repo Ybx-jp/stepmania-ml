@@ -81,6 +81,34 @@ def name_figure(canon) -> str:
     return "step"
 
 
+# H15 hierarchical pick-then-realize: a DISCRETE per-section figure vocabulary (the "pick"). The continuous
+# radar-orthogonal knobs ENTANGLE figures (knob-0 'jack<->sweep' is really a jack detector; sweep mushes with
+# step/candle — diag_figure_labels.py), so a discrete family label cleanly isolates a figure (esp. SWEEP) that
+# the continuous projection cannot. Index 0 = sparse/none (sections with too few onsets to name).
+FIGURE_CLASSES = ["sparse", "jack", "sweep/staircase", "trill", "candle/cross", "jump/bracket", "step"]
+NUM_FIGURE_CLASSES = len(FIGURE_CLASSES)
+_FIG2IDX = {f: i for i, f in enumerate(FIGURE_CLASSES)}
+
+
+def figure_token(section_chart, W: int = 3, min_onsets: int = 4) -> int:
+    """(T,4) section -> dominant canonical W-window figure-family token (FIGURE_CLASSES index). 'sparse' (0)
+    when the section has too few onsets to name a figure."""
+    toks = onset_tokens(section_chart)
+    if len(toks) < max(W, min_onsets):
+        return 0
+    cnt = Counter(_canon(toks[j:j + W]) for j in range(len(toks) - W + 1))
+    return _FIG2IDX[name_figure(cnt.most_common(1)[0][0])]
+
+
+def figure_token_schedule(chart, section: int, W: int = 3) -> np.ndarray:
+    """(T,4) chart -> (T,) per-frame figure token, piecewise-constant per `section` frames."""
+    T = chart.shape[0]
+    out = np.zeros(T, np.int64)
+    for i in range(0, T, section):
+        out[i:i + section] = figure_token(chart[i:i + section], W)
+    return out
+
+
 class MotifBasis:
     def __init__(self, scales, codebooks, col_meta, radar_mu, radar_sd, ridge_W, ridge_b,
                  col_mean, col_std, components, score_mu, score_sd, axis_info):
