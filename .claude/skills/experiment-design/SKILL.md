@@ -73,6 +73,24 @@ companion to the rules below.
     live in one enforced helper. A bespoke generate()/export path that re-implements them WILL silently drop
     one and confound a playtest (it did). New paths call the shared helper; deviations need explicit approval.
 
+## Added 06-23 (motif-gate post-mortem — see `failure_modes_postmortem.md` §10)
+
+15. **Baseline against the capability you ALREADY have — not a strawman subset.** When the question is "does
+    a NEW lever add value," the control must be the FULL set of things already conditioned/deployed, not a
+    convenient slice. Baselining motifs against *density alone* (a slice of the radar we already condition on
+    in full — density, jumps, AND holds) let an already-SOLVED capability (freeze→holds is a shipped radar
+    knob) masquerade as a novel motif finding. **Red-flag sanity trip:** if a conclusion recommends pursuing
+    something the project ALREADY does (e.g. "start with holds"), the control was wrong — stop and re-floor.
+16. **Manipulate the HYPOTHESIS variable itself; don't let an auxiliary variant answer an easier, different
+    question.** The hypothesis was note-PATTERN motifs (which-panel figures). I added a frame/RHYTHM variant,
+    it predicted groove, and I credited *that* to "the vibe lever" — but rhythm/timing is a DIFFERENT,
+    already-settled axis (H4/H16). The manipulated variable drifted off the hypothesis. If you extend a probe
+    past the spec'd hypothesis, LABEL the extension and report results **against the original hypothesis**
+    separately; never silently redefine the hypothesis to fit what the apparatus happened to surface. When a
+    handoff/spec defines the hypothesis and its operationalization, deviating from it needs the same explicit
+    flag as deviating from shared infra (Rule 14) — and a negative result must be stated against the ORIGINAL
+    definition, not the substitute.
+
 ## The single highest-leverage habit
 Before you believe/commit ANY result, ask **"what would make this conclusion wrong?"** and run THAT first.
 Every overturned conclusion this session was caught by a cheap fair test we eventually ran — the only error

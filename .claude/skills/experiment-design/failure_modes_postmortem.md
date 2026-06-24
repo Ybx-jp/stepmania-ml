@@ -13,6 +13,10 @@ failures generalize; the examples are this session's.
 2. **Premature conclusions from rigged tests.** Model-defect / ceiling conclusions were COMMITTED and then
    OVERTURNED by the very next (fair) probe — twice. The fair test always existed; the only error was running
    it second instead of first. **Every overturned conclusion was caught by a cheap test we eventually ran.**
+3. **Drift off the asked question — wrong control, wrong variable** (added 06-23, §10). The probe answered an
+   easier/adjacent question (an auxiliary variant, a strawman baseline) and the result got credited to the
+   real hypothesis. Tell: the conclusion recommends something the project ALREADY does. **Anchor every probe
+   to (a) the EXACT hypothesis variable and (b) a control = everything you already have, before believing it.**
 
 ## Catalog: failure mode → session example → betterment
 
@@ -88,10 +92,36 @@ failures generalize; the examples are this session's.
   progress is monitorable. Isolate a segfault with a 1-file repro before assuming a logic bug. Re-read every
   comprehension's unpacking against what the body uses.
 
+### 10. Wrong CONTROL + hypothesis DRIFT — "discovered" a solved capability (motif-gate, 2026-06-23)
+Designing the H15 Phase-0 motif gate (do note-PATTERN motifs carry a style's "vibe"?), three linked errors,
+all caught by the user, not a probe:
+- **Strawman floor.** I controlled motif signal against **density + difficulty** and declared the note-pattern
+  hypothesis "adds nothing" where it didn't beat that floor. But we ALREADY condition on the *full* radar
+  (density, jumps/air, holds/freeze). The honest "is this a NEW lever" floor is the whole deployed
+  conditioning surface — against a density-only slice, an already-solved knob looked novel.
+- **Hypothesis drift.** The hypothesis was which-PANEL note-pattern motifs. I added a FRAME/rhythm-window
+  variant, it scored, and I let *its* gain carry the headline ("chaos vibe is rhythm, not panel-shape") —
+  rhythm/timing is a DIFFERENT axis already settled by H4/H16. The manipulated variable slid off the
+  hypothesis and I reported a result about the substitute as if it answered the original.
+- **No sanity trip against known capability.** The conclusion recommended "start with freeze/holds" — a knob
+  the radar ALREADY controls and that's shipped. Recommending a solved problem should have screamed "wrong
+  control"; it didn't, because I never cross-checked the output against what the project can already do.
+- **Circular buckets (compounding).** Buckets were single radar dims, which ARE the conditioning targets, so
+  "motif predicts the bucket beyond density" partly re-measured radar-internal correlation, not residual
+  vocabulary.
+- **Betterments → SKILL.md Rules 15 (baseline against what you ALREADY have; a recommendation to pursue a
+  solved capability = red flag) + 16 (manipulate the hypothesis variable itself; label and separate any
+  extension; state negatives against the ORIGINAL definition).** Plus: when testing a *new* lever's novelty,
+  hold the FULL existing conditioning ~fixed and look for STRUCTURED residual variation — and don't bucket by
+  the very knobs you condition on.
+
 ## The single highest-leverage habit
 Before you BELIEVE or COMMIT any result, ask **"what would make this conclusion wrong?"** and run THAT test
 first. Cheap probes are the right tool — but a cheap probe on a rigged setup gives a *confidently wrong*
-answer fast (every overturned conclusion here was a cheap probe whose setup hadn't been cleared).
+answer fast (every overturned conclusion here was a cheap probe whose setup hadn't been cleared). And before
+crediting a probe's gain to your hypothesis, ask **"is this the variable I claimed to test, and is my control
+everything I already have?"** — a clean number for the wrong variable against the wrong baseline is worse than
+no number.
 
 ## A 30-second pre-commit gate (run before writing a conclusion in a note/commit)
 1. What is this metric BLIND to? (decompose; spot-check vs the artifact)
@@ -100,3 +130,6 @@ answer fast (every overturned conclusion here was a cheap probe whose setup hadn
 4. Are the units comparable (stratified, not pooled)?
 5. If this blames the MODEL — have I run the fair test that could exonerate it?
 6. Did I route generation through the shared enforced infra (no ad-hoc paths)?
+7. Is my CONTROL everything I already have (not a strawman subset), and is the manipulated variable the
+   ACTUAL hypothesis (not an auxiliary variant that answered a different question)?
+8. Does my conclusion recommend a capability we ALREADY have? If so, the control is probably wrong — re-floor.

@@ -26,6 +26,8 @@ from .transformer import PositionalEncoding, _causal_mask
 from .factorized import _project, _attend, _LayerCache
 from .typed import NUM_SYMBOLS, NUM_PANELS, NUM_PATTERNS, NUM_TYPES  # 5 symbols, 4 panels, 15 patterns, 4 types
 
+MOTIF_DIM = 12  # H15 motif-knob conditioning width (MotifBasis.K; see src/generation/motif_codebook.py)
+
 
 class TypedChartGenerator(nn.Module):
     def __init__(self, audio_dim: int = 23, d_model: int = 128, nhead: int = 8,
@@ -247,6 +249,13 @@ class LayeredTypedChartGenerator(nn.Module):
         # reference-chart style conditioning (Step 3): encode a reference chart -> (B,d) latent
         self.style_encoder = StyleEncoder(d_model=d_model)
         self.null_style = nn.Parameter(torch.zeros(d_model))
+        # H15 motif-vocabulary conditioning: radar-orthogonal motif-style knobs (MotifBasis) -> d; null for CFG.
+        # zero-init the proj so a warm-start begins as an identity no-op and the motif lever is LEARNED
+        # (preserves the warm-started model's quality at step 0; nothing changes until motif gradients flow).
+        self.motif_dim = MOTIF_DIM
+        self.motif_proj = nn.Linear(MOTIF_DIM, d_model)
+        nn.init.zeros_(self.motif_proj.weight); nn.init.zeros_(self.motif_proj.bias)
+        self.null_motif = nn.Parameter(torch.zeros(d_model))
 
     def encode_style(self, reference, reference_mask=None):
         """Reference chart -> (B,d) style latent. `reference` is (B,L,4) typed symbols (0..4) or
@@ -258,13 +267,22 @@ class LayeredTypedChartGenerator(nn.Module):
             occ = occ * reference_mask.unsqueeze(-1).float()
         return self.style_encoder(occ, reference_mask)
 
-    def _cond(self, difficulty, radar, style=None):
-        """Per-sample conditioning vector (B, d): difficulty + groove-radar (or null radar)
-        + reference-chart style latent (or null style)."""
+    def _cond(self, difficulty, radar, style=None, motif=None):
+        """Per-position conditioning, shape (B,1,d) (broadcast over time) — or (B,T,d) when `motif`
+        is a PER-FRAME schedule (B,T,K): the local-motif path (notes/h15_local_motif_plan.md). The
+        global motif vector (B,K) collapses to one constant added to every frame (weak per-frame
+        gradient — H15 Phase-2 root cause); a (B,T,K) schedule lets conditioning VARY by section.
+        difficulty + groove-radar (or null) + reference-style (or null) + motif knobs (or null)."""
         c = self.diff_embedding(difficulty)
         c = c + (self.radar_proj(radar) if radar is not None else self.null_radar.unsqueeze(0))
         c = c + (style if style is not None else self.null_style.unsqueeze(0))
-        return c
+        c = c.unsqueeze(1)                                                # (B,1,d)
+        if motif is None:
+            m = self.null_motif.view(1, 1, -1)                           # (1,1,d)
+        else:
+            m = self.motif_proj(motif)                                   # (B,K)->(B,d) | (B,T,K)->(B,T,d)
+            m = m.unsqueeze(1) if m.dim() == 2 else m                    # (B,1,d) | (B,T,d)
+        return c + m                                                     # (B,1,d) | (B,T,d)
 
     def load_from_factorized(self, sd: dict) -> int:
         """Warm-start: name+shape matches (audio enc, onset branch, decoder, diff emb) PLUS
@@ -285,9 +303,13 @@ class LayeredTypedChartGenerator(nn.Module):
     def encode_audio(self, audio):
         return self.audio_encoder(audio)
 
-    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None):
-        B, T, _ = memory.shape
-        cond = self._cond(difficulty, radar, style).unsqueeze(1).expand(B, T, -1)
+    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None, motif=None):
+        # Motif shapes WHICH panels (a pattern-head concern) — the MotifBasis is which-panels only, rhythm &
+        # density excluded. Timing/density is the onset head's job, controlled by radar. Conditioning onset on
+        # motif was spurious and let CFG inflate density (notes/h15_local_motif_plan.md), so onset sees
+        # difficulty+radar+style only; motif is applied in _decode. `motif` kept in the signature for call-site
+        # symmetry but intentionally NOT passed to the onset conditioning.
+        cond = self._cond(difficulty, radar, style, motif=None)   # onset: NO motif (density stays radar-controlled)
         x = self.dropout(self.pos_encoding(memory) + cond)
         pad = (~mask.bool()) if mask is not None else None
         return self.onset_head(self.onset_encoder(x, src_key_padding_mask=pad)).squeeze(-1)
@@ -300,9 +322,9 @@ class LayeredTypedChartGenerator(nn.Module):
         e = self._state_emb(states)
         return torch.cat([self.bos.expand(B, 1, -1), e[:, :-1]], dim=1)
 
-    def _decode(self, memory, states, difficulty, mask=None, radar=None, style=None):
+    def _decode(self, memory, states, difficulty, mask=None, radar=None, style=None, motif=None):
         B, T, _ = states.shape
-        cond = self._cond(difficulty, radar, style).unsqueeze(1).expand(B, T, -1)
+        cond = self._cond(difficulty, radar, style, motif)   # (B,1,d) broadcast | (B,T,d) per-frame
         tgt = self.dropout(self.pos_encoding(self._decoder_input(states)) + cond)
         causal = _causal_mask(T, states.device)
         pad = (~mask.bool()) if mask is not None else None
@@ -311,16 +333,17 @@ class LayeredTypedChartGenerator(nn.Module):
         return self.pattern_head(h), self.type_head(h).view(B, T, NUM_PANELS, NUM_TYPES)
 
     def forward(self, audio, states, difficulty, mask=None, radar=None,
-                reference=None, reference_mask=None, style=None):
+                reference=None, reference_mask=None, style=None, motif=None):
         """Returns (onset_logits (B,T), pattern_logits (B,T,15), type_logits (B,T,4,4)).
         `radar` (B,5) optional target groove-radar conditioning (None -> null/CFG).
         `reference` (B,L,4) optional reference chart for style conditioning; or pass a
-        precomputed `style` (B,d) latent directly. Both None -> null style/CFG."""
+        precomputed `style` (B,d) latent directly. Both None -> null style/CFG.
+        `motif` (B,MOTIF_DIM) optional motif-knob conditioning (None -> null motif/CFG)."""
         memory = self.encode_audio(audio)
         if style is None and reference is not None:
             style = self.encode_style(reference, reference_mask)
-        ol = self.onset_logits(memory, difficulty, mask, radar, style)
-        pat, typ = self._decode(memory, states, difficulty, mask, radar, style)
+        ol = self.onset_logits(memory, difficulty, mask, radar, style, motif)
+        pat, typ = self._decode(memory, states, difficulty, mask, radar, style, motif)
         return ol, pat, typ
 
     def _decoder_step_cached(self, x, caches):
@@ -342,7 +365,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  type_sample=False, type_temperature=1.0, hold_aware=False,
                  pattern_sample=False, pattern_temperature=1.0, pattern_top_k=None,
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
-                 guidance_scale=1.0, reference=None, reference_mask=None, style=None,
+                 guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, max_jack_run=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
@@ -399,13 +422,13 @@ class LayeredTypedChartGenerator(nn.Module):
         memory = self.encode_audio(audio)
         if style is None and reference is not None:
             style = self.encode_style(reference, reference_mask)
-        do_cfg = (guidance_scale != 1.0) and (radar is not None or style is not None)  # amplify radar/style conditioning
+        do_cfg = (guidance_scale != 1.0) and (radar is not None or style is not None or motif is not None)  # amplify radar/style/motif conditioning
         if onset_override is not None:
             onset = onset_override.bool().to(device)
         else:
-            ol = self.onset_logits(memory, difficulty, radar=radar, style=style)
+            ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif)
             if do_cfg:  # classifier-free guidance: push onset toward the conditioned prediction
-                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None)
+                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None, motif=None)
                 ol = ol_u + guidance_scale * (ol - ol_u)
             if onset_phase_penalty != 0.0:
                 # metric gate: off-beat frames need higher onset confidence (on-beat free, 8th -p, 16th -2p).
@@ -453,10 +476,10 @@ class LayeredTypedChartGenerator(nn.Module):
         panel_bits = ((states_tab.unsqueeze(-1) >> torch.arange(NUM_PANELS, device=device)) & 1)  # (15,4)
 
         caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
-        cond_emb = self._cond(difficulty, radar, style).unsqueeze(1)  # (B,1,d): difficulty + radar + style
-        if do_cfg:  # parallel unconditioned (null radar + null style) path for guidance
+        cond_emb = self._cond(difficulty, radar, style, motif)  # (B,1,d) | (B,T,d) if motif is a per-frame schedule
+        if do_cfg:  # parallel unconditioned (null radar + null style + null motif) path for guidance
             uncond_caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
-            uncond_emb = self._cond(difficulty, None, None).unsqueeze(1)
+            uncond_emb = self._cond(difficulty, None, None, None)  # (B,1,d)
         gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = self.bos.expand(B, 1, -1)
         held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
@@ -490,7 +513,8 @@ class LayeredTypedChartGenerator(nn.Module):
                         c.k = None; c.v = None
             held_start = held                                              # hold state at frame start (hold_aware rebinds held later)
             pe_t = self.pos_encoding.pe[:, t:t + 1]
-            h = self._decoder_step_cached(prev_emb + pe_t + cond_emb, caches)[:, -1]
+            cond_t = cond_emb[:, t:t + 1] if cond_emb.size(1) > 1 else cond_emb  # index the per-frame motif schedule
+            h = self._decoder_step_cached(prev_emb + pe_t + cond_t, caches)[:, -1]
             pat_logits = self.pattern_head(h)                                  # (B,15)
             typ_logits = self.type_head(h).view(B, NUM_PANELS, NUM_TYPES)      # (B,4,4)
             if do_cfg:  # blend toward the radar-conditioned prediction (run the null path in lockstep)
