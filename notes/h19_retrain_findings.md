@@ -37,6 +37,18 @@ attacks-only `onset_tokens`, so both fixes flow into targets + teacher-forcing a
 ⇒ The two representation fixes corrected the honesty of the trill lever and improved sweep, without breaking
 candle or quality. `gen_motif_full_fixed` is a clean, strictly-not-worse replacement for `gen_motif_full`.
 
+## Playtest A/B prep — an HONEST complication (presses-during-holds NOT reduced)
+Built `ab_trill_A_old` (gen_motif_full) vs `ab_trill_B_fixed` (gen_motif_full_fixed), SAME 5 songs (the h15
+set: Deja loin, Pound the Alarm, IN BETWEEN, nightbird, japa1), trill=3 g2 — matching the original
+`h15_08_motif_trill` the user called "huge jack streams during holds." Direct proxy for that phenomenon =
+fresh presses landing while another panel sustains a hold:
+- **A (old): 3.1%** (71/2277).  **B (fixed): 5.4%** (119/2223).
+So the retrain did **NOT** reduce the during-holds activity — slightly UP (small/noisy over 5 songs). The user's
+felt "jacks during holds" is a GENERATION-side behavior the representation fix did not target (H19 was the
+DETECTOR; this is the decoder placing notes during holds, which is legal+hittable under the pad constraints but
+may read busy). ⇒ the A/B is a genuine feel test with NO guaranteed direction: offline trill is honestly-lower
+on B, quality equal, but during-holds is unchanged. Only ears resolve whether honest-lower-trill feels better.
+
 ## Caveat + next
 - **Warm-start residue:** base (onset/pattern/type) inherited from `gen_motif_local2` (trained on buggy charts),
   fine-tuned here. The deltas are small partly because it's a fine-tune. A FULLY clean model = retrain the chain

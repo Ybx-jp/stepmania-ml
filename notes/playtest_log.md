@@ -15,6 +15,31 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-25 — ⏳ PENDING: trill A/B — deployed vs clean-retrained model (the H19 retrain feel gate)
+### What was generated (not yet played)
+Two sets, `~/sm-generated/ab_trill_A_old` vs `ab_trill_B_fixed`, **identical songs** (the h15 set: Deja loin,
+Pound the Alarm, IN BETWEEN, nightbird, japa1) + **identical knob** (trill=+3 g2, matching the old
+`h15_08_motif_trill`). Only the MODEL differs: A = deployed `gen_motif_full` (buggy representation), B =
+`gen_motif_full_fixed` (retrained after the two repr fixes). Mandatory pad-playability ON both; 5/5 re-parse.
+Guide: `outputs/playtest_ab_trill/SET_GUIDE.md`. Offline validation: [[h19_retrain_findings]].
+
+### What to evaluate
+- **Trill honesty (the point):** B's trill knob is honestly LOWER offline (+0.32 vs +0.47). Does B's trill feel
+  *better-judged* or just *less*? (A/B the SAME song A-vs-B.)
+- **HONEST CAVEAT for the "jacks during holds" (your old report):** the retrain did NOT reduce it — measured
+  presses-during-holds A 3.1% vs B 5.4% (slightly MORE on B, small/noisy). That phenomenon is GENERATION-side,
+  separate from the H19 DETECTOR fix. So this A/B does not promise a cleaner-around-holds feel; watch whether B
+  feels busier there.
+- **Decision it gates:** swap the default to `gen_motif_full_fixed`? It's offline strictly-better-or-equal
+  (candle preserved, trill honest, sweep improved, quality equal), but H15 is a feel thesis → ears decide.
+
+### Action / next
+- [ ] Play A vs B same-song; log whether honest-lower-trill is better/wash/worse + the during-holds feel.
+- [ ] If B ≥ A by ear → swap default exporter/eval/playtest checkpoint to gen_motif_full_fixed (PR #39).
+- [ ] If the during-holds busyness bugs you → open a SEPARATE generation-side thread (not the repr fix).
+
+---
+
 ## 2026-06-24 — ★ H15 + CHAOS sets PLAYED — candle knob validated by ear, "model might be ready", felt-chaos ≠ proxy
 
 ### What was played
