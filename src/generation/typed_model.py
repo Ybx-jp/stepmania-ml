@@ -385,8 +385,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, max_jack_run=None,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
-                 fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=6.0,
-                 footswitch_pen=4.0):
+                 fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
+                 footswitch_pen=4.0, fatigue_cap=30.0):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -628,6 +628,10 @@ class LayeredTypedChartGenerator(nn.Module):
                           torch.where(runp == 3, torch.full((B,), float(footswitch_pen), device=device),  # 3-note: penalize
                                       torch.zeros(B, device=device)))                         # <=2-note: free (just travel)
                 cost = cost + fs_add.view(B, 1, 1) * fswitch.float()
+                # NOTE: HOLD-PINNING (route taps to the free foot during a hold) was attempted here and REVERTED
+                # 2026-06-25 — it regressed NON-MONOTONICALLY (more penalty -> MORE jacks, maxJackRun 4->14;
+                # root cause unidentified). Holds-blindness remains an OPEN problem (notes/foot_fatigue_design.md);
+                # needs a different approach. The barrier penalty below is validated and kept.
                 # per-pattern resulting foot state (for the post-choice update); default = unchanged
                 np_panel = foot_panel.unsqueeze(1).repeat(1, NUM_PATTERNS, 1)                 # (B,15,2)
                 np_E = decayE.unsqueeze(1).repeat(1, NUM_PATTERNS, 1)
@@ -638,7 +642,9 @@ class LayeredTypedChartGenerator(nn.Module):
                         p = int(pn[0])
                         oa = torch.maximum(decayE[:, 0] + cost[:, 0, p], decayE[:, 1])        # left hits
                         ob = torch.maximum(decayE[:, 1] + cost[:, 1, p], decayE[:, 0])        # right hits
-                        pat_logits[:, pidx] -= fatigue_penalty * (torch.minimum(oa, ob) - fatigue_free).clamp(min=0)
+                        E_eff = torch.minimum(oa, ob)                                         # min-footing fatigue
+                        pat_logits[:, pidx] -= torch.where(E_eff >= fatigue_cap, torch.full_like(E_eff, 1e4),
+                                                           fatigue_penalty * (E_eff - fatigue_free).clamp(min=0))
                         wa = oa <= ob                                                         # left-foot assignment wins
                         np_panel[:, pidx, 0] = torch.where(wa, p, np_panel[:, pidx, 0])
                         np_panel[:, pidx, 1] = torch.where(~wa, p, np_panel[:, pidx, 1])
@@ -649,7 +655,9 @@ class LayeredTypedChartGenerator(nn.Module):
                         x, y = int(pn[0]), int(pn[1])
                         oa = torch.maximum(decayE[:, 0] + cost[:, 0, x], decayE[:, 1] + cost[:, 1, y])  # L=x,R=y
                         ob = torch.maximum(decayE[:, 0] + cost[:, 0, y], decayE[:, 1] + cost[:, 1, x])  # L=y,R=x
-                        pat_logits[:, pidx] -= fatigue_penalty * (torch.minimum(oa, ob) - fatigue_free).clamp(min=0)
+                        E_eff = torch.minimum(oa, ob)                                         # min-footing fatigue
+                        pat_logits[:, pidx] -= torch.where(E_eff >= fatigue_cap, torch.full_like(E_eff, 1e4),
+                                                           fatigue_penalty * (E_eff - fatigue_free).clamp(min=0))
                         wa = oa <= ob
                         np_panel[:, pidx, 0] = torch.where(wa, x, y)
                         np_panel[:, pidx, 1] = torch.where(wa, y, x)

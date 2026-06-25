@@ -127,6 +127,33 @@ Swept λ×free on the EGREGIOUS rich-Hard set, targeting the REAL source charts 
 vs fatigue (governs jacks, no displacement) on rich-Hard songs → does it FEEL cleaner on jacks while leaving
 musical jump streams intact? (ab_fatigue_* sets.)
 
+## FUTURE THREAD (parked 2026-06-25, user) — FATIGUE DYNAMICS should ARC, not sit flat
+The governor enforces a CEILING; the conditioning owns WHERE in the playable zone a chart sits. But there's a
+distinct, deeper idea: a good chart's exertion shouldn't be flat — it should **arc** (build → peak at the
+musical climax → release), like a real charter paces difficulty to the song. This is the fatigue analog of H5
+(generated density is structurally flat; real charts have an intro→build→climax@~80-90%→outro arc). Fatigue
+ARCING = condition the fatigue target/ceiling on song STRUCTURE/energy so the hardest footwork clusters at
+climaxes and eases in verses. NOT a static lower bound in the penalty (that fights difficulty conditioning) —
+a time-varying target tied to audio novelty/energy. Connects: H5 (structure), the manifold density arc, and the
+per-foot fatigue model as the difficulty currency that should follow the song. A v2/structural feature.
+
+## CORRECTIONS (2026-06-25, user review of the math) — one landed, one reverted
+- **BARRIER PENALTY (objective reshape) — DONE + VALIDATED.** Replaced `λ·relu(E−free)` (low free, monotone
+  downward pull that jump-STARVED charts) with a one-sided CEILING: `penalty = ∞ if E≥fatigue_cap, else
+  λ·relu(E−fatigue_free)` with fatigue_free set HIGH. Isolated barrier-only sweep (rich-Hard): free=8 gently
+  governs (jackRun 6.2→4.1, jump% 5.9→2.7); free=18 ≈ OFF (silent). Tunable ceiling that doesn't flatten —
+  exactly the shape wanted. Governor owns the ceiling; difficulty conditioning owns where in the zone (NO lower
+  bound — would fight the difficulty knob). E is BPM-coupled (cost∝rate) so a fixed E_max auto-maps to "fewer
+  fast notes at higher BPM" (correct). Params: fatigue_free (E_soft, def 12), fatigue_cap (E_max, def 30).
+- **HOLD-PINNING (the holds-blindness bug) — ATTEMPTED + REVERTED, STILL OPEN.** Holds-blindness is real and
+  serious (a stream during a hold is a ONE-foot grind — the model treats it as a shared two-foot load = inverted).
+  First attempt (a foot on a `held` panel → cost ∞ → route taps to the free foot) REGRESSED NON-MONOTONICALLY:
+  isolated A/B showed it produced maxJackRun 4→14 (more penalty → MORE jacks), root cause unidentified. Likely
+  a state-corruption or greedy-foot-choice issue (the model doesn't look ahead to pick WHICH foot holds, so the
+  free foot gets forced into one-foot grinds the penalty can't escape). REVERTED to keep the branch healthy.
+  **Holds-blindness remains the top open problem for this model** — needs a different mechanism (e.g. choose the
+  holding foot to keep the other free; or model the hold cost without forcing all assignment to one foot).
+
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).
 - `tau` default (half vs full measure) — expose configurable.
