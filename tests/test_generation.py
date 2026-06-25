@@ -542,6 +542,28 @@ def test_motif_per_frame_schedule_and_onset_decouple():
         "motif leaked into the onset head (must be decoupled)"
 
 
+def test_figure_token_conditioning_and_onset_decouple():
+    # H15 hierarchical: discrete per-section figure tokens (B,T) feed the decoder only, zero-init = warm-start
+    # no-op, and never affect the onset head.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator, NUM_FIGURE_CLASSES
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 32
+    audio = torch.randn(B, T, 23); states = torch.randint(0, 5, (B, T, 4)); diff = torch.tensor([1, 2])
+    mask = torch.ones(B, T, dtype=torch.bool)
+    fig = torch.randint(0, NUM_FIGURE_CLASSES, (B, T))
+    ol0, pat0, _ = m(audio, states, diff, mask)                              # null figure
+    olf, patf, _ = m(audio, states, diff, mask, figure=fig)
+    assert torch.allclose(pat0, patf, atol=1e-6), "zero-init figure embedding must be a warm-start no-op"
+    m.figure_embedding.weight.data += 0.1 * torch.randn_like(m.figure_embedding.weight)
+    olf2, patf2, _ = m(audio, states, diff, mask, figure=fig)
+    assert not torch.allclose(pat0, patf2, atol=1e-4), "trained figure token did not change pattern logits"
+    assert torch.allclose(ol0, olf2, atol=1e-6), "figure leaked into the onset head (must be decoupled)"
+    ov = torch.ones(B, T, dtype=torch.bool)
+    assert m.generate(audio, diff, onset_override=ov, figure=fig).shape == (B, T, 4)
+
+
 def test_hold_aware_decoding_valid():
     # Hold-aware decoding's automaton guarantees no orphan tails (a tail only ever
     # closes an open head) and at most one open hold per panel at a time.
