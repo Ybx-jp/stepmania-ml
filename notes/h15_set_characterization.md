@@ -40,6 +40,23 @@ match the characterization metric to the conditioning target.
   (g2) made 16ths (0.11). The radar_chaos set may feel mild; a stronger chaos set would need higher target/g.
 - **Side effect:** candle conditioning suppresses jumps/holds (0.03/0.02 vs 0.08/0.06) toward pure candle-steps.
 
+## Chaos sets (2026-06-24, `chaos2_*`, on `--groove_select chaos` Hard songs)
+Bracketing the chaos KNEE by realized 16th-offbeat onset share (the chaos realization):
+| set | recipe | 16th | quarter backbone | read |
+|-----|--------|------|------------------|------|
+| chaos2_manifold_q90 | manifold chaos=0.28 g2.5 | 0.00 | full | coherent, TOO GENTLE (no 16ths) |
+| chaos2_manifold_q99 | manifold chaos=0.47 g3.0 | 0.10 | ~0.9 | mild musical syncopation (air/jumps↑ coherently) |
+| chaos2_calib | manifold q0.9 + onset_phase_calib(1.0,2.0) g2.0 | **0.54** | ~0.46 | STRONG syncopation — the validated 16th lever |
+| chaos2_ohworld | --style chaos=high,air=low g3.5 | **0.61** | ~0.39 | the OH WORLD recipe; heavy 16ths, backbone survives |
+| chaos2_calib_strong | q0.95 + calib(1.5,3.0) g2.5 | 0.94 | ~0.06 | over-cranked (near smear) |
+| chaos2_glitch_ood | OOD radar chaos=0.7,air=.15,str=.5 + calib g3 | 1.00 | ~0 | full smear (max-reach reference) |
+
+**Finding (validates conditioning-mechanics skill):** pure radar chaos via the MANIFOLD barely places 16ths
+(q0.9→0.00, q0.99→0.10) — it stays in-distribution / preserves the backbone. **`onset_phase_calib` is what
+actually PLACES the 16ths** (same chaos target, 0.00→0.54) by lifting 16th-frame confidence where the high-res
+onset feature finds events — coherent syncopation, not a uniform smear. Knee ≈ calib / OH WORLD (16th 0.5–0.6,
+backbone ~0.4); calib_strong + glitch_ood are past it (smear). Musical-vs-smear boundary = a PLAYTEST question.
+
 ## Caveats
 Knobs measured against each generated chart's OWN radar (eval_motif used the source-song radar) — directions
 match but magnitudes aren't identical to eval_motif's harness. Density is ~flat (0.34) because the manifold

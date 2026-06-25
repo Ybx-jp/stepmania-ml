@@ -27,6 +27,12 @@ Guide: `outputs/playtest_h15/SET_GUIDE.md`. Old 44 sets archived → `~/sm-gener
 - **pattern motif (H15):** `h15_05_motif_candle` (+3 g2), `h15_06_motif_candle_gentle` (+3 g1.4),
   `h15_07_motif_candle_neg` (−3 g2), `h15_08_motif_trill` (+3 g2), `h15_09_figure_sweep` (figure=sweep g1).
 - **combined:** `h15_10_combo_chaos_candle`, `h15_11_combo_stream_trill`, `h15_12_combo_glitch_candle`.
+- **CHAOS knee bracket** (`chaos2_*`, on `--groove_select chaos` Hard songs; chaos = crown jewel) — by realized
+  16th share: `chaos2_manifold_q90` (0.00, too gentle), `chaos2_manifold_q99` (0.10, mild), `chaos2_calib`
+  (**0.54**, strong — the phase-calib 16th lever), `chaos2_ohworld` (**0.61**, the OH WORLD recipe),
+  `chaos2_calib_strong` (0.94, over), `chaos2_glitch_ood` (1.00, smear). Numbers + recipes in
+  `notes/h15_set_characterization.md`. **Key Q for ears: where does musical syncopation become smear?** (calib
+  / ohworld are the candidates; expect calib_strong/glitch_ood to feel like a wall of 16ths.)
 
 ### Raw feedback
 _(pending — fill in after playing)_
