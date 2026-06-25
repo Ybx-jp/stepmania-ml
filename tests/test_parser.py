@@ -150,6 +150,23 @@ def test_convert_to_tensor_nonzero():
     assert tensor.shape == (400, 4)
     assert np.sum(tensor) > 0
 
+def test_typed_converter_sub16th_collision_keeps_note():
+    """Regression: a sub-16th note must NOT be erased when a later line quantizing to the same 16th cell is
+    empty. convert_to_tensor_typed used to assign every panel unconditionally (including 0), so a colliding
+    empty line overwrote the real note with zero — silently dropping sub-16th notes from the typed path while
+    the binary/radar path (which writes conditionally) kept them. Fix = sticky write (overwrite only with a
+    nonzero symbol)."""
+    parser = StepManiaParser()
+    chart = StepManiaChart(title="x", artist="", audio_file="", bpm=120, offset=0, sample_start=0,
+                           sample_length=100, timing_events=[], note_data=[], song_length_seconds=100,
+                           timesteps_total=16, hop_length=0)
+    # 32 lines in one 4-beat measure => two 32nd rows fall in each 16th cell (tpb=4). Row0 (L tap, beat 0) and
+    # row1 (empty, beat 0.125) both floor to ts=0.
+    nd = NoteData("Hard", 8, "\n".join(["1000", "0000"] + ["0000"] * 30))
+    typed = parser.convert_to_tensor_typed(chart, nd)
+    assert typed[0, 0] == 1, "sub-16th tap erased by a colliding empty row (zero-overwrite bug)"
+
+
 def test_pattern_quality_density_reasonable():
     """Test pattern quality validation"""
     parser = StepManiaParser()
