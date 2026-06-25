@@ -33,7 +33,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
-from src.generation.typed_model import LayeredTypedChartGenerator
+from src.generation.typed_model import LayeredTypedChartGenerator, MOTIF_DIM
+from src.generation.motif_codebook import FIGURE_CLASSES
 from src.generation.typed import symbol_histogram, pair_holds
 from src.generation.sm_writer import charts_to_sm
 from src.generation.playtest_export import enforce_playability
@@ -93,6 +94,13 @@ def parse_args():
                    help='H13 exertion cap: max consecutive same-panel 16th-jack presses. A fast one-foot jack '
                         'is brutal; real charts alternate (jack-pair-rate ~0.006, max run ~1). =1 matches real '
                         '(strict alternation); 0/negative = off. Default on (the exertion fix).')
+    p.add_argument('--motif', type=str, default=None,
+                   help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
+                        '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
+                        'bracket=1. Sets a GLOBAL motif vector (CFG-amplifiable with --guidance).')
+    p.add_argument('--figure', type=str, default=None,
+                   help='H15 discrete figure-token conditioning (gen_motif_full), e.g. "sweep" -> a constant '
+                        f'per-section figure schedule. One of {[c for c in FIGURE_CLASSES if c != "sparse"]}.')
     p.add_argument('--prefer', type=str, default=None, help='panel preference, e.g. "U,R" to favor Up+Right')
     p.add_argument('--radar', type=str, default=None,
                    help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
@@ -142,6 +150,25 @@ def main():
     phase_calib = (tuple(float(x) for x in args.onset_phase_calib.split(','))
                    if args.onset_phase_calib else None)  # per-phase logit offset (b8, b16) for variable chaos
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # H15 motif-knob conditioning (continuous): build a GLOBAL (1, MOTIF_DIM) vector from "name/idx=z" pairs.
+    MOTIF_ALIAS = {'candle': 3, 'trill': 10, 'jacksweep': 0, 'bracket': 1}
+    motif_vec = None
+    if args.motif:
+        motif_vec = torch.zeros(1, MOTIF_DIM)
+        for tok in args.motif.split(','):
+            key, val = tok.split('='); key = key.strip()
+            idx = MOTIF_ALIAS.get(key, None)
+            idx = int(key) if idx is None else idx
+            motif_vec[0, idx] = float(val)
+        motif_vec = motif_vec.to(device)
+        print(f"motif conditioning: {args.motif} -> knob vector {motif_vec.cpu().numpy().round(1).tolist()}")
+    # H15 figure-token conditioning (discrete): a constant per-section figure schedule built per song (needs T).
+    figure_tok = None
+    if args.figure:
+        FIG_ALIAS = {'sweep': 'sweep/staircase', 'candle': 'candle/cross', 'jump': 'jump/bracket'}
+        figure_tok = FIGURE_CLASSES.index(FIG_ALIAS.get(args.figure, args.figure))
+        print(f"figure conditioning: '{args.figure}' -> token {figure_tok} ({FIGURE_CLASSES[figure_tok]})")
     cf = glob.glob(f"{args.data_dir}/**/*.sm", recursive=True) + glob.glob(f"{args.data_dir}/**/*.ssc", recursive=True)
     _, val_files, _ = create_data_splits(cf, random_state=args.seed)
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
@@ -324,7 +351,10 @@ def main():
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
                           onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
-                          style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen)
+                          style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen,
+                          motif=motif_vec,  # H15 continuous motif knobs (global vector; None if --motif unset)
+                          figure=(torch.full((1, T), figure_tok, dtype=torch.long, device=device)
+                                  if figure_tok is not None else None))  # H15 discrete figure schedule
         if args.override_playability:  # user-approved deviation -> respect the explicit flags
             gen_kwargs.update(hold_aware=True, no_jump_during_hold=args.no_jump_during_hold,
                               no_cross_during_hold=args.no_cross_during_hold)

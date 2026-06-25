@@ -15,6 +15,41 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-24 — H15 conditioning-knob sets PREPARED (radar + pattern-motif + combined) — ⏳ PENDING PLAYTEST
+### What was generated (not yet played — user afk)
+13 sets from **`gen_motif_full`** (the consolidated H15 deliverable: radar + continuous per-section motif +
+discrete figure token), all on the SAME `--groove_select rich --difficulty_select Hard` songs (seed 42) for
+same-song A/B; all mandatory pad-playability on; `pattern_temperature 0.7`. Installed as `~/sm-generated/h15_*`.
+Guide: `outputs/playtest_h15/SET_GUIDE.md`. Old 44 sets archived → `~/sm-generated-archive/2026-06-24/` (INDEX.md).
+- **base:** `h15_00_base` (no conditioning — the reference).
+- **groove radar (manifold --style):** `h15_01_radar_stream` g1.5, `h15_02_radar_chaos` g1.8,
+  `h15_03_radar_freeze` g1.6, `h15_04_radar_air` g1.6.
+- **pattern motif (H15):** `h15_05_motif_candle` (+3 g2), `h15_06_motif_candle_gentle` (+3 g1.4),
+  `h15_07_motif_candle_neg` (−3 g2), `h15_08_motif_trill` (+3 g2), `h15_09_figure_sweep` (figure=sweep g1).
+- **combined:** `h15_10_combo_chaos_candle`, `h15_11_combo_stream_trill`, `h15_12_combo_glitch_candle`.
+
+### Raw feedback
+_(pending — fill in after playing)_
+
+### What to evaluate (hypotheses these sets probe)
+- **H15 (the thesis):** does the **candle** knob audibly change the *vibe*? Offline it steers strongly
+  (Δ+1.7/+3.9, section-by-section) but every offline metric is blind to feel — this is the only way to know.
+  A/B `h15_05_motif_candle` vs `h15_07_motif_candle_neg` (opposite poles) and vs `h15_00_base`.
+- **H3 (guidance×musicality):** does candle still steer at gentle g1.4 (`_gentle`) while staying musical?
+- **Figure sweep:** modest by metric (frequency nudge, can't enforce a staircase) — does it read as more
+  runs/staircases at all, or is it imperceptible? (sets the bar for whether option-2 structured realize matters.)
+- **H4 (chaos):** does radar `chaos=high` still smear, or feel musical on these Hard songs?
+- **Composition:** do the **combined** sets stay coherent (radar + motif together), esp. `combo_glitch_candle`
+  (aiming at the OH WORLD g3.5 vibe + candle ornaments)?
+
+### Action / next
+- [ ] Play the sets; I'll log feel against H15/H3/H4 and the standing threads.
+- [ ] If candle audibly changes vibe → H15 lever VALIDATED by ear (the arc's payoff); pick a default operating g.
+- [ ] If figure=sweep is imperceptible → confirms the soft-realize ceiling; option-2 structured realize is the
+      only path to a real sweep lever.
+
+---
+
 ## 2026-06-23 — ★ BEST CHART YET (OH WORLD glitch g3.5) + "harmonic guidance" hypothesis (H16) + song-style fit (H17)
 
 ### What was played
