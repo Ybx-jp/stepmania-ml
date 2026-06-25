@@ -65,9 +65,24 @@ The last place the symbols get interpreted. Audited + confirmed on 5 raw (pre-`p
 `tests/test_parser.py::test_phase1_song_length_rejection` fails with "No BPM events found" (empty `timing_events`
 in the test fixture) — fails identically on the pre-fix parser (verified via stash). Separate test-setup issue.
 
-## RETRAIN CHECKLIST (carry-forward — the two fixes that need the cache rebuild)
-1. **H19** — refit `cache/motif_basis.npz` with attacks-only `onset_tokens`, retrain `gen_motif_full` on clean
-   (non-tail-inflated) motif targets. [[playtest_log]] H19 action.
-2. **THIS bug** — rebuild `cache/samples_v3` with the sticky `convert_to_tensor_typed` so training charts regain
-   their sub-16th notes; the basis refit + target derivation then run on the corrected charts.
-   Both land in one cache-recompute + retrain.
+## RETRAIN — what actually needs recomputing (CORRECTED 2026-06-25 after reading the data path)
+My earlier "rebuild cache/samples_v3 + refit the basis" was WRONG once the data path is traced:
+- **`cache/samples_v3` stores AUDIO features only** — independent of the chart converter. The per-sample
+  `chart_tensor` in `valid_samples` is the BINARY extended tensor, recomputed in-memory each run (not in the
+  `.npz`). **No audio-cache rebuild needed.**
+- **The trainer re-parses the typed chart FRESH:** `train_motif_consolidated.collect_typed` calls
+  `convert_to_tensor_typed(meta['chart'], nd)` per sample (line 74), then derives the motif/figure targets and
+  teacher-forced states from it. So the **sticky-converter fix + attacks-only `onset_tokens` flow in
+  automatically** at training time — no cache, no manual step.
+- **`cache/motif_basis.npz` does NOT need a refit:** it is fit on the BINARY extended tensor
+  (`from_loaded_datasets` → `m['chart_tensor']`), which uses the collision-safe `convert_to_tensor_extended`
+  and has no tails. So the basis was always effectively attacks-only and collision-safe; the H19 fix simply
+  makes the TYPED application (`encode_chart` on a typed chart) consistent with the binary-fit basis. (Earlier
+  claim "basis was fit tail-inclusive" = imprecise; it was binary-fit.)
+- **⇒ The whole retrain = just run `train_motif_consolidated.py` on this branch.** The fixed converters do the
+  rest. Running to `checkpoints/gen_motif_full_fixed` (NOT clobbering the deployed `gen_motif_full`, so we can
+  A/B). Branch `gen/h19-retrain`.
+- **Caveat (warm-start residue):** the run warm-starts `gen_motif_local2`, itself trained on buggy (note-dropped)
+  charts, and fine-tunes on the FIXED targets. This corrects the motif/figure heads + nudges the base; a FULLY
+  clean model would retrain the whole chain (hr→local→local2→consolidated) from scratch on fixed charts — bigger,
+  deferred unless the fine-tune proves insufficient.
