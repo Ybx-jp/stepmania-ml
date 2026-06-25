@@ -100,6 +100,33 @@ becomes a loophole the decode exploits — the diag-on-real-data loop is what ca
 - A/B PLAYTEST (fatigue OFF vs tuned) — does the per-foot governing FEEL natural? jump streams + 4-cap footswitch.
 - Decide default + whether fatigue SUPERSEDES the shipped jack governor (it generalizes it) or runs alongside.
 
+## CALIBRATION (2026-06-25, calib_foot_fatigue.py) — REFRAMED the governor's job (jacks, not jumps)
+Swept λ×free on the EGREGIOUS rich-Hard set, targeting the REAL source charts of the SAME songs.
+**REAL target: jump% 31.4 · maxJumpStream 10.2 · maxJackRun 3.5 · jack≥4 0.8% · dens 0.385.**
+```
+ lam free  jump%  jumpStrm  jackRun  jack>=4%   dens
+  OFF   -    5.9     4.0      6.2      2.1     0.320
+  2.0   6    1.5     1.1      3.9      0.7     0.320
+  4.0   6    2.3     1.8      3.6      0.4     0.320
+  2.0   8    2.7     1.9      4.1      1.3     0.320
+```
+**KEY FINDINGS (the calibration changed direction — experiment-design Rule):**
+1. **The model UNDER-jumps, doesn't over-jump.** Real charts on these air-heavy songs = **31%** jumps with
+   streams to 10; the model OFF = ~6%. The "consecutive jumps" the user felt were **INDUCED by the jack penalty**
+   (it displaced suppressed jacks into jumps 15.7→23%), NOT intrinsic. So calibrating the governor to "match real
+   jump%" optimizes the WRONG axis — the dist-to-real score is dominated by a gap the governor can't/shouldn't close.
+2. **The governor's real value is JACKS:** maxJackRun 6.2→3.6 (real 3.5), jack≥4 2.1%→0.4% (real 0.8%) — lands
+   right on the human distribution. The fatigue model = a good JACK governor that, unlike the jack penalty, does
+   NOT displace into jumps (it penalizes both dimensions in one foot model). ⇒ **fatigue should REPLACE the jack
+   penalty** — that dissolves the jump-displacement (the original motivation) while fixing jacks.
+3. **The governor can't tell an EARNED jump stream from an unearned one** — it penalizes length; real charts have
+   musical 10-streams. So keep λ GENTLE or it kills good streams too → a PLAYTEST is the only arbiter (offline blind).
+4. **Separate thread (not the governor's job):** the model under-jumps AND under-densifies these rich songs
+   (dens 0.320 vs real 0.385) — manifold density / air conditioning too low on jumpy songs.
+**DECISION:** default λ=2, free=6, fatigue REPLACES jack_penalty. A/B = jack-penalty (current, has displacement)
+vs fatigue (governs jacks, no displacement) on rich-Hard songs → does it FEEL cleaner on jacks while leaving
+musical jump streams intact? (ab_fatigue_* sets.)
+
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).
 - `tau` default (half vs full measure) — expose configurable.

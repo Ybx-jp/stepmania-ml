@@ -98,6 +98,12 @@ def parse_args():
                         'run (penalty = lambda * accumulated exertion). Gates unnatural jack STREAMS (8th + long) '
                         'while keeping short justified ones; preserves density (re-routes to alternation). '
                         '0 = off; ~1.5 gentle (default), ~3 aggressive. Uses the song BPM. notes/foot_exertion_findings.md')
+    p.add_argument('--fatigue_penalty', type=float, default=0.0,
+                   help='PER-FOOT FATIGUE governor (lambda): two-foot biomechanical simulator; governs jacks AND '
+                        'jump streams via min-exertion footing (gen generalizes the jack governor). 0=off; ~2 gentle. '
+                        'Set with --jack_penalty 0 to REPLACE the jack governor. notes/foot_fatigue_design.md')
+    p.add_argument('--fatigue_free', type=float, default=6.0,
+                   help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams gated)')
     p.add_argument('--motif', type=str, default=None,
                    help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
                         '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
@@ -353,7 +359,9 @@ def main():
                           repetition_penalty=args.repetition_penalty,
                           max_jack_run=(args.max_jack_run if args.max_jack_run and args.max_jack_run > 0 else None),
                           jack_penalty=(args.jack_penalty if args.jack_penalty and args.jack_penalty > 0 else None),
-                          bpm=float(meta['chart'].bpm),  # foot-exertion governor needs real BPM for press-rate
+                          fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
+                          fatigue_free=args.fatigue_free,
+                          bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
                           onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,

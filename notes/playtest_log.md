@@ -40,6 +40,27 @@ Guide: `outputs/playtest_ab_trill/SET_GUIDE.md`. Offline validation: [[h19_retra
 
 ---
 
+## 2026-06-25 — ⏳ PENDING: jack-penalty vs PER-FOOT-FATIGUE A/B (does fatigue dissolve the jump displacement?)
+### What was generated (not yet played)
+`~/sm-generated/ab_fatigue_A_jack` (jack_penalty 1.5, the CURRENT default) vs `ab_fatigue_B_foot` (fatigue
+penalty 2, jack OFF), SAME rich-Hard songs, `gen_motif_full_fixed`. Guide: `outputs/playtest_ab_fatigue/SET_GUIDE.md`.
+Mechanism + calibration: [[foot_fatigue_design]].
+### Why — the calibration REFRAMED the problem
+The "consecutive jumps" felt earlier were INDUCED by the jack penalty displacing jacks→jumps. On installed charts:
+A (jack penalty) has a **59-note jump WALL**, 23.3% jumps; B (fatigue) cuts longest jump stream to **3**, 4.6%
+jumps, density identical (0.346). Real rich-Hard charts = 31% jumps / streams to 10 (the model UNDER-jumps), so
+the risk now FLIPS: not walls but whether B feels jump-STARVED.
+### What to evaluate
+- Does B feel cleaner (no jump walls), jacks controlled? Or **too flat / jump-starved** (4.6% vs real 31%)?
+- **Earned vs unearned:** does B flatten jump streams that SHOULD be there (musical bursts), or only the ugly ones?
+  (The governor penalizes length, can't see musicality — this is the offline-blind question.)
+### Action / next
+- [ ] Play A vs B same-song; log clean-vs-starved + whether musical jump streams survive.
+- [ ] If B better → fatigue REPLACES the jack penalty as default (dissolves displacement). If jump-starved → lower
+      λ, OR pursue the SEPARATE model-under-jumps/under-density thread (manifold density/air, not the governor).
+
+---
+
 ## 2026-06-25 — ⏳ PENDING: jack-governor A/B — foot-exertion penalty OFF vs ON (the "long jack streams" fix)
 ### What was generated (not yet played)
 `~/sm-generated/ab_jack_OFF` (`--jack_penalty 0`) vs `ab_jack_ON` (`--jack_penalty 1.5`), SAME rich-Hard songs
@@ -54,10 +75,21 @@ escalating BPM-aware penalty on extending a same-panel run. Offline on the INSTA
 - Does ON feel more natural / less mechanically jacky (esp. IN BETWEEN)? Does it feel like it LOST anything
   (it shouldn't — density preserved)? Is λ=1.5 right / too gentle / too strong?
 - **Gates the default:** λ=1.5 is proposed as the standing default for all future playtests.
+### Raw feedback (PLAYED 2026-06-25)
+> "this definitely solved the unnatural jack problem." — the foot-exertion governor (λ=1.5) WORKS by ear.
+Revealed the next issue: **consecutive JUMPS need a similar mechanism.**
+
+### Commentary — the jack fix DISPLACED mass into jumps (measured)
+The jack penalty only suppresses the jack-panel SINGLE; that probability redistributes (softmax) into jumps,
+AND a jump RESETS the exertion accumulator (escape valve). Measured OFF→ON (same songs): jump rate 15.7→**23.2%**,
+jump-laundered-jacks 21→40, **longest consecutive-jump stream 11→59**. So the consecutive-jump problem is partly
+INDUCED by our jack fix. ⇒ jump governor needed (next: foot-exertion v2, jumps). H13b handle. Mechanism +
+design in [[foot_exertion_findings]].
+
 ### Action / next
-- [ ] Play OFF vs ON same-song; log natural-ness + whether density-preservation reads (no holes).
-- [ ] Tune λ by ear; if 1.5 feels right it stays the exporter default. Connects to the H20 jack-vocabulary thread
-      ([[two-generator-tracks]]/the advanced-patterns gap) — governor reduces UNNATURAL jacks, doesn't add figures.
+- [x] Jack governor λ=1.5 VALIDATED by ear ("solved the unnatural jack problem"). Stays the exporter default.
+- [ ] DESIGN jump governor (H13b): jumps differ (foot-TRAVEL/span geometry, no single-foot re-route, must not
+      fight the AIR radar, shared exertion budget to stop jack↔jump laundering). Designing with the user.
 
 ---
 
