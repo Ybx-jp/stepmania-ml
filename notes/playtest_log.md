@@ -40,6 +40,27 @@ Guide: `outputs/playtest_ab_trill/SET_GUIDE.md`. Offline validation: [[h19_retra
 
 ---
 
+## 2026-06-25 — ⏳ PENDING: jack-governor A/B — foot-exertion penalty OFF vs ON (the "long jack streams" fix)
+### What was generated (not yet played)
+`~/sm-generated/ab_jack_OFF` (`--jack_penalty 0`) vs `ab_jack_ON` (`--jack_penalty 1.5`), SAME rich-Hard songs
+(seed 42, the IN BETWEEN-type jack-heavy set), same clean model `gen_motif_full_fixed`, same hard cap
+(max_jack_run=2). Only the SOFT foot-exertion governor differs. 5/5 reparse. Guide:
+`outputs/playtest_ab_jack/SET_GUIDE.md`. Mechanism: [[foot_exertion_findings]].
+### Why (audit)
+The user's "long jack streams" = 8th-note jacks, which `max_jack_run` (16th-only) was BLIND to. New governor =
+escalating BPM-aware penalty on extending a same-panel run. Offline on the INSTALLED charts: longest jack stream
+**14→4 notes**, runs≥4 7.0→1.3%, **density identical (0.346)** — re-routes to alternation, doesn't delete.
+### What to evaluate
+- Does ON feel more natural / less mechanically jacky (esp. IN BETWEEN)? Does it feel like it LOST anything
+  (it shouldn't — density preserved)? Is λ=1.5 right / too gentle / too strong?
+- **Gates the default:** λ=1.5 is proposed as the standing default for all future playtests.
+### Action / next
+- [ ] Play OFF vs ON same-song; log natural-ness + whether density-preservation reads (no holes).
+- [ ] Tune λ by ear; if 1.5 feels right it stays the exporter default. Connects to the H20 jack-vocabulary thread
+      ([[two-generator-tracks]]/the advanced-patterns gap) — governor reduces UNNATURAL jacks, doesn't add figures.
+
+---
+
 ## 2026-06-24 — ★ H15 + CHAOS sets PLAYED — candle knob validated by ear, "model might be ready", felt-chaos ≠ proxy
 
 ### What was played
