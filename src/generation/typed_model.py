@@ -383,7 +383,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
-                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, max_jack_run=None):
+                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, max_jack_run=None,
+                 jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -517,6 +518,12 @@ class LayeredTypedChartGenerator(nn.Module):
         since_onset = torch.full((B,), 99, dtype=torch.long, device=device)  # frames since last onset (==1 -> 16th-adj)
         jack_panel = torch.full((B,), -1, dtype=torch.long, device=device)   # panel of the current fast same-panel run
         jack_len = torch.zeros(B, dtype=torch.long, device=device)           # length of that run
+        # FOOT-EXERTION soft jack governor (graded, BPM-aware): instead of a hard per-spacing cap, accumulate an
+        # exertion E per same-panel run = sum over repeats of (press_rate / jack_free_rate); penalty to EXTEND the
+        # run = jack_penalty * E. Escalates with run LENGTH and repeat RATE (Hz, from BPM x spacing), so it gates
+        # unnatural streams while a short/justified jack (incl. a 2-note 16th) survives. frame_hz = 16ths/sec.
+        frame_hz = (float(bpm) * 4.0 / 60.0) if (jack_penalty and bpm) else None
+        jack_exertion = torch.zeros(B, device=device)                        # accumulated foot exertion of the run
 
         reset_at = set(int(x) for x in boundary_reset) if boundary_reset is not None else set()
         for t in range(T):
@@ -578,6 +585,14 @@ class LayeredTypedChartGenerator(nn.Module):
                                            .expand(B, NUM_PATTERNS, 1)).squeeze(-1)           # (B,15) jack_panel pressed?
                     forbid = at_cap.unsqueeze(1) & (fresh.sum(-1) == 1) & on_jack             # fresh SINGLE on jack_panel
                     pat_logits = pat_logits.masked_fill(forbid, float("-inf"))               # (incl. {jack, hold-close} jumps)
+            if frame_hz is not None:  # FOOT-EXERTION soft governor: escalating penalty to EXTEND a same-panel run
+                has_run = jack_panel >= 0
+                if has_run.any():
+                    g = since_onset.float().clamp(min=1)                                      # gap (frames) to last onset
+                    cost_now = (frame_hz / g) / jack_free_rate                                # this press's rate cost
+                    pen = jack_penalty * (jack_exertion + cost_now)                           # accumulated + this -> escalates
+                    rows = has_run.nonzero(as_tuple=True)[0]                                  # subtract from the jack-panel single
+                    pat_logits[rows, SINGLE_IDX[jack_panel[rows]]] -= pen[rows]
             if pattern_sample or not greedy:
                 lg = pat_logits / (pattern_temperature if pattern_sample else temperature)
                 if pattern_top_k is not None:
@@ -632,6 +647,11 @@ class LayeredTypedChartGenerator(nn.Module):
             is_fs = on & (nfresh == 1)                                          # exactly one fresh press = a single
             extend = is_fs & (since_onset == 1) & (jack_panel == fsp)           # reads start-of-frame since_onset
             jack_len = torch.where(is_fs, torch.where(extend, jack_len + 1, torch.ones_like(jack_len)), jack_len)
+            if frame_hz is not None:  # foot-exertion accumulator: += rate-cost on a same-panel repeat (any spacing
+                cost_ = (frame_hz / since_onset.float().clamp(min=1)) / jack_free_rate     # up to jack_max_gap); reset
+                same_run = is_fs & (jack_panel == fsp) & (since_onset <= jack_max_gap)     # on a NEW single or a jump;
+                jack_exertion = torch.where(same_run, jack_exertion + cost_,               # PERSIST across empty frames
+                                  torch.where(on, torch.zeros_like(jack_exertion), jack_exertion))
             jack_panel = torch.where(is_fs, fsp, jack_panel)
             reset = on & (nfresh != 1)                                          # jump (>=2 fresh) or pure hold-close breaks it
             jack_panel = torch.where(reset, torch.full_like(jack_panel, -1), jack_panel)

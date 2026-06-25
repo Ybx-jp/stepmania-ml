@@ -384,6 +384,42 @@ def test_max_jack_run_caps_fast_jacks():
         assert fast_jack_pairs(g_on) < fast_jack_pairs(g_off)
 
 
+def test_jack_penalty_governs_long_runs():
+    # FOOT-EXERTION soft governor: an escalating BPM-aware penalty re-routes long same-panel runs to alternation
+    # WITHOUT a hard cap and WITHOUT changing the onset count (density preserved). Invariants: it never lengthens
+    # the worst run, never empties the chart, and (onsets forced) keeps the same number of note-frames.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2, onset_layers=1).eval()
+    B, T = 2, 200
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2, 3])
+    ov = torch.ones(B, T, dtype=torch.bool)                 # force an onset every frame (all 16th-adjacent)
+    kw = dict(onset_override=ov, pattern_sample=True, pattern_temperature=1.5)
+
+    def max_same_panel_run(g):
+        best = 0
+        for b in range(B):
+            run, last = 0, -2
+            for tt in range(T):
+                pa = [p for p in range(4) if g[b, tt][p] != 0]
+                if len(pa) == 1 and pa[0] == last:
+                    run += 1
+                elif len(pa) == 1:
+                    last, run = pa[0], 1
+                else:
+                    last, run = -2, 0
+                best = max(best, run)
+        return best
+
+    torch.manual_seed(0); g_off = m.generate(audio, diff, **kw).numpy()
+    torch.manual_seed(0); g_on = m.generate(audio, diff, jack_penalty=8.0, bpm=160, **kw).numpy()
+    assert max_same_panel_run(g_on) <= max_same_panel_run(g_off), "jack_penalty lengthened the worst jack run"
+    assert (g_on != 0).any(), "penalty collapsed generation to empty"
+    # onsets are forced -> the penalty only re-routes WHICH panel, never deletes notes (density preserved)
+    assert int((g_on != 0).any(1).sum()) == int((g_off != 0).any(1).sum()), "penalty changed the onset count"
+
+
 def test_enforce_playability_jack_cap():
     # The H13 exertion cap is MANDATORY: enforce_playability injects max_jack_run when missing and
     # REFUSES to ship a chart with it disabled (None/0) unless a deviation reason is given.

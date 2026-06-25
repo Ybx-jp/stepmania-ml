@@ -90,10 +90,14 @@ def parse_args():
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
-    p.add_argument('--max_jack_run', type=int, default=1,
-                   help='H13 exertion cap: max consecutive same-panel 16th-jack presses. A fast one-foot jack '
-                        'is brutal; real charts alternate (jack-pair-rate ~0.006, max run ~1). =1 matches real '
-                        '(strict alternation); 0/negative = off. Default on (the exertion fix).')
+    p.add_argument('--max_jack_run', type=int, default=2,
+                   help='HARD 16th-jack cap: max consecutive same-panel 16th-adjacent presses. =2 (default, '
+                        'user-approved) allows a justified 2-note 16th jack, hard-forbids 3+. 0/negative = off.')
+    p.add_argument('--jack_penalty', type=float, default=1.5,
+                   help='SOFT foot-exertion governor (lambda): escalating BPM-aware penalty to extend a same-panel '
+                        'run (penalty = lambda * accumulated exertion). Gates unnatural jack STREAMS (8th + long) '
+                        'while keeping short justified ones; preserves density (re-routes to alternation). '
+                        '0 = off; ~1.5 gentle (default), ~3 aggressive. Uses the song BPM. notes/foot_exertion_findings.md')
     p.add_argument('--motif', type=str, default=None,
                    help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
                         '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
@@ -348,6 +352,8 @@ def main():
                           pattern_sample=True, pattern_temperature=args.pattern_temperature,
                           repetition_penalty=args.repetition_penalty,
                           max_jack_run=(args.max_jack_run if args.max_jack_run and args.max_jack_run > 0 else None),
+                          jack_penalty=(args.jack_penalty if args.jack_penalty and args.jack_penalty > 0 else None),
+                          bpm=float(meta['chart'].bpm),  # foot-exertion governor needs real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
                           onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
