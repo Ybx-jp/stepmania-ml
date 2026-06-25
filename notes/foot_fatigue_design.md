@@ -72,6 +72,34 @@ The CURRENT release candidate (clean-retrain `gen_motif_full_fixed` + jack gover
 assessable INDEPENDENT of this. The per-foot fatigue simulator is a fast-follow / v2 headline, not a release
 blocker. Recommendation: assess the release on the current state; let foot-fatigue land on its own branch/PR.
 
+## IMPLEMENTED + VALIDATED (2026-06-25, gen/foot-fatigue) — and the FIVE subtleties it took
+`typed_model.generate(fatigue_penalty, fatigue_tau, jack_weight, travel_weight, fatigue_free, footswitch_pen, bpm)`.
+Two-foot state (foot_panel/foot_E/foot_t) + same-panel run tracker (sp_run/sp_panel); per-frame, for each
+candidate pattern, min-exertion foot assignment → penalty `λ·relu(max(E_after) − fatigue_free)`. Building it
+surfaced five non-obvious failures, each caught by `diag_foot_fatigue.py` (8 songs, jump% / maxJumpStream /
+maxJackRun / density), NOT by reading the code:
+1. **Footswitch loophole.** A per-foot max(E) model is GAMED by alternating feet on one arrow (each foot hits at
+   half rate → E never spikes) → 20+ note same-panel runs read as "cheap footswitches". (jumps 11.6→0.3%, jacks→23)
+2. **Forbid-all-footswitch was too blunt** (user-corrected): a 2-note footswitch is legit; only 4+ should cap.
+3. **Free threshold.** Penalizing per-NOTE cost crushed isolated jumps (→0.3%, fighting the air radar). Fix:
+   `relu(E − fatigue_free)` — a rested jump passes, only accumulated streams are gated (mirrors jack_free_rate).
+4. **Graded footswitch (user's rule): 2 free / 3 penalize (footswitch_pen) / 4 hard-cap**, by prospective
+   same-panel run length sp_run+1.
+5. **The lift bug.** A footswitch must LIFT the displaced foot; without it the state corrupts to "both feet on
+   the panel" and the cap is bypassed via the stay path (jacks →21 again). Fix: if both feet read one panel, the
+   foot that didn't act lifts (−1).
+**Validated final** (max_jack_run=2, jack_penalty OFF, sweep λ): jacks BOUNDED (maxJackRun 6→5, was exploding to
+21), jumps GENTLY reduced not crushed (11.6→6.6→4.5%), maxJumpStream ~5→4 (noisy at high λ), **density held 0.208
+at every λ** (re-routes, never deletes). Regression test `test_fatigue_penalty_runs_and_preserves_density`; 36/36.
+LESSON: a faithful foot simulator is mostly *bookkeeping* (lift, footswitch-count, free-zone) and every gap
+becomes a loophole the decode exploits — the diag-on-real-data loop is what caught each one.
+
+## NEXT (calibration + feel — metrics handing off to the ear)
+- Calibrate on the EGREGIOUS rich-Hard set (where OFF maxJumpStream was 14, not 5) — the 8-song val set is too mild.
+- Sweep `fatigue_penalty / fatigue_free / footswitch_pen / fatigue_tau / jack_weight:travel_weight` there.
+- A/B PLAYTEST (fatigue OFF vs tuned) — does the per-foot governing FEEL natural? jump streams + 4-cap footswitch.
+- Decide default + whether fatigue SUPERSEDES the shipped jack governor (it generalizes it) or runs alongside.
+
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).
 - `tau` default (half vs full measure) — expose configurable.

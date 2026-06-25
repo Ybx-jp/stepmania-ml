@@ -384,7 +384,9 @@ class LayeredTypedChartGenerator(nn.Module):
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, max_jack_run=None,
-                 jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None):
+                 jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
+                 fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=6.0,
+                 footswitch_pen=4.0):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -522,8 +524,21 @@ class LayeredTypedChartGenerator(nn.Module):
         # exertion E per same-panel run = sum over repeats of (press_rate / jack_free_rate); penalty to EXTEND the
         # run = jack_penalty * E. Escalates with run LENGTH and repeat RATE (Hz, from BPM x spacing), so it gates
         # unnatural streams while a short/justified jack (incl. a 2-note 16th) survives. frame_hz = 16ths/sec.
-        frame_hz = (float(bpm) * 4.0 / 60.0) if (jack_penalty and bpm) else None
+        frame_hz = (float(bpm) * 4.0 / 60.0) if ((jack_penalty or fatigue_penalty) and bpm) else None
         jack_exertion = torch.zeros(B, device=device)                        # accumulated foot exertion of the run
+        # PER-FOOT FATIGUE model (generalizes the single-foot jack governor: jack = one foot stays & re-hits).
+        # Two feet with positions (= body orientation) + exertion accumulators that DECAY (exp, tau in beats).
+        # Per note we ASSIGN arrow(s) to feet at MIN added exertion (crossovers when cheaper, no surcharge);
+        # a foot that STAYS & re-hits costs jack_weight*rate, one that MOVES costs travel_weight*dist*rate.
+        fatigue_on = bool(fatigue_penalty) and frame_hz is not None
+        tau_frames = max(float(fatigue_tau) * 4.0, 1e-3)                      # tau beats -> 16th frames
+        _pos = torch.tensor([[-1., 0.], [0., -1.], [0., 1.], [1., 0.]], device=device)  # L,D,U,R on the cross
+        PAD_DIST = torch.cdist(_pos, _pos)                                   # (4,4) Euclidean foot-travel
+        foot_panel = torch.full((B, 2), -1, dtype=torch.long, device=device)  # (left,right) current panel or -1
+        foot_E = torch.zeros(B, 2, device=device)                            # per-foot exertion at last-hit time
+        foot_t = torch.full((B, 2), -10000, dtype=torch.long, device=device)  # frame of each foot's last hit
+        sp_run = torch.zeros(B, dtype=torch.long, device=device)             # current SAME-PANEL single-run length
+        sp_panel = torch.full((B,), -1, dtype=torch.long, device=device)     # panel of that run (footswitch grading)
 
         reset_at = set(int(x) for x in boundary_reset) if boundary_reset is not None else set()
         for t in range(T):
@@ -585,7 +600,7 @@ class LayeredTypedChartGenerator(nn.Module):
                                            .expand(B, NUM_PATTERNS, 1)).squeeze(-1)           # (B,15) jack_panel pressed?
                     forbid = at_cap.unsqueeze(1) & (fresh.sum(-1) == 1) & on_jack             # fresh SINGLE on jack_panel
                     pat_logits = pat_logits.masked_fill(forbid, float("-inf"))               # (incl. {jack, hold-close} jumps)
-            if frame_hz is not None:  # FOOT-EXERTION soft governor: escalating penalty to EXTEND a same-panel run
+            if jack_penalty and frame_hz is not None:  # single-foot jack governor (escalating same-panel-run penalty)
                 has_run = jack_panel >= 0
                 if has_run.any():
                     g = since_onset.float().clamp(min=1)                                      # gap (frames) to last onset
@@ -593,6 +608,54 @@ class LayeredTypedChartGenerator(nn.Module):
                     pen = jack_penalty * (jack_exertion + cost_now)                           # accumulated + this -> escalates
                     rows = has_run.nonzero(as_tuple=True)[0]                                  # subtract from the jack-panel single
                     pat_logits[rows, SINGLE_IDX[jack_panel[rows]]] -= pen[rows]
+            if fatigue_on:  # PER-FOOT FATIGUE: penalize each pattern by its MIN-exertion two-foot footing, and
+                dt = (t - foot_t).clamp(min=0).float()                                        # remember the winning
+                decayE = foot_E * torch.exp(-dt / tau_frames)                                 # (B,2) decay to now
+                rate = frame_hz / dt.clamp(min=1)                                             # (B,2) press rate per foot
+                _ar4 = torch.arange(NUM_PANELS, device=device)
+                stay = (foot_panel.unsqueeze(-1) == _ar4)                                     # (B,2,4) this foot already on tgt
+                other = foot_panel[:, [1, 0]]                                                 # the OTHER foot's panel
+                fswitch = (other.unsqueeze(-1) == _ar4) & (other.unsqueeze(-1) >= 0) & ~stay  # other foot holds tgt
+                unit = torch.where(stay, torch.tensor(jack_weight, device=device),
+                                   travel_weight * PAD_DIST[foot_panel.clamp(min=0)])         # (B,2,4) per-hit unit cost
+                cost = rate.unsqueeze(-1) * unit * (foot_panel >= 0).unsqueeze(-1).float()    # (B,2,4); unplaced foot = free
+                # FOOTSWITCH policy (user 2026-06-25): alternating feet on a same-panel run is LEGIT for 2 notes,
+                # uncommon at 3 (penalize), hard-capped at 4. A footswitch = the OTHER foot taking the panel it
+                # holds; graded by the prospective same-panel run length sp_run+1. (One-foot jack is always the
+                # alternative, governed by the climbing per-foot E. Crossovers — other foot NOT on tgt — stay cheap.)
+                runp = sp_run + 1                                                             # run length if repeated now
+                fs_add = torch.where(runp >= 4, torch.full((B,), 1e4, device=device),         # 4-note: hard cap
+                          torch.where(runp == 3, torch.full((B,), float(footswitch_pen), device=device),  # 3-note: penalize
+                                      torch.zeros(B, device=device)))                         # <=2-note: free (just travel)
+                cost = cost + fs_add.view(B, 1, 1) * fswitch.float()
+                # per-pattern resulting foot state (for the post-choice update); default = unchanged
+                np_panel = foot_panel.unsqueeze(1).repeat(1, NUM_PATTERNS, 1)                 # (B,15,2)
+                np_E = decayE.unsqueeze(1).repeat(1, NUM_PATTERNS, 1)
+                np_used = torch.zeros(B, NUM_PATTERNS, 2, dtype=torch.bool, device=device)
+                for pidx in range(NUM_PATTERNS):
+                    pn = panel_bits[pidx].nonzero(as_tuple=True)[0]
+                    if pn.numel() == 1:                                                       # single: either foot hits p
+                        p = int(pn[0])
+                        oa = torch.maximum(decayE[:, 0] + cost[:, 0, p], decayE[:, 1])        # left hits
+                        ob = torch.maximum(decayE[:, 1] + cost[:, 1, p], decayE[:, 0])        # right hits
+                        pat_logits[:, pidx] -= fatigue_penalty * (torch.minimum(oa, ob) - fatigue_free).clamp(min=0)
+                        wa = oa <= ob                                                         # left-foot assignment wins
+                        np_panel[:, pidx, 0] = torch.where(wa, p, np_panel[:, pidx, 0])
+                        np_panel[:, pidx, 1] = torch.where(~wa, p, np_panel[:, pidx, 1])
+                        np_E[:, pidx, 0] = torch.where(wa, decayE[:, 0] + cost[:, 0, p], np_E[:, pidx, 0])
+                        np_E[:, pidx, 1] = torch.where(~wa, decayE[:, 1] + cost[:, 1, p], np_E[:, pidx, 1])
+                        np_used[:, pidx, 0] = wa; np_used[:, pidx, 1] = ~wa
+                    elif pn.numel() == 2:                                                     # jump: 2 foot assignments
+                        x, y = int(pn[0]), int(pn[1])
+                        oa = torch.maximum(decayE[:, 0] + cost[:, 0, x], decayE[:, 1] + cost[:, 1, y])  # L=x,R=y
+                        ob = torch.maximum(decayE[:, 0] + cost[:, 0, y], decayE[:, 1] + cost[:, 1, x])  # L=y,R=x
+                        pat_logits[:, pidx] -= fatigue_penalty * (torch.minimum(oa, ob) - fatigue_free).clamp(min=0)
+                        wa = oa <= ob
+                        np_panel[:, pidx, 0] = torch.where(wa, x, y)
+                        np_panel[:, pidx, 1] = torch.where(wa, y, x)
+                        np_E[:, pidx, 0] = torch.where(wa, decayE[:, 0] + cost[:, 0, x], decayE[:, 0] + cost[:, 0, y])
+                        np_E[:, pidx, 1] = torch.where(wa, decayE[:, 1] + cost[:, 1, y], decayE[:, 1] + cost[:, 1, x])
+                        np_used[:, pidx] = True
             if pattern_sample or not greedy:
                 lg = pat_logits / (pattern_temperature if pattern_sample else temperature)
                 if pattern_top_k is not None:
@@ -630,6 +693,19 @@ class LayeredTypedChartGenerator(nn.Module):
             npc = n_panels[pat]                        # panels in the chosen pattern
             next_foot = torch.where(on & (npc == 1), 1 - next_foot, next_foot)   # alternate on singles
             next_foot = torch.where(on & (npc >= 2), torch.zeros_like(next_foot), next_foot)  # reset after jump
+            if fatigue_on:  # commit the chosen pattern's MIN-exertion footing to the per-foot fatigue state
+                idx = torch.arange(B, device=device)
+                cp, cE, cu = np_panel[idx, pat], np_E[idx, pat], np_used[idx, pat]  # (B,2) chosen footing
+                upd = on.unsqueeze(-1) & cu                                     # update only USED feet, on onset frames
+                foot_panel = torch.where(upd, cp, foot_panel)                  # (unused feet keep state -> lazy decay)
+                foot_E = torch.where(upd, cE, foot_E)
+                foot_t = torch.where(upd, torch.full_like(foot_t, t), foot_t)
+                # a footswitch LIFTS the displaced foot: if both feet now read the same panel, the one that did NOT
+                # act this frame lifts (-1). Without this the state corrupts to "both feet here" and the footswitch
+                # cap is bypassed via the stay path (each foot taking turns "staying" on the panel).
+                both = (foot_panel[:, 0] == foot_panel[:, 1]) & (foot_panel[:, 0] >= 0) & on
+                foot_panel[:, 0] = torch.where(both & ~cu[:, 0], torch.full_like(foot_panel[:, 0], -1), foot_panel[:, 0])
+                foot_panel[:, 1] = torch.where(both & ~cu[:, 1], torch.full_like(foot_panel[:, 1], -1), foot_panel[:, 1])
             # free-foot tracking for no_cross_during_hold: a single note placed while a hold was already open
             free_gap = free_gap + 1
             sp = single_panel[pat]                                              # (B,) panel if single pattern else -1
@@ -657,6 +733,11 @@ class LayeredTypedChartGenerator(nn.Module):
             jack_panel = torch.where(reset, torch.full_like(jack_panel, -1), jack_panel)
             jack_len = torch.where(reset, torch.zeros_like(jack_len), jack_len)
             since_onset = torch.where(on, torch.ones_like(since_onset), since_onset + 1)
+            if fatigue_on:  # SAME-PANEL run tracker (footswitch grading): +1 on a same-panel single, reset on a new
+                same_sp = is_fs & (fsp == sp_panel)                            # panel / jump; PERSIST across empty frames
+                sp_run = torch.where(on, torch.where(same_sp, sp_run + 1,
+                                     torch.where(is_fs, torch.ones_like(sp_run), torch.zeros_like(sp_run))), sp_run)
+                sp_panel = torch.where(on, torch.where(is_fs, fsp, torch.full_like(sp_panel, -1)), sp_panel)
 
         if lengths is not None:
             valid = torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)
