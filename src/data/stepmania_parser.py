@@ -554,7 +554,13 @@ class StepManiaParser:
                     ts = int(np.floor(beat_position * self.timesteps_per_beat))
                     if 0 <= ts < chart.timesteps_total:
                         for panel_idx in range(4):
-                            arr[ts, panel_idx] = self.TYPED_SYMBOLS.get(line[panel_idx], 0)
+                            sym = self.TYPED_SYMBOLS.get(line[panel_idx], 0)
+                            # Collision-safe (sticky), matching convert_to_tensor_extended: when a sub-16th note
+                            # quantizes onto an already-occupied cell, do NOT let a later line's EMPTY panel
+                            # overwrite an existing note with 0 (that silently dropped sub-16th notes from the
+                            # typed path while the binary/radar path kept them).
+                            if sym:
+                                arr[ts, panel_idx] = sym
             current_beat += 4.0
         return arr
 
