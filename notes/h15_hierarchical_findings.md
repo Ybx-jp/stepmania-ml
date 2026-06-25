@@ -47,10 +47,43 @@ Quality intact (F1 0.72, density 0.186 at g=1).
   (redundant for prediction); and the "realize" is a soft per-frame bias, not an enforced staircase — so a
   long-range figure (sweep) lifts but can't dominate, and CFG g=3 washes it out instead of amplifying.
 
+## OPTION 1 TESTED → REFUTED (2026-06-24): the modest lift is the CEILING, not an artifact
+`train_motif_figure_standalone.py` (warm gen_motif_hr, figure-ONLY conditioning, FIGURE-AWARE selection =
+per-epoch generation-time sweep-control lift not val CE, quality guard, patience-5). Best epoch 3, early-stop
+epoch 8. Full eval (`gen_motif_figure_solo`, 12 songs): figure=sweep lift **+0.07 @g1 (0.03→0.09)** — IDENTICAL
+to the on-top-of-local2 version (+0.08). Both of option 1's sub-fixes tested, neither moved the needle:
+- **Standalone (drop continuous motif)** → +0.07, unchanged ⇒ REDUNDANCY (Reason A) was NOT the bottleneck.
+- **Figure-aware selection** → the per-epoch control metric bounced ~+0.03 in noise, never climbed ⇒ SELECTION
+  (Reason B) was NOT the bottleneck.
+**CONCLUSION: a per-section token biases sweep FREQUENCY a little (0.03→0.09, real 0.11) but cannot ENFORCE the
+L→D→U→R staircase SEQUENCE. Soft per-frame conditioning has a low ceiling on long-range coordinated figures.
+The real lever is a STRUCTURED "realize" (option 2), not more/better figure training.**
+METHOD NOTE (Rule 11 misstep, user-caught): standalone discarded gen_motif_local2's WORKING candle/trill
+representation for no product benefit, on the redundancy hunch — which the result then refuted. It survives only
+as a NEGATIVE CONTROL. Should have kept local2 as the base or run both side-by-side. `gen_motif_figure_solo` is
+NOT a deliverable (no candle/trill).
+
 ## NEXT (decision point)
-1. **Re-train figure properly (cheap):** STANDALONE figure (drop the continuous motif so figure must carry the
-   signal) + MORE epochs + a FIGURE-AWARE selection metric (sweep-realization on a held set, not val CE — Rule
-   2). Likely the modest result is a training/selection artifact, not the ceiling.
-2. **Stronger "realize" (bigger):** the soft per-frame token can't enforce a staircase; a structured/template
-   decode (commit to a figure for a window, realize its panel sequence) is the real fix for long-range figures.
-3. Carry-forward if pursued: `gen_motif_figure`. The candle/trill levers (gen_motif_local2) are unaffected.
+1. **Structured "realize" (option 2, the real lever):** commit to a figure for a window, render its coherent
+   panel sequence (template / sequence-level head), instead of a soft per-frame bias. The only thing left that
+   can enforce a staircase. Bigger build.
+2. **Consolidate + accept (product):** add figure on top of gen_motif_local2 (KEEP candle/trill), accept the
+   modest sweep nudge (~+0.08) — one model with all working levers; sweep stays a known weak axis.
+3. **Stop:** jack↔sweep remains the documented holdout; ship the candle/trill section lever (gen_motif_local2).
+Carry-forward deliverable = `gen_motif_local2` (candle/trill); `gen_motif_figure` adds a modest sweep nudge.
+
+## CONSOLIDATED DELIVERABLE — `gen_motif_full` (chosen path: consolidate + accept, 2026-06-24)
+`train_motif_consolidated.py` = the CORRECTED option 1 (user-caught): warm-start gen_motif_local2 (KEEP the
+working candle/trill continuous-motif representation), ADD the figure token, train both with the FIGURE-AWARE
+selection (per-epoch sweep-control lift, not figure-blind CE). train_pat held at ~0.95 (local2 level — rep
+preserved); best epoch 5, early-stop epoch 10. ONE model with ALL levers, all quality-safe (onset_F1 0.72–0.74,
+density matched):
+| lever        | mechanism                | Δ / lift (g=1 / g=3)        |
+|--------------|--------------------------|-----------------------------|
+| candle/cross | continuous motif (knob 3)| **+1.72 / +3.88** (strong)  |
+| jack↔trill   | continuous motif (knob 10)| **+0.73 / +1.10** (preserved)|
+| sweep        | discrete figure token    | **frac +0.05 → real 0.11**  |
+| jack↔sweep   | continuous knob 0        | +0.03 / +0.15 (stuck — sweep comes from the figure token, not the knob) |
+**Carry-forward deliverable = `gen_motif_full`** (radar + section candle/trill + modest figure sweep nudge).
+Sweep accepted at the soft-conditioning ceiling; the structured-realize fix (option 2) remains the only path to
+a strong sweep lever if ever wanted. `gen_motif_figure_solo` = negative control (not a deliverable).
