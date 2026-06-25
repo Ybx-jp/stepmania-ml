@@ -47,6 +47,20 @@ empty panels overwrote the earlier row's notes with zero**. The typed path silen
   *factorized* track / quality readouts, not the gen_motif_full conditioning or training targets. Flagged, not
   fixed; revisit if any becomes load-bearing.
 
+## Decode-side symbol handling (typed_model.generate hold automaton) — CLEAN (verified empirically)
+The last place the symbols get interpreted. Audited + confirmed on 5 raw (pre-`pair_holds`) generated charts:
+- **index→symbol mapping correct:** `proposed = typ + 1` maps type-head class 0..3 → symbol 1..4 (no off-by-one).
+- **hold bodies emit 0** (a held panel not noted this frame → `close`/`free_act` both false → state 0), so
+  `onset_tokens`/density read them as empty correctly.
+- **no orphan tails in raw output:** a tail (`state=3`) is only emitted on `close = held & active`, so it always
+  has a preceding head; a tail predicted on a FREE panel is remapped to a tap (typed_model.py:601). Measured:
+  **orphan_tails=0, bad_symbols=0** across 5 charts; heads pair with tails except a trailing unclosed hold
+  (chart0: 15 heads/14 tails = 1 end-of-song orphan head), which `pair_holds` demotes to a tap.
+- **robust to skipping `pair_holds`:** the motif detector is attacks-only and there are no orphan tails, so raw
+  vs paired only differ by head(2)→tap(1) demotion of trailing holds — both are attacks, so the measurement is
+  unchanged. `pair_holds` is applied on the playable `.sm` export path (export_typed_samples.py:362) for strict
+  structural validity. ⇒ no decode-side bug.
+
 ## Pre-existing unrelated failure (not caused here)
 `tests/test_parser.py::test_phase1_song_length_rejection` fails with "No BPM events found" (empty `timing_events`
 in the test fixture) — fails identically on the pre-fix parser (verified via stash). Separate test-setup issue.
