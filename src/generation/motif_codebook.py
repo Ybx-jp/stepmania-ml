@@ -55,9 +55,16 @@ def _canon(window):
 
 
 def onset_tokens(chart_tensor) -> np.ndarray:
-    """(T,4) typed chart -> (n_onsets,) which-panels pattern id (empties dropped)."""
+    """(T,4) typed chart -> (n_onsets,) which-panels pattern id (empties dropped).
+
+    An onset is an ATTACK only: tap(1), hold_head(2), roll_head(4). The hold/roll TAIL (3) is a note
+    RELEASE, not a strike — it must NOT count. Because this function drops empty hold-body frames, a hold's
+    head and tail would otherwise become ADJACENT same-panel tokens, manufacturing a phantom jack/trill pair
+    per hold (the H19 confound: it inflated trill/jack knobs proportionally to hold density, flipping the trill
+    knob's sign on hold-heavy charts). NOTE: cache/motif_basis.npz was fit tail-inclusive; this corrects the
+    MEASUREMENT path. A full fix refits the basis + retrains on clean targets (deferred)."""
     arr = np.asarray(chart_tensor)
-    active = arr != 0
+    active = (arr != 0) & (arr != 3)   # attacks only — exclude the hold/roll release (symbol 3)
     onset = active.any(1)
     return panels_to_pattern(active[onset]) if onset.any() else np.empty(0, np.int64)
 

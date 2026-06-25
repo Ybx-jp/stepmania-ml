@@ -154,6 +154,23 @@ def test_typed_helpers():
     assert h["tap"] == 1 and h["hold_head"] == 1 and h["none"] == 18
 
 
+def test_onset_tokens_excludes_hold_tail():
+    """H19 regression: the figure/motif detector must count ATTACKS only (tap/hold_head/roll_head),
+    NEVER the hold release (symbol 3). Because empty hold-body frames are dropped, a counted tail would
+    sit adjacent to its head as a phantom same-panel pair -> fake jacks/trills proportional to hold count."""
+    from src.generation.motif_codebook import onset_tokens
+    # A single L-hold: head(2) at t0, empty body, tail(3) at t3. Plus a real U tap at t5.
+    chart = np.zeros((6, 4), dtype=np.int64)
+    chart[0, 0] = 2; chart[3, 0] = 3; chart[5, 2] = 1
+    toks = onset_tokens(chart)
+    # exactly TWO attacks (hold-head L, tap U); the tail must NOT appear as a third L token.
+    assert len(toks) == 2, f"tail leaked as an onset: {toks}"
+    # A lone hold = ONE attack (the head); its release must add no second same-panel token.
+    lone = np.zeros((8, 4), dtype=np.int64)
+    lone[0, 0] = 2; lone[4, 0] = 3
+    assert len(onset_tokens(lone)) == 1, "hold release manufactured a phantom same-panel onset"
+
+
 def test_pair_holds():
     from src.generation.typed import pair_holds
     chart = np.zeros((10, 4), dtype=np.int64)

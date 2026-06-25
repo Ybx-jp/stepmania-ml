@@ -15,7 +15,131 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
-## 2026-06-24 — H15 conditioning-knob sets PREPARED (radar + pattern-motif + combined) — ⏳ PENDING PLAYTEST
+## 2026-06-24 — ★ H15 + CHAOS sets PLAYED — candle knob validated by ear, "model might be ready", felt-chaos ≠ proxy
+
+### What was played
+The 13 `h15_*` (`gen_motif_full`) + 6 `chaos2_*` sets from the pending entry below. Same `--groove_select`
+Hard songs, seed 42, all mandatory pad-playability on, `pattern_temperature 0.7`. Recurring songs the user
+named: **japa1** (a Japanese-titled song — extremely hard), **deja loin**, **in between**, **high school love**,
+**nightbird lost wing**. (Player self-rates below super-elite, so japa1's hardest charts are read by feel, not cleared.)
+
+### Raw feedback (verbatim where vivid)
+- **chaos2_calib (16th≈0.54):** "The quarter backbone dissolved. Local and global structures were preserved,
+  and symmetric patterns emerged. Music accents were represented, though it felt like the conditioning tuning
+  was off, most songs took a while to get started — like it was trying to balance densities maybe."
+- **chaos2_ohworld (16th≈0.61):** "Mostly the same as chaos2_calib, but it felt a little more coherent and
+  quite good choreography with accents. **japa1 was awesome!** It was sooooo chaotic but every note felt earned
+  and the choreography was very strong and the chart felt in character with the song… really good." → **disputes
+  my characterization:** "I would not agree… that this set's 'backbone survives', the songs seemed to largely key
+  off 1/16s to hold the groove during verses."
+- **chaos2_manifold_q99 (16th≈0.10):** "**japa1 was totally insane** omg haha! Not a large share of 1/16s, but
+  it felt insanely chaotic even though the radar didn't think so. Really good chart. high school love had a
+  similar feeling, but the radar showed pretty strong chaos for this. **For the first time, I'm thinking this
+  model might be ready.** It's cranking out incredibly intense and chaotic charts (as requested) that still feel
+  choreographed… meant for the super elite guys who leave the arcade in a deep sweat and a crowd in awe."
+- **chaos2_glitch_ood (1.00) + calib_strong (0.94):** "With basically everything being 1/16s these felt really
+  streamy and were actually **not hard to play**. The model was definitely still able to comprehend choreography
+  and global/local structures, but its expressiveness was limited by the conditioning… the model is finally
+  working with enough controls to put something coherent together under a wide range of conditions, though
+  performance is likely better in some regions than others."
+- **h15_base:** "japa1 still pretty hectic, fun! The model definitely understands what a 'hard' song really is.
+  **deja loin used jacks really well** — the model picked up some understanding of when the music especially wants
+  some stomping. **in between had soooo many jacks**, really long jack streams too. It seems clear pattern motifs
+  were learned. If this is just base, I'd think **jacks are a knob that should pretty much only go lower lol**."
+- **radar_stream:** "fun charts! Not majorly different than base, but I could sense a preference for streams."
+- **radar_chaos:** "doesn't feel especially chaotic. fun charts though."
+- **motif_candle (+3 g2):** "in between felt like it kinda broke from the music, but the candles were there.
+  japa1 was fine."
+- **motif_candle_neg (−3 g2):** "in between definitely felt more linear than motif_candle. **the knob is working.**"
+- **motif_trill (+3 g2):** "japa1 definitely had the trills. It also had a **huuuge jack streams during holds.**
+  I wonder if our pattern head confuses a held frame with a tap and scored some trill points that way."
+- **combo_chaos_candle:** "yeah I think its working. nightbird lost wing reminded me that there are some classic
+  patterns I barely see represented in any of these charts, like **gallops and foot switches**."
+
+### Commentary / hypotheses
+- **★ H15 candle knob — SUPPORTED BY EAR (the arc's payoff).** `motif_candle_neg` played "more linear" than
+  `motif_candle` on the *same song* (in between), and "the knob is working" is the user's own verdict on the A/B.
+  This is the thing every offline metric is blind to: the section-by-section candle lever (Δ+1.7/+3.9 offline)
+  audibly changes the footwork. The H15 thesis (a steerable, quality-safe motif vibe lever) has its play-feel
+  confirmation. Caveat → next bullet.
+- **H3 (guidance×musicality) — reconfirmed on candle.** At g2, `motif_candle` "kinda broke from the music" on
+  in between while japa1 stayed fine — same song-dependence as the chaos/glitch arc (H17 fit). The knob works but
+  g2 is past the musical operating point on less-ornamental songs; the gentler `_gentle` g1.4 set is the one to
+  default to. Pick operating g per song character, don't headline g2.
+- **H18 (NEW) — felt-chaos ≠ 16th-share ≠ radar-chaos.** The single most important result here. `manifold_q99`
+  (16th≈0.10, low radar) played "insanely chaotic / totally insane"; `calib`/`ohworld` (16th 0.54/0.61) I'd
+  characterized as "backbone survives" but the user heard them keying off 16ths; and the *highest* 16th-share
+  sets (`glitch_ood`/`calib_strong`, ≈0.94–1.0) played "streamy and NOT hard." So perceived chaos is **non-
+  monotonic in 16th-share and decoupled from radar-chaos** — it peaks in the manifold-realized middle and
+  *collapses into easy streams* at the OOD flood. This refines H4: the **manifold** chaos path produces musical,
+  choreographed intensity (crown jewel confirmed by ear); the smear regime isn't "more chaos," it's a uniform
+  16th wall that reads as *less* demanding. The offline knee-bracket numbers measured placement, not the felt
+  axis. **Action:** stop treating 16th-share as the chaos dial; the operating sweet spot by ear is `manifold_q99`
+  → `ohworld`, and `calib_strong`/`glitch_ood` are past the cliff, not "more."
+- **MILESTONE — "for the first time I'm thinking this model might be ready" / "enough controls to put something
+  coherent together under a wide range of conditions."** First time the user has called the *system* (not one
+  lucky chart, cf. OH WORLD g3.5) plausibly done. Worth treating as a phase gate.
+- **H19 (NEW) — possible held-frame/tap confound in the pattern head.** `motif_trill` produced "huge jack streams
+  during holds," and the user suspects the pattern/figure detector credits a *held* frame as a tap → spurious
+  "trill" score, i.e. the trill axis may be partly measuring hold artifacts rather than alternating taps. This is
+  a **measurement/labeling bug suspicion** on the figure head, and it would also inflate the offline trill Δ we've
+  been reporting. Connects to the earlier note (memory) that trill's honest gain was already partly a density
+  artifact. **Action:** check `motif_codebook` figure/trill labeling — does a hold-active frame get counted toward
+  trill/tap mass? If yes, exclude hold-occupied frames from the figure detector and re-measure trill steerability.
+- **H20 (NEW) — missing advanced-pattern VOCABULARY (a coverage gap, not a steering gap).** Charts are jack-heavy
+  ("jacks should only go lower") and the user notes **gallops and foot-switches are barely represented**, prompted
+  by nightbird lost wing. From the ddrcommunity guide, the advanced vocabulary the model isn't producing:
+  **gallops** (a quick 1/16 grace-note before a beat — a "da-dum" burst, not on the grid), **foot-switches** (a
+  two-note jack that's actually a foot swap, not a same-foot hammer), **laterals** (extended crossovers like the
+  AFRONOVA walk that stay crossed), **half-spins**, **freeze-switches** (lift-and-replace on a freeze to keep
+  alternating), and **brackets/hands**. This is distinct from H15 (we can *steer* motifs the model already knows);
+  here the model's repertoire is **over-concentrated on jacks and under-covers ornamental footwork**. Likely a
+  data-coverage / objective issue (these figures are rare in training and the jack axis is over-served), not a
+  decode knob. **Note:** the lone stuck H15 axis is jack↔sweep, and the user independently wants jacks *lower* —
+  so the holdout axis and the desired direction coincide; a working jack-reduction / sweep-toward push is the
+  same lever as fixing the over-jacked feel.
+- **chaos2_calib "slow to get started / balancing densities"** → consistent with **H5** (no global density arc;
+  awkward starts). The phase-calib recipe may be spending early measures equilibrating density before the groove
+  locks. Minor, but it's the same structural-flatness thread.
+
+### Connecting thread
+The recurring lesson lands again, sharper: **our offline proxies disagreed with the ear in the direction that
+mattered.** The 16th-share "knee" I bracketed put the *best-feeling* chaos (`manifold_q99`) at the bottom and the
+*worst* (`glitch_ood`) at the top — perceived intensity is carried by manifold-coherent placement, not raw 16th
+count (H18). Meanwhile the candle A/B (H15) and the trill artifact (H19) show the pattern head is both a working
+steering lever *and* a possibly-miscalibrated measuring stick. Net: the **system** crossed a felt-quality bar
+("might be ready") under manifold conditioning, and the remaining work is (a) trust manifold-chaos over the 16th
+proxy, (b) audit the figure head for the hold/tap confound, (c) broaden the pattern vocabulary away from jacks.
+
+### Action / next
+- [ ] **H15 candle:** validated — adopt `_gentle` g≈1.4 as the default candle operating point (g2 breaks musicality
+      on non-ornamental songs, H3). Mark candle as the shipped, ear-confirmed H15 lever.
+- [ ] **H18 chaos:** retire 16th-share as the "chaos dial"; document `manifold_q99`→`ohworld` as the felt sweet
+      spot and `calib_strong`/`glitch_ood` as past-the-cliff smear. Consider a perceived-intensity proxy that isn't
+      16th-count (manifold-distance? pattern-entropy?) before the next chaos characterization.
+- [x] **H19 figure-head audit — CONFIRMED + measurement fixed (2026-06-24).** `motif_codebook.onset_tokens`
+      gated on `arr != 0`, admitting symbol 3 (hold/roll RELEASE) as a struck note; since empty hold-body frames
+      are dropped, each hold's head+tail became an ADJACENT same-panel pair → phantom jack/trill, one per hold.
+      Magnitude scales with hold density (diag_figure_hold_confound.py): trill exports tail-share ~1% / trillK
+      bias ~+0.08, but the freeze set ~4% / ~+0.22 and on hold-heavy charts (IN BETWEEN +0.53→−0.12) it FLIPS the
+      trill knob's sign. **Measurement-side fix applied** (`active=(arr!=0)&(arr!=3)`, attacks only; generation
+      unaffected — it sets the knob directly, never calls onset_tokens). **Paired re-run of trill eval** (k10,
+      16 songs, gen_motif_full, ±3z; same seeded charts): g1 Δself +0.58→**+0.52**, g3 +1.28→**+1.15** — ~10% of
+      the measured trill gain was the hold-tail phantom on this hold-sparse set (more on hold-heavy content). Trill
+      lever REAL, just smaller. Regression test added (test_onset_tokens_excludes_hold_tail), 34/34 pass.
+      DEFERRED (the fuller fix): cache/motif_basis.npz was fit tail-inclusive and gen_motif_full trained on
+      tail-contaminated targets — refit basis + retrain to fully clean. SEPARATE thread: the user's PLAYED "huge
+      jack streams during holds" on japa1 (tail-share only ~1% there) is mostly a GENERATION behavior, not this
+      detector miscount — its own follow-up.
+- [ ] **H20 vocabulary:** scope a coverage analysis — measure training-set frequency of gallop / foot-switch /
+      lateral / bracket figures vs how often the model emits them; the jack over-concentration is the flip side of
+      the stuck jack↔sweep axis and the user's "jacks only go lower" wish. This is likely data/objective, not decode.
+- [ ] **Milestone:** log "model might be ready" as a phase gate; decide whether the next arc is *polish/coverage*
+      (H19/H20) rather than another conditioning capability.
+
+---
+
+## 2026-06-24 — H15 conditioning-knob sets PREPARED (radar + pattern-motif + combined) — ✅ PLAYED (see entry above)
 ### What was generated (not yet played — user afk)
 13 sets from **`gen_motif_full`** (the consolidated H15 deliverable: radar + continuous per-section motif +
 discrete figure token), all on the SAME `--groove_select rich --difficulty_select Hard` songs (seed 42) for
