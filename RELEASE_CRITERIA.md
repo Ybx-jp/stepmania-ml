@@ -60,10 +60,19 @@ A release is **0.1.0-ready** when every box is checked.
       governor.
 
 ### Documentation / narrative
-- [ ] README carries the governor as a short controllability beat (no stale silence about a
+- [x] README carries the governor as a short controllability beat (no stale silence about a
       major subsystem the code contains).
-- [ ] README's "Live demo / Sample charts" promises are honest (no "coming soon" that points
+- [x] README's "Live demo / Sample charts" promises are honest (no "coming soon" that points
       at nothing the reader can reach).
+- [x] **README claims audit** published (`readme-0.1.0-audit.md`): every significant claim traced
+      to a `notes/` finding, source file, or test. Fixed a broken `--radar` example (→ `--style`),
+      recalibrated the song-structure + chaos framings, added the batch-of-4 KV-cache nuance.
+
+### Repo hygiene / packaging
+- [x] Git-tracking privacy audit: no secrets, no copyrighted data/audio/weights tracked. Untracked
+      3 path-leaking build logs; scrubbed the personal interpreter path from 10 scripts; cleared
+      notebook outputs.
+- [x] Migrated `setup.py` → `pyproject.toml` (PEP 621, version `0.1.0`, MIT, accurate description).
 
 ### Honesty / claims  *(the project's brand discipline)*
 - [ ] Every number in the README traces to a real `notes/*_findings.md` — verbs match the
