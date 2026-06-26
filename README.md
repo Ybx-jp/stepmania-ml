@@ -4,7 +4,8 @@ Generate playable [StepMania](https://www.stepmania.com/) dance charts from audi
 and a target difficulty, get back a chart whose arrows land on the music and match the difficulty
 you asked for — with controllable style and a learned sense of *taste*.
 
-> **Live demo:** _Hugging Face Space — coming soon._
+> **Status:** research project, pre-1.0 — MIT licensed. No hosted demo yet; you can
+> [generate playable charts locally](#run-it) and read the hands-on [playtest log](notes/playtest_log.md).
 > **Sample charts:** generated `.sm` files re-parse cleanly and play in StepMania, with holds.
 
 This is a from-scratch deep-learning project. The model — a multi-modal, autoregressive,
@@ -59,9 +60,14 @@ Plus the engineering that makes it practical:
 
 - **Controllability:** trained groove-radar conditioning + **classifier-free guidance** + reference-
   chart **style transfer** — steer density, syncopation, jumps, holds, or transfer another chart's feel.
+- **Decode-time biomechanical governor:** a per-note two-foot **fatigue** model (foots jacks onto a
+  human distribution), a per-region **stamina** relief valve (thins density under sustained workload),
+  and an energy-following difficulty **arc** — physical plausibility applied at *decode* rather than
+  retrained in (the recurring "the bottleneck is the decode, not the model" theme). Playtest-confirmed
+  as "a tasteful edit, not a rewrite."
 - **Calibration:** per-difficulty Platt scaling brought onset ECE from ~0.17 to ~0.01.
 - **KV-cache:** a hand-rolled incremental decoder, **bit-identical** to the reference path, takes a
-  full 1440-frame (~2 min) generation from 33.4s to 3.6s (**9.2×**).
+  full 1440-frame (~2 min) generation from 33.4s to 3.6s (**9.2×**, batch of 4).
 - **Playable output:** generated charts write back to `.sm`, re-parse with valid hold spans, and
   play in StepMania alongside the original for A/B.
 
@@ -119,7 +125,8 @@ audio (MFCC / chroma / HPSS / onset / spectral / metric-phase)     target diffic
 - **Tokenizer** (`src/generation/tokenizer.py`): lossless `(T, 4)` ↔ token.
 - **Factorized generator** (`src/generation/factorized.py`): audio-driven onset + AR panel.
 - **Typed generator** (`src/generation/typed_model.py`, `typed.py`): tap/hold symbols + the layered
-  onset→which-panels→type head; conditioning (radar, style), CFG, and KV-cached decode.
+  onset→which-panels→type head; conditioning (radar, style), CFG, KV-cached decode, and the
+  decode-time fatigue/stamina governor.
 - **`.sm` writer** (`src/generation/sm_writer.py`): tensor → playable chart, inverse of the parser.
 - **Critics** (`src/generation/evaluation.py`, `experiments/realism_critic/`): the difficulty critic
   and the learned taste critic, both reusing the Phase-1 classifier backbone.
@@ -151,11 +158,12 @@ python experiments/generation_typed/train_radar.py
 
 **Generate playable charts:**
 ```bash
+# --style is the in-distribution (manifold) conditioning path; --radar is disabled (off-manifold).
 python experiments/generation_typed/export_typed_samples.py \
-    --data_dir data/ --audio_dir data/ --radar "chaos=0.9,air=0.85" --guidance 1.4
+    --data_dir data/ --audio_dir data/ --style "chaos=q0.9" --guidance 1.5
 ```
 
-**Taste critic + best-of-N reranking:**
+**Taste critic + best-of-N reranking** (reranking is built but not yet playtest-validated)**:**
 ```bash
 python experiments/realism_critic/train_critic.py     # corrupted-real negatives
 python experiments/realism_critic/eval_taste.py        # REAL > BASE > CHAOS ranking
@@ -175,9 +183,20 @@ pytest tests/
 - **Holds are supported. Rolls are not** — there are zero rolls in the training data (0/675), so
   the model never learns to place them. A data limit, stated rather than hidden.
 - **Musicality is improved, not solved.** Onset F1 in the high-0.7s means most notes land on-beat,
-  not every note. Open problems: the `chaos` (syncopation) knob still smears off-grid; the model has
-  no song-structure/climax awareness (density stays flat where humans build to a finale); the AR
-  decoder has an awkward cold-start. These are tracked in [`notes/playtest_log.md`](notes/playtest_log.md).
+  not every note; and the AR decoder has an awkward cold-start.
+- **Chaos / syncopation is in-distribution-bounded (mostly characterized, not an open defect).** The
+  `chaos` knob produces *musical*, choreographed intensity while the conditioning stays on the groove
+  **manifold** — the deployed radar path fills unset dims via the Gaussian conditional and projects
+  onto the covariance ellipsoid (the in-distribution shell). Pushed *past* the manifold it degrades to
+  a uniform 16th "wall" that actually reads as *less* demanding, so literal 16th-note share isn't the
+  dial (felt chaos peaks mid-range, not at the flood). The lever is staying in-distribution, not
+  cranking harder.
+- **Song structure — a strength, with one open frontier.** Playtests consistently read charts as
+  *"in character with the song"* — accents land, choreography escalates, and the model picks jacks
+  where the music wants stomping; the audio-driven onset backbone follows energy into an intensity
+  arc. What's *less* certain is deliberate **global, whole-song phrase planning** (long-range density
+  build, clean phrase boundaries), which frame-local features don't directly encode — the optional
+  decode-time governor can impose an energy-following difficulty arc on top. These are tracked in [`notes/playtest_log.md`](notes/playtest_log.md).
 - The taste critic is a within-project signal validated against the playtest ranking on this dataset
   — not a general-purpose musicality oracle.
 
