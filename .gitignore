@@ -90,7 +90,12 @@ out.txt
 marketing/
 
 # Feature caches (large, regenerable) and local MLflow store
-cache/
+# NB: ignore cache/* (contents), NOT cache/ (the dir) — git won't descend into an excluded
+# directory, so the re-include below only works against a contents glob.
+cache/*
+# ...but ship the fitted groove manifold: tiny derived stats (per-chart 5-dim radar +
+# difficulty + density; no charts/audio), needed for dataset-free generation (scripts/generate.py).
+!cache/radar_manifold.npz
 mlflow.db
 
 # Generated sample song folders (contain copied audio)

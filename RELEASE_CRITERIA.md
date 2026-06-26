@@ -82,8 +82,11 @@ A release is **0.1.0-ready** when every box is checked.
       as a percentage.
 
 ### Reproducibility
-- [ ] Clean-env load test: someone following the README can load the deployed checkpoint
-      (`checkpoints/gen_motif_full_fixed/best_val.pt`) and generate a chart end-to-end.
+- [x] End-to-end generation works from the README: `scripts/generate.py --audio song.ogg
+      --difficulty Hard` produces a `.sm` that re-parses cleanly (verified; smoke-tested in
+      `tests/test_generate_cli.py`). Dataset-free — added this pass, because the only prior
+      entrypoint required the full training dataset. Ships the 256 KB groove manifold.
+- [x] `pip install -e .` verified against the new `pyproject.toml`.
 
 ### Packaging / deliverable hygiene
 - [ ] `CHANGELOG.md` (or release notes) for v0.1.0.

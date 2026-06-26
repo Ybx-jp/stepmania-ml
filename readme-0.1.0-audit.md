@@ -47,7 +47,7 @@ record doesn't support. Audited against the README at branch `release/v0.1.0-pre
 | # | Reference (README) | Problem | Fix | Status |
 |---|---|---|---|---|
 | 21 | Generate example: `--radar "chaos=0.9,air=0.85" --guidance 1.4` | `--radar` is **disabled** and now **errors out** (mean-pin = off-manifold smear). A new user copy-pasting this hits an error. | Use the manifold path: `--style "chaos=q0.9" --guidance 1.5` (exporter help: "pair with `--guidance ~1.5`"; the aggressive validated recipe is `--style "chaos=q0.99" --guidance 3.0`) | 🔧 fixed this pass |
-| 22 | "Run it" Phase-2 training surfaces the `gen_stage1`-era lineage | Accurate and the scripts run, but the **deployed** checkpoint is `gen_motif_full_fixed` (42-dim highres + governor), which the Run-it section doesn't surface | Deferred — fold into the HF model-release step (model-card lineage reconciliation), not a 0.1.0 code blocker | ⚠️ noted |
+| 22 | The only generation entrypoint (`export_typed_samples.py`) **required the full dataset** and generated on its own held-out songs — no bring-your-own-audio path, so the headline "feed it a song, get back a chart" overpromised for a public user | The README's core promise wasn't reachable without the (unshipped) dataset | Built `scripts/generate.py` (dataset-free: audio → 42-dim features via a stub chart → manifold difficulty density → `generate()` → `.sm`); shipped the 256 KB groove manifold so it works out of the box; reframed the exporter as the eval harness | 🔧 fixed this pass |
 | 23 | All referenced `src/generation/*` files and `experiments/*` scripts | — | All 12 referenced paths exist (verified) | ✅ |
 
 ## Net
