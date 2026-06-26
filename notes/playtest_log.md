@@ -15,6 +15,28 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-25 — ⏳ PENDING: STAGE-3 ARC (breathing ceiling) under the chaos crank
+### What was generated (not yet played)
+Two new sets added to the chaos family: `~/sm-generated/chaos_stamina_g25_breathe{12,18}` — same cranked recipe
+(`--style chaos=q0.99 g3.0`, density 0.400) + `--stamina_ceiling 25`, but the ceiling now BREATHES with audio
+energy (`--stamina_breathe 1.2 / 1.8`). The A/B is **`chaos_stamina_g25` (flat) vs `chaos_stamina_g25_breathe12`
+(arc)**: flat thins uniformly → softens to Medium; breathing KEEPS the climaxes near 0.39–0.40 (stays Hard) and
+rests only the verses. Guide: `outputs/playtest_stamina_chaos/SET_GUIDE.md`. Offline: foot_fatigue_design.md "STAGE 3".
+
+### What to evaluate
+- **The arc (the point):** does `g25_breathe12` feel like the chart is PACED — brutal at the climaxes, breathing in
+  the verses — vs flat g25's uniform "tasteful edit everywhere"? This is the "extra room for the spicy notes in the
+  deserving sections" the user wanted from Stage 3.
+- **Stays Hard:** breathing keeps the climaxes (japa1 0.328 vs flat 0.264, critic Hard vs Medium). Does it feel like
+  it kept the right intensity where the music earns it?
+- **breathe1.2 vs 1.8:** is the deeper arc (1.8) better paced or too swingy? Calibrates the default.
+- **japa1** = clearest read (flat→Medium vs breathe→Hard).
+
+### Action / next
+- [ ] Play japa1 + High School Love: flat g25 vs g25_breathe12 (vs OFF). Log whether breathing PACES better.
+- [ ] Pick the breathe default (1.2 vs 1.8) by feel.
+- [ ] Then: map the "region of good settings" (knob sweep) → release.
+
 ## 2026-06-25 — ✅ PLAYED — STAMINA WIN: "a tasteful edit, not a rewrite" (chaos over-crank relief)
 ### Raw feedback (japa1 + High School Love, OFF vs g50)
 > "japa1 at **g50 was much more playable than at off without being much different overall, it felt like a tasteful
