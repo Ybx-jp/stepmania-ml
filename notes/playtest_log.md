@@ -15,6 +15,181 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-26 — 🔬 PLAYED: STAGE-3 ARC (breathing) — works, but 3 findings to fix
+### Raw feedback (japa1, High School Love, IN BETWEEN; breathe 1.2 vs 1.8 under the chaos crank)
+> "the 1.8 was mostly good, but had **abrupt early endings a few measures short**, and it seemed to **bias toward
+> percussive-type sections for energy and ignore energy from high pitches like a manic piano solo** as seen in high
+> school love. i noticed it has always seemed to react strongly to **this weird thunderclap and distorted witch
+> laugh sound at the open of japa1**, breathing relaxed it somewhat, but I'm wondering if the **audio features need
+> some tuning to better balance the percussive-lead axis**. japa1 was definitely better on 1.2 than 1.8, didn't end
+> awkward. high school love did still end awkward, so did in between."
+
+### Findings / hypotheses
+- **H-arc-end (BUG, mine):** abrupt endings = the breathing ceiling COLLAPSES to ~0 at low-energy outros
+  (`ceiling·(1+breathe·z).clamp(min=1e-3)`; z very negative at the outro → ceiling ~0 → max thinning → empty tail).
+  breathe=1.8 drives it more negative than 1.2 → empties more (japa1 awkward at 1.8, fine at 1.2). HSL/IN BETWEEN
+  end awkward even at 1.2 → their outros go negative enough at 1.2 too, AND it compounds the known H5 end-fade. FIX:
+  floor the effective ceiling so low-energy/low-workload sections aren't emptied.
+- **H-arc-energy (percussive-lead axis, the user's hypothesis — CONFIRMED plausible):** the breathing energy =
+  `p_onset` (onset head) is PERCUSSION-biased, so a manic piano solo (melodic, high-pitch) reads as LOW energy and
+  breathing RESTS it. The audio features already carry the harmonic half — **HPSS `harm_onset`** (harmonic onset)
+  + `perc_onset` (percussive) + 12-dim `chroma` (tonal energy). FIX (decode-time): breathe on a BALANCED energy
+  (perc+harm / chroma), not p_onset. Deeper layer (H-onset-perc-bias): the onset HEAD itself may under-place on
+  melodic sections → audio-feature/retrain thread (the user's "audio features need tuning").
+- **H-japa1-transient:** the onset head over-fires on the opening thunderclap/witch-laugh (loud non-musical
+  transient); breathing relaxed it (low musical energy there → thinned). Same root as H-arc-energy (the energy
+  signal). A balanced/cleaner energy may also down-weight non-musical transients.
+
+### RESOLUTION (this session)
+- **H-arc-end → FIXED (ceiling floor).** Confirmed on the real chaos charts: breathe1.8 floor=0 emptied tails
+  (HSL/Star Trail last-10% density 0.156/0.054 → 0.000); `stamina_breathe_floor=0.4` (clamp the effective ceiling
+  to 0.4× base) restores them to the OFF baseline (0.094/0.054). Breathing-induced emptying gone (residual fade =
+  pre-existing H5). Sets regenerated with the floor + reinstalled. (diag_breathe_energy/diag_stamina_arc.)
+- **H-arc-energy → REFUTED at the breathing-signal level, REDIRECTED to the onset head (diag_breathe_energy.py on
+  the actual playtest songs).** p_onset is NOT percussion-biased on these songs: c_harm (0.34) ≥ c_perc (0.30), and
+  on melodic-loud/perc-quiet frames p_onset is POSITIVE (+0.47) — it already reads piano-solo regions as HIGH energy
+  and would KEEP them. So swapping the breathing energy to perc+harm would NOT help (data says so) — NOT shipped.
+  The "ignored piano solo" perception is therefore the ONSET HEAD under-placing on melodic-only sections (present at
+  OFF too; breathing inherits, doesn't cause) = the user's deeper "audio features need tuning" thread
+  (H-onset-perc-bias), a retrain/feature investigation, NOT a Stage-3 decode knob. japa1 thunderclap: onset head
+  over-fires on the loud transient; breathing incidentally relaxes it (low phrase-energy intro → ceiling drops).
+
+### Action / next
+- [ ] Re-playtest the regenerated breathe sets — endings fixed? (japa1/HSL/IN BETWEEN no longer end short.)
+- [ ] Pick breathe default (1.2 vs 1.8) by feel; the floor makes 1.8 safe to try.
+- [ ] PARKED thread H-onset-perc-bias (melodic note-placement) — revisit if it bugs you post-release.
+- [ ] Then: map the region of good settings → release.
+
+### Original gen note
+### What was generated
+Two new sets added to the chaos family: `~/sm-generated/chaos_stamina_g25_breathe{12,18}` — same cranked recipe
+(`--style chaos=q0.99 g3.0`, density 0.400) + `--stamina_ceiling 25`, but the ceiling now BREATHES with audio
+energy (`--stamina_breathe 1.2 / 1.8`). The A/B is **`chaos_stamina_g25` (flat) vs `chaos_stamina_g25_breathe12`
+(arc)**: flat thins uniformly → softens to Medium; breathing KEEPS the climaxes near 0.39–0.40 (stays Hard) and
+rests only the verses. Guide: `outputs/playtest_stamina_chaos/SET_GUIDE.md`. Offline: foot_fatigue_design.md "STAGE 3".
+
+### What to evaluate
+- **The arc (the point):** does `g25_breathe12` feel like the chart is PACED — brutal at the climaxes, breathing in
+  the verses — vs flat g25's uniform "tasteful edit everywhere"? This is the "extra room for the spicy notes in the
+  deserving sections" the user wanted from Stage 3.
+- **Stays Hard:** breathing keeps the climaxes (japa1 0.328 vs flat 0.264, critic Hard vs Medium). Does it feel like
+  it kept the right intensity where the music earns it?
+- **breathe1.2 vs 1.8:** is the deeper arc (1.8) better paced or too swingy? Calibrates the default.
+- **japa1** = clearest read (flat→Medium vs breathe→Hard).
+
+### Action / next
+- [ ] Play japa1 + High School Love: flat g25 vs g25_breathe12 (vs OFF). Log whether breathing PACES better.
+- [ ] Pick the breathe default (1.2 vs 1.8) by feel.
+- [ ] Then: map the "region of good settings" (knob sweep) → release.
+
+## 2026-06-25 — ✅ PLAYED — STAMINA WIN: "a tasteful edit, not a rewrite" (chaos over-crank relief)
+### Raw feedback (japa1 + High School Love, OFF vs g50)
+> "japa1 at **g50 was much more playable than at off without being much different overall, it felt like a tasteful
+> edit — not a rewrite**. high school love felt the same. the stamina and fatigue system is **DEFINITELY an
+> improvement**, and I do feel like stage 3 will give it that extra room for that handful of spicy extra notes to
+> give the deserving sections some flair."
+
+### Verdict / commentary (the FEEL the metrics can't see — resolved)
+- **H-stamina CONFIRMED at the gentle end.** g50 took japa1 0.400→0.391 (−2%) / HSL 0.400→0.371, critic stayed
+  **Hard** — and that mapped to "much more playable, not much different" = the onset thinning read as **RELIEF, not
+  dropped notes**. The CEILING property (bite only the genuinely-over-cranked spots) is what makes it "edit not
+  rewrite." This is the qualitative answer the offline peak/rest diag (peak −0.039 / rest −0.002) predicted but
+  couldn't prove. The stamina (per-region density) + fatigue (per-note footing) system is a play-confirmed
+  improvement on the deployed generator.
+- **g50 is the felt sweet spot for the OVER-CRANK case** (chaos g3.0, density 0.400): relieve the worst spots, keep
+  it Hard. g25/g12 (→ Medium) are the stronger relief options if a chart needs more.
+- **Stage-3 endorsed by the user, framed as the additive mirror:** g50 *removes* a few notes from over-cranked
+  spots; Stage 3's breathing ceiling would *add* "a handful of spicy extra notes in the deserving sections" (the
+  difficulty arc) — same ceiling lever, made to breathe with audio energy.
+
+### What was generated
+Three sets, **same 5 chaos-Hard songs** (`--groove_select chaos`: High School Love, NIGHT IN MOTION, IN BETWEEN,
+Star Trail, **japa1 = 突撃ガラスのニーソ姫**), `gen_motif_full_fixed` highres, seed 42, conditioned with the
+`chaos2_manifold_q99` recipe **`--style "chaos=q0.99" --guidance 3.0`** (MANIFOLD path — NOT the off-manifold
+`--radar` mean-pin, now disabled in the exporter). The manifold density coupling cranks every song to **0.400**
+(over its natural 0.32–0.39). Stamina is now **HOLD-AWARE** (free-foot one-foot-grind cost drives the thinning).
+Per-note governor identical (`fatigue_penalty=2, jack_penalty=0, max_jack_run=2`). Mandatory pad-playability ON;
+4/4 re-parse + installed `~/sm-generated/chaos_stamina_{OFF,g50,g25,g12}`. Guide: `outputs/playtest_stamina_chaos/SET_GUIDE.md`.
+- OFF (0.400, over-cranked) → g50 (0.37–0.40, barely; 2/5 untouched, stays Hard) → g25 (0.26–0.34, ≈ natural density,
+  →Medium) → g12 (0.17–0.25, over-relieved → Medium).
+
+### Why this set (carry-forward from the default-conditioned A/B)
+The default japa1 OFF-vs-g25 was ~imperceptible — correct (the default chart isn't over its ceiling). The user:
+"crank the conditioning to what chaos2_manifold_q99 used and see the effect there." Under chaos the OFF chart is
+genuinely over-cranked (0.400), so stamina engages HARD (g25 thins 16–34% here vs ~12% on default) and pulls it
+back toward the song's natural density. This is also the venue where hold-grinds appear (the brutal "jack streams
+during holds" was under aggressive trill conditioning).
+
+### What to evaluate
+- **Relief of the over-crank (the core Q):** does g25 feel like the over-dense chaos chart pulled back to "what the
+  song wants" (relief, groove intact), while OFF feels overwhelming and g12 too sparse?
+- **japa1 holds (hold-aware test):** watch the hold sections — do they grind under OFF, and does g25 ease them MORE
+  than the rest? (Offline: the model's holds aren't actually grinds [pinned frames only 0.138 dense], so this may be
+  subtle — ears decide. diag in foot_fatigue_design.md "HOLD-AWARE".)
+- **Mirroring side-effect (watch):** heavier thinning here may make the re-footed/mirrored local sequences (you
+  spotted these at g25 default) more visible — does it ever read as incoherent? (handle: H-stamina-mirror)
+
+### Action / next
+- [ ] Play japa1 + High School Love OFF→g25→g12; log relief-vs-overwhelming verdict + whether g25 ≈ "right".
+- [ ] Note any hold-section easing on japa1 (the hold-aware payoff, if any).
+- [ ] If g25 lands as the over-crank relief → that's the headline use (stamina as an over-conditioning safety valve);
+  feeds the Stage-3 breathing-ceiling arc.
+
+---
+
+## 2026-06-25 — 🔬 PARTIAL: Stage-2 STAMINA density governor A/B (does thinning feel like relief?)
+### Raw feedback (japa1, OFF vs g25)
+> "they didn't feel majorly different — which is good! the off was already at an intensity that I wouldn't want
+> majorly curbed. some notes must have been dropped, because I noticed a few local sequences were **mirrored**,
+> which is likely an artifact of the onset head thinning sections and the pattern head reallocating note selection.
+> a more noticeable test would be to crank up the conditioning to what `chaos2_manifold_q99` used and see the
+> effect there."
+
+### Commentary / hypothesis
+- **H-stamina (gentle = safe, as designed):** g25 on an already-good chart was ~imperceptible → the CEILING did its
+  job (it doesn't curb a chart that isn't over its workload ceiling). This is the no-op-below-ceiling invariant
+  *felt*, not just measured. Confirms the offline finding (peak −0.039 / rest −0.002): gentle stamina preserves
+  charts you'd want preserved.
+- **Mirroring side-effect (new, user-spotted, real):** dropping an onset shifts the decoder context (`prev_emb`),
+  so the **pattern head re-derives placement** for the remaining notes from the new context → a thinned run can come
+  out mirrored/re-footed. Benign (mandatory playability holds) but a genuine architectural consequence of the
+  onset/pattern factorization: onset and pattern are separate heads, and the pattern head wasn't trained on
+  stamina-thinned onset streams (mild train/decode mismatch). Handle = **H-stamina-mirror**: watch whether it ever
+  reads as incoherent under heavier thinning; if so, a fix is to keep the pattern head's context stable across a
+  dropped onset (e.g. don't advance `prev_emb` on a suppressed frame — though the current code already emits an
+  empty state there, so this is subtle).
+- **Carry-forward = the user's instinct, validated by the holds diag:** under DEFAULT conditioning the model isn't
+  over-cranked (pinned grind-frames only 0.138 dense; maxJackRun-in-holds=3), so there's little for stamina (or its
+  new hold-aware refinement) to bite on. The brutal "jack streams during holds" was the **trill +3 g2** set. So the
+  decisive test is **aggressive conditioning** — `chaos2_manifold_q99` (radar chaos=0.47 g3.0). See the new pending
+  entry below.
+
+### What was generated (not yet played)
+Three sets, **same 5 dense Hard songs** (groove-selected on `stream`: High School Love, nightbird lost wing,
+AFRONOVA, 突撃ガラスのニーソ姫 [= **japa1**], IN BETWEEN), `gen_motif_full_fixed` highres, seed 42, identical except
+`stamina_ceiling`. Per-note governor identical across all (`fatigue_penalty=2, jack_penalty=0, max_jack_run=2`); only the new Stage-2
+STAMINA layer differs. Mandatory pad-playability ON; 3/3 sets re-parse + installed to `~/sm-generated/`.
+Guide: `outputs/playtest_stamina/SET_GUIDE.md`. Offline validation in `notes/foot_fatigue_design.md` "STAGE 2".
+- `ab_stamina_OFF` (baseline) → `ab_stamina_g25` (validated gentle, ~10–13% thinner, ~Hard) → `ab_stamina_g12`
+  (strong, ~33% thinner, →Medium). Per-song densities in the guide.
+
+### What to evaluate (the FEEL the metrics can't see)
+- **H-stamina (the core question):** play OFF→g25→g12 on the SAME song. Does each step feel like the chart
+  *easing where it was hardest* (relief valve = success), or like notes *missing from a phrase* (dropped notes =
+  fail)? The mechanism sheds the LEAST-salient onsets when E_slow is high, so it SHOULD feel like the busy
+  stretches breathing, not holes.
+- **Selectivity caveat:** these `stream`-selected songs are uniformly dense → E_slow stays high → relief may read
+  as global easing rather than "only the hard spots." The per-region selectivity (diag-proven ~20:1) would show
+  best on a VARIED-density song (dense climax + sparse verses). If g25 feels good-but-uniform, that's the next set.
+- **Calibration:** is gentle (25) enough to feel, or is 12 needed? Gates the shipped default ceiling.
+- **NOT a holds test** — diag_stamina_holds.py confirmed stamina is density-general, not holds-aware.
+
+### Action / next
+- [ ] Play OFF vs g25 vs g12 same-song (AFRONOVA = cleanest, no holds; High School Love / IN BETWEEN = biggest swing).
+- [ ] Log relief-vs-dropped verdict + the ceiling that feels right → sets the exporter default.
+- [ ] If promising but too uniform → generate a varied-density set to feel the per-region selectivity.
+- [ ] If the feel lands → proceed to Stage 3 (breathing ceiling = the difficulty arc), which builds on this.
+
 ## 2026-06-25 — ⏳ PENDING: trill A/B — deployed vs clean-retrained model (the H19 retrain feel gate)
 ### What was generated (not yet played)
 Two sets, `~/sm-generated/ab_trill_A_old` vs `ab_trill_B_fixed`, **identical songs** (the h15 set: Deja loin,

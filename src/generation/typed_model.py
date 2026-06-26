@@ -386,7 +386,9 @@ class LayeredTypedChartGenerator(nn.Module):
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, max_jack_run=None,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
-                 footswitch_pen=4.0, fatigue_cap=30.0):
+                 footswitch_pen=4.0, fatigue_cap=30.0,
+                 stamina_ceiling=None, stamina_tau=8.0, stamina_scale=15.0, stamina_max_bump=0.45,
+                 stamina_breathe=0.0, stamina_breathe_win=96, stamina_breathe_floor=0.4):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -434,7 +436,36 @@ class LayeredTypedChartGenerator(nn.Module):
         sampled per-frame, repeats a panel ~28% of fast pairs (diag_exertion_h13.py). When set, once a fast
         same-panel run reaches the cap, that panel is forbidden on the next 16th-adjacent single onset,
         forcing a different panel (foot alternation). =1 matches real (strict alternation); only 16th-adjacent
-        runs are capped (normal slower jacks untouched); jumps reset the run. None = off."""
+        runs are capped (normal slower jacks untouched); jumps reset the run. None = off.
+
+        `stamina_ceiling` (Stage 2 STAMINA governor, needs `fatigue_penalty` for the foot model): a per-region
+        DENSITY governor, complementing the per-note FOOTING governor above. The per-note layer only redistributes
+        load across feet -- it can never REMOVE notes, so a sustained one-foot grind has no relief valve (see
+        notes/foot_fatigue_design.md). Stamina fixes that: a SLOW exertion accumulator `E_slow` (decay `stamina_tau`
+        beats, ~several measures) is fed the REALIZED footing cost of each note (a one-foot grind raises it faster
+        than alternating feet at the same density). While `E_slow > stamina_ceiling`, the EFFECTIVE onset threshold
+        is raised by `stamina_max_bump * tanh(excess / stamina_scale)`, so the onset head drops its LEAST-salient
+        upcoming notes -- thinning density coherently where workload is genuinely sustained-high, then recovering as
+        E_slow decays. It is a CEILING: below the ceiling, density is untouched (no global dent); it only ever
+        SUPPRESSES onsets, never adds. Works with every onset mode (threshold / Bernoulli / phase_alloc); skipped
+        for `onset_override` (caller-supplied onsets are respected). None = off. Validated operating point
+        (diag_stamina.py, 8 val songs, fatigue_penalty=2): `stamina_ceiling~25, stamina_scale=15, stamina_tau=8`
+        shaves the top-decile dense 4-measure windows ~14% (peakΔ -0.039) while moderate windows hold (restΔ
+        -0.002) -- a ~20:1 peak/rest selectivity.
+
+        `stamina_breathe` (Stage 3 ARC, needs `stamina_ceiling`): makes the stamina ceiling BREATHE with a
+        phrase-smoothed audio-energy envelope (the onset head's own `p_onset`, box-smoothed over
+        `stamina_breathe_win` frames, z-normalized per song). The effective ceiling is `stamina_ceiling ·
+        (1 + stamina_breathe · z_energy[t])`: HIGH at the climax (ceiling up → stamina doesn't thin → the dense
+        spicy notes survive) and LOW in the verses (ceiling down → thin → forced rest). The CONTRAST is a difficulty
+        ARC. Ceiling-only — NO lower bound, so it never fights the radar/difficulty conditioning. Note FLAT stamina
+        DULLS the model's own arc (it thins the dense climaxes); breathing fixes that and pushes the arc PAST the
+        no-stamina baseline. Validated (diag_stamina_arc.py, 10 Hard songs): vs OFF corr(density,energy) 0.898 /
+        climax-verse Δ 0.180, flat ceiling=25 drops to 0.876 / 0.131, breathe=1.2 RECOVERS+AMPLIFIES to 0.918 /
+        0.185 (1.8 → 0.200) at held overall density (redistribution, not a cut). 0 = off (flat Stage-2 ceiling);
+        ~1.2 = the validated default, up to ~1.8 (diminishing). `stamina_breathe_win` ~96 frames (~6 measures) =
+        the phrase scale. `stamina_breathe_floor` (~0.4) floors the effective ceiling at that fraction of the base
+        so a low-energy OUTRO isn't collapsed to ~0 (which empties the tail = abrupt early ending — playtest H-arc-end)."""
         self.eval()
         device = audio.device
         B, T, _ = audio.shape
@@ -444,6 +475,7 @@ class LayeredTypedChartGenerator(nn.Module):
         do_cfg = (guidance_scale != 1.0) and (radar is not None or style is not None or motif is not None or figure is not None)  # amplify radar/style/motif/figure conditioning
         if onset_override is not None:
             onset = onset_override.bool().to(device)
+            p_onset = None                                    # no probs under override -> stamina gate skipped
         else:
             ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif)
             if do_cfg:  # classifier-free guidance: push onset toward the conditioned prediction
@@ -467,6 +499,7 @@ class LayeredTypedChartGenerator(nn.Module):
                 off = torch.where(ph == 2, float(b8), torch.where((ph == 1) | (ph == 3), float(b16), 0.0))
                 ol = ol + off.unsqueeze(0)
             p = torch.sigmoid(onset_logit_scale * ol + onset_logit_bias)
+            p_onset = p                                       # (B,T) onset probs kept for the in-loop stamina gate
             if onset_phase_alloc is not None:
                 # phase-aware threshold: keep the budget N = (p>tau).sum() per row, split across the three
                 # 16th-grid phase bands (quarter t%4==0, 8th t%4==2, 16th t%4 in {1,3}) by `onset_phase_alloc`
@@ -539,6 +572,38 @@ class LayeredTypedChartGenerator(nn.Module):
         foot_t = torch.full((B, 2), -10000, dtype=torch.long, device=device)  # frame of each foot's last hit
         sp_run = torch.zeros(B, dtype=torch.long, device=device)             # current SAME-PANEL single-run length
         sp_panel = torch.full((B,), -1, dtype=torch.long, device=device)     # panel of that run (footswitch grading)
+        # STAGE-2 STAMINA governor (per-region DENSITY): a SLOW exertion accumulator E_slow fed the realized
+        # per-note footing cost (decay tau ~ several measures). While E_slow exceeds stamina_ceiling, the
+        # EFFECTIVE onset threshold is bumped up so the onset head sheds its least-salient upcoming notes
+        # (coherent thinning, a CEILING -- never adds notes). Needs the foot model for the cost signal; skipped
+        # under onset_override (caller owns the onsets). See notes/foot_fatigue_design.md (two-timescale plan).
+        stamina_on = (stamina_ceiling is not None) and fatigue_on and (p_onset is not None)
+        stamina_decay = float(np.exp(-1.0 / max(float(stamina_tau) * 4.0, 1e-3)))   # per-16th-frame slow decay
+        E_slow = torch.zeros(B, device=device)                               # accumulated sustained workload
+        # STAGE-3 ARC: the stamina ceiling BREATHES with a phrase-smoothed audio-energy envelope. High energy
+        # (climax) -> high ceiling -> stamina doesn't thin (the spicy notes survive); low energy (verse) -> low
+        # ceiling -> thin/rest. The CONTRAST is the difficulty arc (H5). Ceiling-only (no lower bound -> doesn't
+        # fight the radar/difficulty conditioning). Energy = the onset head's own p_onset (where the audio affords
+        # notes), box-smoothed over ~stamina_breathe_win frames (a phrase) and z-normalized per song.
+        if stamina_on:
+            ceiling_t = torch.full((B, T), float(stamina_ceiling), device=device)
+            if stamina_breathe and stamina_breathe > 0:
+                w = max(int(stamina_breathe_win), 1)
+                env = torch.nn.functional.avg_pool1d(p_onset.unsqueeze(1), kernel_size=2 * w + 1,
+                                                     stride=1, padding=w, count_include_pad=False).squeeze(1)  # (B,T) phrase energy
+                if lengths is not None:  # z-normalize over VALID frames per song (pad frames excluded)
+                    vmask = (torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)).float()
+                    mu = (env * vmask).sum(1, keepdim=True) / vmask.sum(1, keepdim=True).clamp(min=1)
+                    var = ((env - mu) ** 2 * vmask).sum(1, keepdim=True) / vmask.sum(1, keepdim=True).clamp(min=1)
+                else:
+                    mu = env.mean(1, keepdim=True); var = env.var(1, keepdim=True, unbiased=False)
+                z = (env - mu) / var.clamp(min=1e-6).sqrt()
+                # FLOOR the effective ceiling at stamina_breathe_floor x base: without it, a low-energy outro
+                # (z very negative) collapses the ceiling to ~0 -> max thinning -> EMPTY tail = abrupt early ending
+                # (worse at high breathe). The floor keeps low-energy/low-workload sections (outros) from being
+                # emptied while still letting verses (higher workload) thin. Climaxes still raise the ceiling freely.
+                floor = float(stamina_ceiling) * float(stamina_breathe_floor)
+                ceiling_t = (float(stamina_ceiling) * (1.0 + float(stamina_breathe) * z)).clamp(min=floor)
 
         reset_at = set(int(x) for x in boundary_reset) if boundary_reset is not None else set()
         for t in range(T):
@@ -550,6 +615,14 @@ class LayeredTypedChartGenerator(nn.Module):
                     for c in uncond_caches:
                         c.k = None; c.v = None
             held_start = held                                              # hold state at frame start (hold_aware rebinds held later)
+            if stamina_on:  # in-loop onset decision: raise the bar when sustained workload is high, shedding the
+                E_slow = E_slow * stamina_decay                            # least-salient upcoming notes (CEILING)
+                excess = (E_slow - ceiling_t[:, t]).clamp(min=0)           # ceiling BREATHES with audio energy (Stage 3)
+                bump = float(stamina_max_bump) * torch.tanh(excess / max(float(stamina_scale), 1e-6))
+                tired = onset[:, t] & (p_onset[:, t] <= (onset_threshold + bump))  # drop lowest-p onsets when tired
+                on_t = onset[:, t] & ~tired
+            else:
+                on_t = onset[:, t]
             pe_t = self.pos_encoding.pe[:, t:t + 1]
             cond_t = cond_emb[:, t:t + 1] if cond_emb.size(1) > 1 else cond_emb  # index the per-frame motif schedule
             h = self._decoder_step_cached(prev_emb + pe_t + cond_t, caches)[:, -1]
@@ -678,7 +751,7 @@ class LayeredTypedChartGenerator(nn.Module):
                 typ = torch.multinomial(torch.softmax(typ_logits / tt, -1).view(-1, NUM_TYPES), 1).view(B, NUM_PANELS)
             else:
                 typ = typ_logits.argmax(-1)
-            active = panel_bits[pat].bool() & onset[:, t].unsqueeze(1)         # panels the model notes this frame
+            active = panel_bits[pat].bool() & on_t.unsqueeze(1)               # panels the model notes this frame (stamina-gated)
 
             if hold_aware:
                 proposed = typ + 1                                            # symbol 1..4
@@ -696,7 +769,7 @@ class LayeredTypedChartGenerator(nn.Module):
 
             gen[:, t] = state
             prev_emb = self._state_emb(state.unsqueeze(1))
-            on = onset[:, t]
+            on = on_t                                                       # stamina-gated onset for all downstream trackers
             prev_pat = torch.where(on, pat, prev_pat)  # track last note's pattern
             npc = n_panels[pat]                        # panels in the chosen pattern
             next_foot = torch.where(on & (npc == 1), 1 - next_foot, next_foot)   # alternate on singles
@@ -714,6 +787,24 @@ class LayeredTypedChartGenerator(nn.Module):
                 both = (foot_panel[:, 0] == foot_panel[:, 1]) & (foot_panel[:, 0] >= 0) & on
                 foot_panel[:, 0] = torch.where(both & ~cu[:, 0], torch.full_like(foot_panel[:, 0], -1), foot_panel[:, 0])
                 foot_panel[:, 1] = torch.where(both & ~cu[:, 1], torch.full_like(foot_panel[:, 1], -1), foot_panel[:, 1])
+                if stamina_on:  # feed the REALIZED footing effort of this note into the slow stamina accumulator
+                    inc = ((cE - decayE) * cu.float()).sum(1).clamp(min=0)   # normal: two-foot footing cost
+                    # HOLD-AWARE (user design): during an open hold ONE foot is pinned on the held panel, so the
+                    # FREE foot does EVERY note -- a one-foot grind. The unpinned foot model under-counts this by
+                    # alternating feet, so a hold-stream looked no harder than an alternating stream (diag_stamina_
+                    # holds.py null). Charge the FREE foot's single-foot grind cost instead: onset-spacing rate
+                    # (one foot every onset) x travel/jack unit to its last panel -> a sustained hold-stream raises
+                    # stamina ~2x faster than an equally-dense alternating stream, so the onset thins it. Placement
+                    # is untouched (no jack explosion); this only re-attributes the COST that feeds the onset gate.
+                    in_hold = held_start.any(1) & on & (fresh_press.sum(1) == 1)
+                    if in_hold.any():
+                        pp = fresh_press.float().argmax(1)                       # the lone fresh press = the free foot's note
+                        rate_free = frame_hz / since_onset.float().clamp(min=1)  # one foot every onset -> onset-spacing rate
+                        same = (free_last == pp) | (free_last < 0)              # jack (or first note this hold) vs travel
+                        unit_free = torch.where(same, torch.tensor(float(jack_weight), device=device),
+                                                travel_weight * PAD_DIST[free_last.clamp(min=0), pp])
+                        inc = torch.where(in_hold, (rate_free * unit_free).clamp(min=0), inc)
+                    E_slow = E_slow + torch.where(on, inc, torch.zeros_like(inc))
             # free-foot tracking for no_cross_during_hold: a single note placed while a hold was already open
             free_gap = free_gap + 1
             sp = single_panel[pat]                                              # (B,) panel if single pattern else -1

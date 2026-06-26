@@ -18,6 +18,14 @@ candle knob did nothing"). This skill is the exact mechanism so the harness matc
 probe must build its conditioning EXACTLY as `export_typed_samples.py` / `generate()` do, and measure with the
 SAME metric the conditioning targets.**
 
+**Pairs with the `experiment-design` skill — use both, in order.** This skill = the MATH (what the deployed path
+does); experiment-design = the DISCIPLINE for using it (attribution order HARNESS→DATA→MODEL; the pre-flight
+checklist; don't blame the model for a harness bug). The mapping: experiment-design Rule 2 (match deployment) and
+Rules 3–4 (in-distribution coherent inputs) are *satisfied* by replicating §1–§8 here; experiment-design's catalog
+of attribution errors is the failure half, this skill's "Catalog of REAL misalignments" is the mechanism half of
+the same bugs. Reach for experiment-design BEFORE a probe to pick a fair setup; reach for this to make the setup
+literally match the code.
+
 Model: `LayeredTypedChartGenerator` (`src/generation/typed_model.py`). Deliverable: `gen_motif_full` (42-dim
 highres audio; radar + continuous motif + discrete figure). Pipeline per frame: **onset head** (audio-driven,
 non-causal, which frames get a note) → **pattern head** (AR, which-panels, 15-way) → **type head** (per-panel
@@ -101,6 +109,8 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   manifold `E[density|radar,diff]` > the source chart's own density (eval A/B only). Raising chaos at FIXED
   density forces quarter→offbeat REPLACEMENT (backbone collapse); real charts raise density WITH chaos
   (r +0.63), which the manifold density coupling reproduces — so let density float with the manifold.
+  NOTE: `tau` sets the BASE density, but the per-frame onset decision is made IN the AR loop and can be raised by
+  the STAMINA governor (§8c) — so realized density ≤ the tau target wherever sustained workload is high.
 - **Phase grid** (frame index `t`, 16th resolution): `t%4` → **0 = quarter, 2 = 8th, 1&3 = 16th-offbeat**.
   Backbone = quarter (+8th). "Chaos / syncopation" = 16th-offbeat share. Real Hard ~ quarter 0.7 / 8th 0.25 /
   16th 0.04; "real-like chaos" sits ~0.25 chaos-radar.
@@ -116,14 +126,18 @@ the FINAL playable symbols, NOT the pre-automaton pattern (a fix written against
 `hold_aware` remaps it). Any new export/probe the user PLAYS must call `enforce_playability(gen_kwargs)`. The
 graded escalation across spacings is the soft FOOT GOVERNORS (§8).
 
-## 8. Decode-time FOOT GOVERNORS — jack governor + per-foot fatigue (act on `pat_logits`, NOT onset)
-Both govern WHICH-panels (placement), never density (the onset/radar's job) — so they change footwork, not note
-count. Both need the song BPM (`bpm=`); `frame_hz = BPM·4/60` (16th-frames/sec). MEASURE their effect with
-same-panel / jump-stream RUN-LENGTH distributions vs REAL charts (`calib_foot_fatigue.py`), NOT raw figure mass.
-Both decode-time, in `LayeredTypedChartGenerator.generate`. Full derivation + the failures in
-`notes/foot_fatigue_design.md`; next-build context in `notes/HANDOFF.md`.
+## 8. Decode-time GOVERNORS — per-note FOOT model (placement) + per-region STAMINA/ARC (density)
+TWO scopes, both decode-time in `LayeredTypedChartGenerator.generate`, both BPM-coupled (`bpm=`; `frame_hz =
+BPM·4/60` = 16th-frames/sec; no bpm → silent):
+- **Per-NOTE (8a jack, 8b fatigue):** act on `pat_logits` → govern WHICH-panels (footwork), NEVER note count.
+  Measure with same-panel / jump-stream RUN-LENGTH vs REAL (`calib_foot_fatigue.py`), not raw figure mass.
+- **Per-REGION (8c stamina + arc):** acts on the ONSET decision → governs DENSITY (thins notes where sustained
+  workload is high; ceiling-only). Measure with the paired peak/rest density-window selectivity, NOT the mean
+  (it's REDISTRIBUTION). Needs the foot model on (it supplies the cost signal).
+RELEASE CENTER (`notes/governor_release_region.md`): per-note = `fatigue_penalty=2` (jack_penalty 0); stamina + arc
+OFF by default. Full derivation + the failures in `notes/foot_fatigue_design.md`.
 
-### 8a. Soft JACK governor (`jack_penalty`, def 1.5 in exporter; SHIPPED, playtest-validated) — single-foot
+### 8a. Soft JACK governor (`jack_penalty`, OLD — exporter default now 0; SUPERSEDED by 8b) — single-foot
 Accumulate `jack_exertion` over a same-panel single-run: on a repeat at gap `g` frames (≤ `jack_max_gap`=4),
 `jack_exertion += (frame_hz/g)/jack_free_rate` (`jack_free_rate`=5). PERSISTS across empty frames; RESETS to 0 on
 a different-panel single or a jump. Penalty to EXTEND: `pat_logits[single on jack_panel] -= jack_penalty ·
@@ -134,7 +148,7 @@ unnatural jack problem" by ear. **GOTCHA:** it only watches the SINGLE on the ja
 softmax (suppressing one single redistributes mass), and on jumpy songs it DISPLACES jacks into jumps (the felt
 "consecutive jumps" were this, not intrinsic).
 
-### 8b. Per-foot FATIGUE governor (`fatigue_penalty`, opt-in default OFF) — two-foot biomechanical model
+### 8b. Per-foot FATIGUE governor (`fatigue_penalty`, the RELEASE per-note default = 2.0; good range 1.5–3) — two-foot biomechanical model
 Generalizes 8a (a jack = one foot stays & re-hits). State per chart: feet `f∈{L,R}` with `pos_f∈{L,D,U,R,∅}`
 (= body orientation), `E_f` (exertion at last-hit time), `t_f`; plus same-panel run `(sp_run, sp_panel)`.
 Per frame `t` (PAD_DIST = Euclidean on the cross `L=(-1,0) R=(1,0) U=(0,1) D=(0,-1)`):
@@ -155,14 +169,47 @@ fixed `fatigue_cap` auto-allows "fewer fast notes at higher BPM". Governor owns 
 conditioning owns where in the playable zone (NO lower bound — would fight the difficulty knob). Governs jacks
 onto the human distribution (maxJackRun 6.2→4.1, real 3.5) with density held.
 
-### 8c. KNOWN GAPS — a probe must NOT assume these are modeled
-- **HOLDS-BLINDNESS:** fatigue reads the chosen pattern's panels, does NOT pin the held foot — a stream during a
-  hold is a ONE-foot grind but it's scored as a shared TWO-foot load (inverted). Pinning in the PATTERN penalty
-  REGRESSED (jacks explode non-monotonically — placement can't fix a COUNT problem). Fix = the unbuilt per-region
-  ONSET stamina governor.
-- **NO stamina / NO arc yet:** only fast decay (τ~2 beats); sustained-load density thinning + the audio-energy
-  "breathing ceiling" arc are SPECIFIED not built (Stage 2/3, HANDOFF.md). A hard per-note onset veto on
-  accumulated E was tried and CRASHED density (0.32→0.145) — stamina must modulate density COHERENTLY, not veto.
+### 8c. Per-region STAMINA (Stage 2, `stamina_ceiling`) + breathing ARC (Stage 3, `stamina_breathe`) — DENSITY
+Needs `fatigue_penalty` on (cost signal) and `bpm`; off by default (`stamina_ceiling=None`). The onset DECISION is
+now made IN the AR loop (NOT precomputed) — a probe replicating onset must apply this per-frame or set stamina off.
+`p_onset = sigmoid(guided onset logits)` is precomputed (all CFG/phase offsets baked in); per frame the EFFECTIVE
+threshold is raised by a slow workload accumulator, shedding the LEAST-salient onsets. CEILING only (suppresses,
+never adds; byte-identical to OFF below the ceiling); skipped under `onset_override`.
+```
+E_slow *= exp(-1/(stamina_tau·4))                         # GLOBAL slow accumulator, per-16th decay (stamina_tau=8 beats)
+bump   = stamina_max_bump · tanh( (E_slow − ceiling_t[t])⁺ / stamina_scale )   # stamina_max_bump=0.45, scale=15
+on_t   = onset[:,t]  &  ¬( p_onset[:,t] ≤ onset_threshold + bump )             # raise the bar when tired
+# on each FIRED onset, add the REALIZED footing cost (decayed-to-now Ẽ from 8b):
+E_slow += ((cE − Ẽ)·used).sum()      # the chosen footing's added per-foot exertion (a one-foot grind = big)
+# HOLD-AWARE: during an open hold the held foot is pinned → the FREE foot does every note. Override the increment:
+E_slow += rate_free · unit_free,  rate_free = frame_hz/since_onset,  unit_free = jack_weight (jack/first) | travel_weight·PAD_DIST[free_last, pp]
+```
+**ARC (Stage 3):** the ceiling BREATHES with a phrase-smoothed audio-energy envelope so it thins VERSES not climaxes:
+```
+env       = boxsmooth(p_onset, stamina_breathe_win≈96) ; z = zscore(env over valid frames)   # energy = the onset head's own p_onset
+ceiling_t = ( stamina_ceiling · (1 + stamina_breathe · z[t]) ).clamp(min = stamina_breathe_floor · stamina_ceiling)
+```
+HIGH energy → high ceiling → no thin (keep the spicy notes); LOW → low ceiling → thin (rest). `stamina_breathe_floor`
+(0.4) stops a low-energy OUTRO collapsing to ~0 = empty tail (the abrupt-ending bug). FLAT stamina (`breathe=0`)
+DULLS the model's own arc (it thins the dense climaxes); breathing fixes + amplifies it.
+**Knobs/ranges:** `stamina_ceiling` 15–50 (off=None; <10 dents REST too = a global cut; ≥200 ≡ OFF), `stamina_tau`
+8, `stamina_scale` 15, `stamina_max_bump` 0.45; `stamina_breathe` 1.2–1.8 (0=flat), `stamina_breathe_floor` 0.4,
+`stamina_breathe_win` 96. **MEASURE:** stamina = paired peak/rest density-window thinning (`diag_stamina.py`,
+~20:1 at ceiling 25), holds = pinned vs non-pinned-dense frames (`diag_stamina_holds.py`), arc = corr(window-
+density, window-energy) + climax-verse Δ (`diag_stamina_arc.py`); the energy must be the SAME p_onset, smoothed+
+z-normed. NOT the density mean — the effect is REDISTRIBUTION (experiment-design Rule 1: a summary stat blind to
+the property; the mean held while the shape moved). Stamina is also the canonical POSITIVE case of experiment-
+design Rule 13 (global-quota anti-pattern): it's a per-frame emergent THRESHOLD, not an imposed density count —
+contrast `onset_phase_alloc` (§6, a flat quota that SMEARS). VALIDATED + playtest-confirmed ("a tasteful edit").
+
+### 8d. KNOWN GAPS — a probe must NOT assume these are modeled
+- **HOLDS-BLINDNESS (per-NOTE only):** the PATTERN penalty (8b) still does NOT pin the held foot (pinning it there
+  REGRESSED — jacks explode non-monotonically; placement can't fix a COUNT problem). FIXED on the DENSITY side: the
+  stamina cost (8c) IS hold-aware (free-foot grind). But on these charts holds aren't actually grinds (pinned frames
+  ~0.14 dense, maxJackRun-in-holds 3 = human) so the effect is near-vacuous in practice.
+- **ONSET-HEAD melodic under-placement (H-onset-perc-bias):** the onset head under-places on melodic-only sections
+  (a piano solo reads sparse); NOT a governor knob — a feature/retrain thread. (The breathing energy itself is NOT
+  percussion-biased on the tested songs — diag_breathe_energy refuted that; the gap is the onset head.)
 - **BODY-TURN:** charges full per-foot travel for a coordinated rotation (ranking right, magnitude too high).
 - **MODEL UNDER-JUMPS** these songs (6% vs real 31%) — a separate density/air thread; do NOT calibrate the
   governor to close that gap (the calib "dist-to-real" is dominated by it — the wrong target).
@@ -178,9 +225,10 @@ onto the human distribution (maxJackRun 6.2→4.1, real 3.5) with density held.
    own artifact (the eval used temp 1.0/radar=real; export uses temp 0.7).
 7. **Song affords the axis** (`--groove_select <axis>`) — you can't test chaos on a quarter-heavy song.
 8. **Sign/label check:** k0+ = jack not sweep; `null_motif` ≠ motif=0; `high` is a quantile not a raw value.
-9. **Foot governors (§8):** passing `bpm=` (no bpm → governor silent)? Measuring effect with same-panel /
-   jump-stream RUN-LENGTH vs REAL (not raw mass)? Not calibrating to "match real jump%" (the model under-jumps —
-   wrong target)? Remember fatigue is HOLDS-BLIND + has no stamina/arc yet.
+9. **Governors (§8):** passing `bpm=` (no bpm → silent)? Per-NOTE (8a/8b) measured with same-panel / jump-stream
+   RUN-LENGTH vs REAL (not raw mass), NOT calibrated to "match real jump%" (model under-jumps — wrong target)?
+   Per-REGION (8c stamina/arc) measured with paired peak/rest density windows (NOT the mean — it's redistribution),
+   stamina needs `fatigue_penalty` on, and the onset decision is IN-loop (replicate the per-frame gate or set off)?
 
 ## Catalog of REAL misalignments (each cost a wrong conclusion)
 - **mean-pin vs manifold conditional-fill** (this is why a chaos probe gave 16th 0.96 everywhere): set
@@ -191,3 +239,9 @@ onto the human distribution (maxJackRun 6.2→4.1, real 3.5) with density held.
 - **eval-vs-export decode mismatch**: candle steered Δ+1.7/+3.9 at eval (temp 1.0, radar=real) but must be
   re-checked at export settings (temp 0.7, radar off) — characterize the EXPORTED charts to confirm it landed.
 - **knob-0 sign**: pushing k0 "+" toward "sweep" actually pushes toward JACK; sweep is the − pole (and weak).
+- **stale onset path (Stage-2)**: the onset decision is now made IN the AR loop (stamina gate), not a precomputed
+  `(B,T)` mask. A probe that rebuilds onset as `p > tau` and skips the per-frame stamina bump silently diverges
+  whenever stamina is on (exp-design Rule 2: match deployment). Replicate the §8c gate or set stamina off.
+- **wrong probe population**: the breathing-energy probe run on the default Hard-song order gave a noisy NON-answer;
+  re-run on the ACTUAL complaint songs (HSL/japa1, via `--match`) it flipped and REFUTED the percussion-bias
+  hypothesis (exp-design Rules 5+11: bin the real reference / the population that actually exhibits the effect).

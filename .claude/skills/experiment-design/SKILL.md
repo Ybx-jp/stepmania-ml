@@ -26,6 +26,12 @@ session (~24 probes), each with the concrete preventive check, plus a 30-second 
 when designing a metric/comparison or before committing a conclusion; it's the "what bites in practice"
 companion to the rules below.
 
+🔧 **Pairs with the `conditioning-mechanics` skill — the MECHANISM half.** This skill is the discipline (don't
+blame the model); conditioning-mechanics is the exact deployed math. Rules 2–4 (match deployment / in-distribution
+coherent inputs) are *satisfied in practice* by replicating that skill's §1–§8 — radar via `build_target` not
+mean-pin, `tau` from guided logits, the in-loop stamina onset gate, the right per-knob metric. Consult it the
+moment a probe touches a generator knob, so "match deployment" means "match the documented code," not a guess.
+
 ## PRE-FLIGHT — before running a probe / sweep / retrain
 
 1. **What property am I actually testing, and does my metric see it?** A summary statistic can move the
@@ -116,3 +122,19 @@ was running it second instead of first.
   for chaos in ~10 min (R² 0.06); the onset-posterior sweeps were fast and decisive.
 - **Rules 7–9 (fair test before committing):** two committed "it's the model" conclusions were overturned
   by fair re-tests. Cost: wasted exports + a misleading paper trail, narrowly avoided a misdirected retrain.
+
+### From the fatigue/stamina governor work (Stage 2/3; cf the `conditioning-mechanics` skill §8)
+- **Rule 1 (metric sees the property), governor edition:** the stamina relief is REDISTRIBUTION — the density
+  MEAN barely moves, so it's blind. The effect only shows in the paired peak/rest density-window selectivity
+  (~20:1), and for holds the *window* metric DILUTED it (a "hold window" is ~85% non-hold frames) until the probe
+  went FRAME-level (pinned vs non-pinned-dense). Pick the metric at the resolution of the property.
+- **Rule 16 + Rules 7–9 (manipulate the real hypothesis; don't commit a strawman):** a prior session invented a
+  "reach/affordability veto," BUILT it on accumulated fatigue, watched it hole-punch density, and committed
+  "the local layer is near-vacuous" to the design note — but the user's ACTUAL design (onset hold-aware + per-foot
+  effort) was never the thing tested. The auxiliary substitute answered a different, easier question and a NEGATIVE
+  result got recorded against it. Caught only by re-reading the spec against the build. Refute the hypothesis as
+  stated, not a convenient proxy.
+- **Rules 5+11 (right population / dynamic range):** the percussion-bias hypothesis was probed on the default
+  song order (not the complaint songs) → a noisy non-answer; re-run on the ACTUAL songs (HSL/japa1) it REFUTED the
+  hypothesis (p_onset tracks harmonic energy fine) and redirected the gap to the onset head. The population that
+  exhibits the effect is the only fair test of it.

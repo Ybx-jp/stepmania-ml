@@ -154,6 +154,17 @@ per-foot fatigue model as the difficulty currency that should follow the song. A
   **Holds-blindness remains the top open problem for this model** — needs a different mechanism (e.g. choose the
   holding foot to keep the other free; or model the hold cost without forcing all assignment to one foot).
 
+## ⚠️ CORRECTION (2026-06-25, user) — the "reach / affordability veto" below was an INVENTED reframe
+The user's ACTUAL design was two sentences: **make the onset head hold-aware, and track the effort PER FOOT.**
+i.e. during a hold one foot is pinned, so the free foot carries a one-foot grind, and THAT per-foot effort should
+drive the onset thinning. The "LOCAL anaerobic reach/affordability veto — can THIS transition physically happen"
+framing in the spec below was NOT the user's design; a prior session invented it, built a hard veto on ACCUMULATED
+fatigue (`decayE + cost ≥ cap`), watched it hole-punch density 0.320→0.145, and then wrongly concluded "hard veto
+is the wrong tool, the local layer is near-vacuous, skip it" — refuting a strawman it had invented. The real design
+was never a reach veto. It is now BUILT correctly as the HOLD-AWARE E_slow increment (see "STAGE 2" → hold-aware
+result): during a hold, charge the FREE foot's single-foot grind cost to the stamina accumulator. Read the spec
+below as historical context, not as the design.
+
 ## TWO-TIMESCALE ONSET GOVERNOR (spec, 2026-06-25 — user-designed) — the holds-blindness + arc resolution
 ROOT CAUSE of the hold-pinning regression (user diagnosed): the PATTERN penalty can only redistribute load, not
 remove it. During a hold (one foot pinned) a one-foot WIDE stream costs MORE than a jack (travel_weight·2 >
@@ -187,13 +198,96 @@ foot an unplayable stream and picked jacks.)
    the wrong tool for the stamina dimension.** Genuine INSTANTANEOUS impossibility is rare and mostly already
    handled by `no_jump_during_hold`; the holds problem is SUSTAINED one-foot load = STAMINA, which must modulate
    DENSITY coherently, never veto single notes. ⇒ Stage 1 (instantaneous hard veto) is near-vacuous; skip it.
-2. **STAMINA → COHERENT tau MODULATION (the real fix, next).** Trailing stamina accumulator E_slow (long τ),
-   hold-pinning feeds IT (sustained one-foot work raises stamina). When E_slow high → RAISE onset tau over the
-   upcoming stretch → onset head re-selects its most-salient notes (coherent thinning, NOT hole-punching). This
-   is the holds fix done right + avoids the fallout.
-3. **BREATHING ceiling**: stamina ceiling tied to audio energy/novelty → the ARC.
+2. **STAMINA → COHERENT tau MODULATION — BUILT + VALIDATED (2026-06-25, gen/foot-fatigue-stage2).** Trailing
+   stamina accumulator E_slow (long τ), fed the REALIZED per-note footing cost; when E_slow > ceiling, RAISE the
+   onset tau over the upcoming stretch → onset head sheds its LEAST-salient notes (coherent thinning, NOT
+   hole-punching). See "STAGE 2 — BUILT + VALIDATED" section below.
+3. **BREATHING ceiling**: stamina ceiling tied to audio energy/novelty → the ARC. **(Stage 3 — BUILT + VALIDATED
+   2026-06-25; see "STAGE 3 — THE ARC" below.)**
 Revised plan: the substance is in 2+3 (stamina tau-modulation + breathing ceiling). Foot model + barrier penalty
 (jacks/jumps) stay as the per-note governor; stamina is the per-region density governor.
+
+## STAGE 2 — BUILT + VALIDATED (2026-06-25, gen/foot-fatigue-stage2)
+**The architectural refactor:** the onset mask was precomputed as a full `(B,T)` tensor BEFORE the AR loop, so an
+in-loop stamina value couldn't reach the decision. Fixed by moving the onset DECISION into the loop: keep
+`p_onset = sigmoid(...)` (B,T) precomputed (audio-driven, with all CFG/phase adjustments), but decide `on_t`
+per-frame. `on_t = onset[:,t] & ~(tired)` where `tired = p_onset[:,t] <= onset_threshold + bump`. The gate is a
+SUPPRESSION-only operation layered on TOP of whatever onset mode produced the base `onset` (threshold / Bernoulli /
+phase_alloc) → all modes preserved; skipped under `onset_override` (caller owns onsets). Both consumers (`active`,
+`on`) now read `on_t`, so a suppressed frame is a true rest everywhere downstream (foot model, jack trackers,
+since_onset all key off `on`).
+
+**The stamina math:** global `E_slow` (B,), per-frame slow decay `exp(-1/(stamina_tau·4))` (tau in beats, ~several
+measures). On each onset, `E_slow += ((cE - decayE)·cu).sum()` = the REALIZED added foot exertion of the chosen
+footing (reuses the per-note governor's committed footing — a one-foot grind dumps a bigger increment than
+alternating feet at equal density, so E_slow integrates total load = rate × footing-difficulty, not raw count).
+Effective threshold bump = `stamina_max_bump · tanh((E_slow - ceiling)⁺ / stamina_scale)`. A CEILING: below the
+ceiling, output is BYTE-IDENTICAL to OFF (verified: ceiling 200 → identical onset count). Needs `fatigue_penalty`
+(the foot model supplies the cost signal).
+
+**Validation (diag_stamina.py, paired before/after on FIXED baseline-defined windows, 8 val songs, fatigue=2):**
+the decisive test is the density PROFILE, not the mean. At `ceiling=25, scale=15, tau=8`: the top-decile
+sustained-dense 4-measure windows thin 14% (peakΔ -0.039, 0.281→0.242) while moderate windows hold (restΔ -0.002)
+= ~20:1 peak/rest selectivity. maxJackRun unchanged (6) → the per-note governor is untouched; the two layers
+compose. This is the per-region density relief valve done RIGHT — coherent thinning of the genuinely-too-dense
+spots, NOT the Stage-1 global hole-punch (which crashed density 0.320→0.145 everywhere). Knobs in `generate`:
+`stamina_ceiling` (None=off), `stamina_tau=8`, `stamina_scale=15`, `stamina_max_bump=0.45`.
+
+**HOLD-AWARE E_slow — BUILT (2026-06-25, the user's actual design).** During an open hold the held foot is pinned,
+so the FREE foot does every note (a one-foot grind). The unpinned foot model under-counted this by alternating feet
+→ a hold-stream looked no harder than an alternating stream. Now, during a hold, E_slow is fed the FREE foot's
+single-foot grind cost: `rate_free × unit_free`, rate_free = `frame_hz / since_onset` (one foot every onset),
+unit_free = jack_weight (same panel / first note) or `travel_weight × PAD_DIST[free_last, pp]`, in the same
+exertion units as the normal increment. So a sustained one-foot stream during a hold raises stamina ~2× faster than
+an equally-dense alternating stream. Placement is UNTOUCHED (this only re-attributes the COST that drives the onset
+gate → no jack explosion, unlike the reverted pin-in-pattern-penalty).
+
+**RESULT — correct, but the pathology is ABSENT under default conditioning (diag_stamina_holds.py frame-level
+test, 12 songs).** The clean test = press-density thinning on PINNED grind-frames vs matched NON-pinned dense
+frames. At ceiling 25: pinned 0.138→0.127 (−7.2% rel) vs non-pinned-dense 0.311→0.292 (−6.1% rel); at ceiling 12:
+pinned −16.7% rel vs non-pinned −18.0% rel. So pinned frames thin at ~the SAME relative rate as non-pinned dense —
+no preferential hold relief. The reason is in the baseline: pinned frames are only **0.138** dense — i.e. during a
+hold the free foot presses on just ~14% of frames. **The model's default holds are NOT grinds** (consistent with
+maxJackRun-in-holds = 3, human-level), so a correct hold-aware cost correctly has almost nothing to bite on. The
+brutal "jack streams during holds" the user felt was under AGGRESSIVE conditioning (the trill +3 g2 playtest), so
+that — not gentle defaults — is the venue to demonstrate the hold-aware cost. CARRY-FORWARD: stamina A/B under
+chaos2_manifold_q99 conditioning (chaos=0.47 g3.0). The mechanism stays in (no-op when there's no grind, bites when
+there is).
+
+**PLAYTEST ✅ WIN (2026-06-25):** under aggressive chaos conditioning (--style chaos=q0.99 g3.0, density cranked
+to 0.400), g50 on japa1 was "much more playable than off without being much different — a TASTEFUL EDIT, not a
+rewrite"; HSL "felt the same"; "the stamina and fatigue system is DEFINITELY an improvement." H-stamina confirmed:
+the onset thinning reads as RELIEF, not dropped notes, at the gentle end. The default-conditioned A/B was
+imperceptible (correct — the chart wasn't over its ceiling); the relief is visible/felt under over-conditioning.
+
+## STAGE 3 — THE ARC (breathing ceiling) — BUILT + VALIDATED (2026-06-25)
+The `stamina_ceiling` becomes a per-frame schedule that BREATHES with a phrase-smoothed audio-energy envelope (the
+onset head's own `p_onset`, box-smoothed over `stamina_breathe_win`~96 frames, z-normalized per song):
+`eff_ceiling[t] = stamina_ceiling · (1 + stamina_breathe · z_energy[t])`. HIGH at climaxes (ceiling up → stamina
+doesn't thin → the dense spicy notes survive), LOW in verses (ceiling down → thin → rest). Ceiling-only, NO lower
+bound (never fights radar/difficulty). Knobs: `stamina_breathe` (0=off, ~1.2 validated), `stamina_breathe_win`.
+
+**KEY FINDING (diag_stamina_arc.py, 10 Hard songs, plain generation; arc = corr(window-density, window-energy) +
+climax-vs-verse density Δ):** the model is NOT structurally flat in this metric — its onset head already tracks
+energy at corr 0.898. The problem is that FLAT stamina DULLS that arc: it thins the dense CLIMAXES (corr 0.898→
+0.876, Δ 0.180→0.131). Breathing makes the thinning ARC-AWARE — protect climax, rest verses — recovering AND
+amplifying past baseline: breathe=1.2 → corr 0.918 / Δ 0.185 (1.8 → 0.200) at held overall density 0.31
+(REDISTRIBUTION, not a cut). ⇒ Stage 3 lets you run stamina relief AND keep/sharpen the arc (the user's "extra
+room for that handful of spicy extra notes in the deserving sections"). The arc lever can only THIN (ceiling), so
+it amplifies the arc by resting verses, not by adding climax notes beyond what the onset head places.
+
+**PLAYTEST (2026-06-26) + two fixes:** the arc was "mostly good" but surfaced two issues.
+(1) **Abrupt early endings (H-arc-end) — FIXED.** The breathing ceiling collapsed to ~0 at low-energy outros
+(`clamp(min=1e-3)`) → max thinning → empty tail. Added `stamina_breathe_floor` (def 0.4): clamp the effective
+ceiling to 0.4× base so low-energy/low-workload sections aren't emptied. Confirmed on real chaos charts: breathe1.8
+floor=0 emptied HSL/Star Trail tails (last-10% dens 0.156/0.054→0.000); floor=0.4 restores them to the OFF baseline
+(0.094/0.054). Small arc cost (corr 0.920→0.905, Δ 0.200→0.184). The residual end-fade is the pre-existing H5 one.
+(2) **"Breathing ignores high-pitch/melodic energy" (H-arc-energy) — REFUTED at the signal level (diag_breathe_
+energy.py).** On the actual playtest songs p_onset is NOT percussion-biased: c_harm (0.34) ≥ c_perc (0.30), and on
+melodic-loud/perc-quiet frames p_onset is POSITIVE (+0.47, reads them as HIGH energy). So a perc+harm energy swap
+would NOT help — not shipped. The "ignored piano solo" perception is the ONSET HEAD under-placing on melodic-only
+sections (present at OFF, breathing inherits it) = a deeper feature/retrain thread (the user's "audio features need
+tuning"), not a Stage-3 knob. **UNTESTED:** re-playtest the floored endings + the arc pacing feel.
 
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).

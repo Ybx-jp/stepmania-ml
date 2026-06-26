@@ -58,8 +58,25 @@ region extends cleanly to low difficulty. Remaining boundaries to map if we want
 each radar/motif axis, the audio-feasibility frontier (H17, the moving boundary), and the multi-knob interior
 (do combined knobs stay coherent — partly seen in the combo_* playtests).
 
+## V2 — MAP THE REGION OF GOOD SETTINGS (the real thing; explicitly NOT done in v1)
+**What v1 actually has (don't overclaim it):** `notes/governor_release_region.md` is a **table of per-knob ranges
+the user PERSONALLY VOUCHED FOR** (hands-on playtest + a few targeted offline sweeps), for the GOVERNOR knobs only.
+That is a vouched-for shipping default + safe envelope — it is NOT a "mapped region." Calling it "the region
+mapped" was an overclaim (user-corrected 2026-06-26).
+**The real region-mapping (v2):** the region of good settings is the JOINT feasible set across ALL conditioning
+knobs — radar (5 dims), continuous motif (12 knobs), discrete figure (7), CFG guidance, density/onset, phase calib,
+AND the governor knobs (fatigue, stamina_ceiling, breathe) — not a per-knob 1-D union. It must be determined by
+ACTUAL EXPERIMENTATION + MEASUREMENT (sweep the interior, walk the boundaries, measure goodness against real charts
+AND by ear), because the knobs are coupled and the feasible set is SONG-CONDITIONAL (the audio gates which
+settings are realizable — H17, the moving boundary above). This is the empirical instantiation of the
+product-of-experts / feasible-region theory in this note. Scope: the boundary-walks listed above + the multi-knob
+interior + the governor axes, run as a real sweep, not vouched-for ranges. Pairs with the GDL/equivariance v2 work
+(a symmetry-respecting generator would reshape the region). Lives here with the rest of v2.
+
 ## Threads this connects to
 - [[two-generator-tracks]] (the manifold conditioning track), conditioning-mechanics skill (the exact math),
   experiment-design skill (don't mistake a rigged harness for a model defect when probing the boundary).
 - **GDL/equivariance = a v2 research direction**, not a release gate. Park here; revisit if we want a principled
   redesign or a paper angle.
+- **Region-of-good-settings empirical map = v2** (above): the joint, song-conditional feasible set across all
+  conditioning + governor knobs, by real experiment. v1's governor range table is the seed, not the map.

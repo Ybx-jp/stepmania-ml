@@ -93,17 +93,28 @@ def parse_args():
     p.add_argument('--max_jack_run', type=int, default=2,
                    help='HARD 16th-jack cap: max consecutive same-panel 16th-adjacent presses. =2 (default, '
                         'user-approved) allows a justified 2-note 16th jack, hard-forbids 3+. 0/negative = off.')
-    p.add_argument('--jack_penalty', type=float, default=1.5,
-                   help='SOFT foot-exertion governor (lambda): escalating BPM-aware penalty to extend a same-panel '
-                        'run (penalty = lambda * accumulated exertion). Gates unnatural jack STREAMS (8th + long) '
-                        'while keeping short justified ones; preserves density (re-routes to alternation). '
-                        '0 = off; ~1.5 gentle (default), ~3 aggressive. Uses the song BPM. notes/foot_exertion_findings.md')
-    p.add_argument('--fatigue_penalty', type=float, default=0.0,
-                   help='PER-FOOT FATIGUE governor (lambda): two-foot biomechanical simulator; governs jacks AND '
-                        'jump streams via min-exertion footing (gen generalizes the jack governor). 0=off; ~2 gentle. '
-                        'Set with --jack_penalty 0 to REPLACE the jack governor. notes/foot_fatigue_design.md')
+    p.add_argument('--jack_penalty', type=float, default=0.0,
+                   help='OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
+                        'generalizes it), so default 0 = off. Set >0 only to use the jack governor INSTEAD of fatigue. '
+                        'notes/foot_exertion_findings.md')
+    p.add_argument('--fatigue_penalty', type=float, default=2.0,
+                   help='PER-FOOT FATIGUE governor (lambda) — the RELEASE per-note governor (default 2.0). Two-foot '
+                        'biomechanical simulator; governs jacks AND jump streams via min-exertion footing (generalizes '
+                        'the jack governor; required for --stamina_ceiling). Good range 1.5-3 (matches real jack dist, '
+                        'density held); 0=off. notes/governor_release_region.md')
     p.add_argument('--fatigue_free', type=float, default=6.0,
                    help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams gated)')
+    p.add_argument('--stamina_ceiling', type=float, default=None,
+                   help='STAGE-2 STAMINA governor (per-region DENSITY): a slow exertion accumulator thins UPCOMING '
+                        'onset density only where sustained workload is high (a CEILING, never a global dent). Needs '
+                        '--fatigue_penalty (the foot model supplies the cost). ~25 = validated gentle relief; lower '
+                        '= more thinning. None = off. notes/foot_fatigue_design.md "STAGE 2".')
+    p.add_argument('--stamina_tau', type=float, default=8.0, help='stamina slow-decay (beats, ~several measures)')
+    p.add_argument('--stamina_scale', type=float, default=15.0, help='excess-workload scale for the tau bump (tanh)')
+    p.add_argument('--stamina_breathe', type=float, default=0.0,
+                   help='STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high at climaxes -> keep '
+                        'the spicy notes, low in verses -> rest) = a difficulty arc. Needs --stamina_ceiling. '
+                        '0=off (flat), ~1.2 validated. notes/foot_fatigue_design.md "STAGE 3".')
     p.add_argument('--motif', type=str, default=None,
                    help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
                         '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
@@ -112,9 +123,18 @@ def parse_args():
                    help='H15 discrete figure-token conditioning (gen_motif_full), e.g. "sweep" -> a constant '
                         f'per-section figure schedule. One of {[c for c in FIGURE_CLASSES if c != "sparse"]}.')
     p.add_argument('--prefer', type=str, default=None, help='panel preference, e.g. "U,R" to favor Up+Right')
+    # ⛔ --radar is DISABLED by default. It MEAN-PINS unset dims (others at the dataset mean), which is OFF-MANIFOLD:
+    # the radar dims are correlated (stream/voltage/air/chaos r 0.71-0.92), so a single-dim pin at high values
+    # SMEARS (chaos=0.9 g3 -> 16th-share 0.98, quarter backbone ~0) -- a knob-shaped artifact, NOT the deployed
+    # knob. The CORRECT path is --style (RadarManifold conditional-fill + projection; coupled dims move together,
+    # backbone preserved). See the conditioning-mechanics skill §2 + its misalignment catalog ("mean-pin vs
+    # manifold conditional-fill"). Only --radar_ood (a deliberate, labeled "see the raw OOD reach" test) re-enables it.
     p.add_argument('--radar', type=str, default=None,
-                   help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
-                        'e.g. "chaos=0.9,air=0.85"; unset dims default to the dataset mean. Use with --guidance to amplify.')
+                   help='DISABLED (mean-pin = OFF-MANIFOLD smear, not the real knob). Use --style for the manifold '
+                        'path. For a deliberate OOD reach test, pass --radar_ood too. See conditioning-mechanics skill §2.')
+    p.add_argument('--radar_ood', action='store_true',
+                   help='acknowledge that --radar is an off-manifold mean-pin (OOD smear) and run it anyway '
+                        '(deliberate raw-reach test only). Without this, --radar errors out.')
     p.add_argument('--match_radar', action='store_true',
                    help="condition each song's generation on its OWN source-chart radar (with --guidance) so "
                         "the output matches the original's groove profile -- avoids profile drift when you "
@@ -155,6 +175,12 @@ def typed_binary(t):
 
 def main():
     args = parse_args(); set_seed(args.seed)
+    if args.radar and not args.radar_ood:  # fail FAST (before the slow data load) -- see conditioning-mechanics §2
+        raise SystemExit(
+            "⛔ --radar is DISABLED: it mean-pins unset dims (others at the dataset mean) = OFF-MANIFOLD, which\n"
+            "   SMEARS at high single-dim values (a knob-shaped artifact, not the deployed knob). Use --style for\n"
+            "   the manifold conditional-fill (e.g. --style \"chaos=q0.99\"). If you truly want the raw off-manifold\n"
+            "   reach test, re-run with --radar_ood. See the conditioning-mechanics skill §2.")
     phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
                    if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
     phase_calib = (tuple(float(x) for x in args.onset_phase_calib.split(','))
@@ -229,7 +255,7 @@ def main():
     # groove-radar target: base at the dataset mean, override the requested dims
     RADAR_DIMS = ['stream', 'voltage', 'air', 'freeze', 'chaos']
     radar_vec = None
-    if args.radar:
+    if args.radar:  # guarded at main() entry -> only reached with --radar_ood (deliberate off-manifold reach test)
         radars = [m['groove_radar'].to_vector() for m in ds.valid_samples if 'groove_radar' in m]
         base = np.mean(radars, 0).astype(np.float32) if radars else np.full(5, 0.5, np.float32)
         for tok in args.radar.split(','):
@@ -361,6 +387,9 @@ def main():
                           jack_penalty=(args.jack_penalty if args.jack_penalty and args.jack_penalty > 0 else None),
                           fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
                           fatigue_free=args.fatigue_free,
+                          stamina_ceiling=args.stamina_ceiling,  # Stage-2 per-region density relief (needs fatigue_penalty)
+                          stamina_tau=args.stamina_tau, stamina_scale=args.stamina_scale,
+                          stamina_breathe=args.stamina_breathe,  # Stage-3 ARC: ceiling breathes with audio energy
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
