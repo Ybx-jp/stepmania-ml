@@ -1,12 +1,17 @@
 # Notes Index
 
 Map of `notes/`, organized by phase and thread. Findings notes (`*_findings.md`) hold offline/quantitative
-results; plans/roadmaps hold forward design; `playtest_log.md` is the subjective play-feel ledger. Newest
-arc (chaos / 16th-placement) is at the bottom and is where the project currently stands.
+results; plans/roadmaps hold forward design; `playtest_log.md` is the subjective play-feel ledger. Arcs are
+roughly chronological; the newest (motif → governor → release) is at the bottom.
 
-**CURRENT STATE (2026-06-22):** best playable model = **gen_highres_v4**. Chaos *amount* is a working knob
-(calib / radar conditioning); chaos *placement* is bounded in the audio→chart paradigm (see the chaos arc).
-Forward direction = **Phase 3** ([[phase3_generative_design]]), gated by two PASSED de-risks.
+**CURRENT STATE (2026-06-26):** deployed model = **`gen_motif_full_fixed`** (42-dim highres, the H19 clean
+retrain). Two arcs shipped on top of it: (1) the **H15 motif arc** — steerable section-level candle/trill
+figure levers (jack↔sweep is the lone dead axis); (2) the **biomechanical governor** — per-note foot fatigue
+(default `fatigue_penalty=2`), per-region stamina + breathing difficulty arc (opt-in), playtest-confirmed "a
+tasteful edit, not a rewrite." A Phase-3 mask-predict prototype is de-risked but parked; the deployed track is
+the staged AR highres generator. **Now in v0.1.0 release prep** on branch `release/v0.1.0-prep` (LICENSE,
+pyproject, README claims audit, bring-your-own-audio `scripts/generate.py`, CHANGELOG). Next-session pointer =
+`HANDOFF.md`.
 
 ## Phase 1 — difficulty classifier (closed)
 - `ordinal_experiment_findings.md` — ordinal vs classification head; `standard_ordinal_multi` won. Phase 1 closed.
@@ -49,12 +54,10 @@ Forward direction = **Phase 3** ([[phase3_generative_design]]), gated by two PAS
 
 ## Decode / playtest fixes
 - `style_decoding.md` — sample the pattern head (greedy = always-Left).
-- `playtest_log.md` — **the subjective play-feel ledger** (709L; standing hypotheses H1–H11, newest on top).
-
-## H11 — transitions
+- `playtest_log.md` — **the subjective play-feel ledger** (standing hypotheses H1–H20, newest on top).
 - `h11_transitions_findings.md` — AR pattern head drifts through section boundaries (exposure bias).
 
-## CHAOS / 16th-PLACEMENT ARC (current, mostly branch `gen/16th-commit-retrain`)
+## CHAOS / 16th-PLACEMENT ARC
 Read roughly in this order:
 - `chaos_mechanism_plan.md` — keystone synthesis: chaos = where resolution + data + objective converge.
 - `chaos_conditioning_findings.md` — chaos-radar conditioning WORKS post-high-res (16th amount 0.3%→26%).
@@ -62,39 +65,57 @@ Read roughly in this order:
 - `phase_aware_threshold_findings.md` — decode: calib (variable per-song chaos) vs alloc (smearing quota).
 - `chaos_retrain_scope.md` — v6 scope (Step-0: 16th under-commitment = knows-but-loses).
 - `v7_additive_loss_design.md` — v6 failed (additive trade); v7 reweighted-BCE additive design + result.
-- `chaos_placement_ceiling_SUPERSEDED.md` — ⚠️ **SUPERSEDED** (its "audio-ambiguity ceiling" conclusion was
-  refuted by the corrected sequence probe; kept as record).
-- `sequence_aware_onset_plan.md` — placement is SEQUENCE-determined (AUC 0.935); AR explodes, refinement can't
-  bootstrap from v4's anti-correlated C0 → not cheaply exploitable. Critic-guided refinement idea recorded.
-- `phase3_generative_design.md` — **the forward plan**: joint generative model (diffusion/mask-predict,
-  structured transformer, critic objective). Objective gate PASSED (critic sees placement), data gate PASSED
-  (484 multi-charted songs).
+- `chaos_placement_ceiling_SUPERSEDED.md` — ⚠️ **SUPERSEDED** (its "audio-ambiguity ceiling" was refuted by
+  the corrected sequence probe; kept as record).
+- `sequence_aware_onset_plan.md` — placement is SEQUENCE-determined (AUC 0.935); AR explodes. Critic-guided
+  refinement idea recorded.
 
-## Manifold conditioning + guidance tuning (2026-06-22/23)
-- `radar_manifold_findings.md` — the 5 radar dims are ~rank-2 (intensity cluster + freeze); manifold-aware
-  steering (conditional-fill + project) + source-chart-free density. `src/generation/radar_manifold.py`.
+## Phase 3 — joint generative paradigm (de-risked, parked)
+- `phase3_generative_design.md` — the forward plan: joint generative model (diffusion/mask-predict, structured
+  transformer, critic objective). Objective + data gates PASSED.
+- `phase3_prototype_findings.md` — first build of the mask-predict paradigm (`diag_maskpredict_proto.py`):
+  onset mask-and-predict. The de-risk prototype; deployed track stayed the staged AR generator.
+
+## Manifold conditioning + guidance tuning
+- `radar_manifold_findings.md` — the 5 radar dims are ~rank-2; manifold-aware steering (conditional-fill +
+  ellipsoid project) + source-chart-free density. `src/generation/radar_manifold.py`. (Manifold now SHIPPED
+  as `cache/radar_manifold.npz` for dataset-free generation.)
 - `h14_guidance_sweep_findings.md` — guidance is per-axis; g=5 overshoots chaos into the H4 smear.
-- `h16_harmonic_findings.md` — "harmonic guidance" FALSIFIED vs sampling noise; it's a monotonic
-  backbone-dissolution, sweet spot = a KNEE. First genuinely-good chart by ear (OH WORLD glitch g3.5).
-- `h15_motif_handoff.md` — train the pattern head on groove-correlated MOTIFS (the "vibe" lever). Phased
-  plan, Phase-0 cheap de-risk gate first.
-- `h15_motif_findings.md` — ★ Phase-0 gate RESULT (faithful, note-pattern motifs): PASS. PART 1 — note-pattern
-  motif histograms separate groove ≫ shuffled (all axes, strongest W=3). PART 2 — vs the FULL radar: radar
-  pins R²0.61 of motif usage (common filler) but ~39% residual; radar-twins more motif-similar than same-song
-  charter-twins → vocabulary is a DISTRIBUTION. PART 3 (crux) — same ≈0 radar → UUUU vs LLLL vs LRLR signature
-  figures the radar can't see. LEVER = a characteristic motif CODEBOOK sampled as a distribution + taste
-  critic; NOT freeze (already a knob). `diag_motif_gate.py`. [first pass had an exp-design failure — strawman
-  density floor + rhythm-variant drift → postmortem'd into the experiment-design skill, §10 / Rules 15–16.]
+- `h16_harmonic_findings.md` — "harmonic guidance" FALSIFIED vs sampling noise; sweet spot = a KNEE.
+
+## H15 — MOTIF ARC (shipped) — the *which-figures* control axis
+- `h15_motif_handoff.md` — the plan: train the pattern head on groove-correlated motifs (the "vibe" lever).
+- `h15_motif_findings.md` — ★ Phase-0 gate PASS: note-pattern motifs separate groove≫shuffled; radar pins R²0.61
+  of motif usage with ~39% signature-figure residual the radar can't see → motif CODEBOOK lever.
+- `h15_local_motif_plan.md` — per-section (incremental sectional) motif conditioning plan.
+- `h15_hierarchical_findings.md` — hierarchical pick-then-realize via discrete figure tokens (isolates SWEEP
+  that the continuous projection can't).
+- `h15_set_characterization.md` — offline characterization of the exported playtest sets (realized figures).
+- `repr_integrity_findings.md` — pre-retrain representation audit: found + fixed a note-dropping converter bug.
+- `h19_retrain_findings.md` — the clean retrain → **`gen_motif_full_fixed`** (deployed): levers preserved, trill
+  honest, sweep improved.
+- `note_patterns_and_motifs.md` — **the consolidated home** for note-pattern/motif framing: the pattern
+  vocabulary + reference links, the figure codebook, the motif control surface's intent + PARTIAL status, and
+  the H20 coverage gap.
+
+## Biomechanical governor (foot fatigue / stamina / breathing arc) — shipped
+- `h13_exertion_findings.md` — H13: does the model represent physical exertion / fast-jack cost? (the seed).
+- `foot_exertion_findings.md` — the soft, BPM-aware jack governor (decode-time, graded) — the Stage-0 version.
+- `foot_fatigue_design.md` — the full per-foot fatigue model spec + every failure (Stages 1–3: per-note foot,
+  per-region stamina, breathing difficulty arc). The governor's design bible.
+- `governor_release_region.md` — vouched-for per-knob RANGES + shipping defaults. ⚠️ a vouched table, NOT a
+  "mapped region" (see [[claim-precision]]); the joint region is a v2 item.
+
+## Geometry / feasible region (parked → v2)
+- `difficulty_corner_findings.md` — offline release gate: the EASY difficulty corner is healthy.
+- `geometry_feasible_region.md` — the "feasible region of good settings" geometry framing (radar ellipsoid ×
+  motif subspace, audio as a constraint); the geometric-DL / map-the-region thread, parked for v2.
 
 ## Roadmaps / standing plans
 - `augmentation_roadmap.md` — on-the-fly augmentation ideas (mirror, etc.).
 - `constraint_relaxation_roadmap.md` — when to relax max-2/variable-BPM/finer-res (data-layer v2).
 
 ## Meta
+- `HANDOFF.md` — **the next-session handoff** (current = governor complete + v0.1.0 release prep).
 - `ml_glossary.md` — ML jargon glossary (gloss-on-first-use; maintained by the ml-gloss skill).
-- `archive/` — superseded scratch (e.g. `next_steps_2-23.md`).
-
----
-### Standing cleanup note
-The chaos-arc notes (8 files) are kept granular for provenance; could optionally fold into one arc-summary
-later. (Done 06-22: superseded ceiling note renamed; stale next-steps archived.)
+- `archive/` — superseded scratch.
