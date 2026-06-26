@@ -41,7 +41,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", default="checkpoints/gen_motif_full_fixed/best_val.pt")
     ap.add_argument("--songs", type=int, default=8); ap.add_argument("--max_len", type=int, default=1440)
+    ap.add_argument("--match", type=str, default=None, help="comma-sep title substrings to select (e.g. the playtest songs)")
     args = ap.parse_args()
+    want = [m.strip().lower() for m in args.match.split(',')] if args.match else None
     set_seed(42); device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     cf = glob.glob("data/**/*.sm", recursive=True) + glob.glob("data/**/*.ssc", recursive=True)
     tf, vf, _ = create_data_splits(cf, random_state=42)
@@ -57,6 +59,8 @@ def main():
             break
         s = vds[i]; m = vds.valid_samples[i]; T = min(int(s['mask'].sum().item()), args.max_len)
         if int(m['difficulty_class']) != 3:
+            continue
+        if want is not None and not any(w in m['chart'].title.lower() for w in want):
             continue
         songs.append({'audio': s['audio'][:T].numpy().astype(np.float32), 'len': T,
                       'diff': int(m['difficulty_class']), 'title': m['chart'].title[:20]})

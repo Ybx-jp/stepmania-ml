@@ -275,7 +275,19 @@ amplifying past baseline: breathe=1.2 → corr 0.918 / Δ 0.185 (1.8 → 0.200) 
 (REDISTRIBUTION, not a cut). ⇒ Stage 3 lets you run stamina relief AND keep/sharpen the arc (the user's "extra
 room for that handful of spicy extra notes in the deserving sections"). The arc lever can only THIN (ceiling), so
 it amplifies the arc by resting verses, not by adding climax notes beyond what the onset head places.
-**UNTESTED:** playtest feel of the arc (does the climax-verse contrast read as musical pacing?).
+
+**PLAYTEST (2026-06-26) + two fixes:** the arc was "mostly good" but surfaced two issues.
+(1) **Abrupt early endings (H-arc-end) — FIXED.** The breathing ceiling collapsed to ~0 at low-energy outros
+(`clamp(min=1e-3)`) → max thinning → empty tail. Added `stamina_breathe_floor` (def 0.4): clamp the effective
+ceiling to 0.4× base so low-energy/low-workload sections aren't emptied. Confirmed on real chaos charts: breathe1.8
+floor=0 emptied HSL/Star Trail tails (last-10% dens 0.156/0.054→0.000); floor=0.4 restores them to the OFF baseline
+(0.094/0.054). Small arc cost (corr 0.920→0.905, Δ 0.200→0.184). The residual end-fade is the pre-existing H5 one.
+(2) **"Breathing ignores high-pitch/melodic energy" (H-arc-energy) — REFUTED at the signal level (diag_breathe_
+energy.py).** On the actual playtest songs p_onset is NOT percussion-biased: c_harm (0.34) ≥ c_perc (0.30), and on
+melodic-loud/perc-quiet frames p_onset is POSITIVE (+0.47, reads them as HIGH energy). So a perc+harm energy swap
+would NOT help — not shipped. The "ignored piano solo" perception is the ONSET HEAD under-placing on melodic-only
+sections (present at OFF, breathing inherits it) = a deeper feature/retrain thread (the user's "audio features need
+tuning"), not a Stage-3 knob. **UNTESTED:** re-playtest the floored endings + the arc pacing feel.
 
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).

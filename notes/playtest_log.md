@@ -15,8 +15,53 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
-## 2026-06-25 — ⏳ PENDING: STAGE-3 ARC (breathing ceiling) under the chaos crank
-### What was generated (not yet played)
+## 2026-06-26 — 🔬 PLAYED: STAGE-3 ARC (breathing) — works, but 3 findings to fix
+### Raw feedback (japa1, High School Love, IN BETWEEN; breathe 1.2 vs 1.8 under the chaos crank)
+> "the 1.8 was mostly good, but had **abrupt early endings a few measures short**, and it seemed to **bias toward
+> percussive-type sections for energy and ignore energy from high pitches like a manic piano solo** as seen in high
+> school love. i noticed it has always seemed to react strongly to **this weird thunderclap and distorted witch
+> laugh sound at the open of japa1**, breathing relaxed it somewhat, but I'm wondering if the **audio features need
+> some tuning to better balance the percussive-lead axis**. japa1 was definitely better on 1.2 than 1.8, didn't end
+> awkward. high school love did still end awkward, so did in between."
+
+### Findings / hypotheses
+- **H-arc-end (BUG, mine):** abrupt endings = the breathing ceiling COLLAPSES to ~0 at low-energy outros
+  (`ceiling·(1+breathe·z).clamp(min=1e-3)`; z very negative at the outro → ceiling ~0 → max thinning → empty tail).
+  breathe=1.8 drives it more negative than 1.2 → empties more (japa1 awkward at 1.8, fine at 1.2). HSL/IN BETWEEN
+  end awkward even at 1.2 → their outros go negative enough at 1.2 too, AND it compounds the known H5 end-fade. FIX:
+  floor the effective ceiling so low-energy/low-workload sections aren't emptied.
+- **H-arc-energy (percussive-lead axis, the user's hypothesis — CONFIRMED plausible):** the breathing energy =
+  `p_onset` (onset head) is PERCUSSION-biased, so a manic piano solo (melodic, high-pitch) reads as LOW energy and
+  breathing RESTS it. The audio features already carry the harmonic half — **HPSS `harm_onset`** (harmonic onset)
+  + `perc_onset` (percussive) + 12-dim `chroma` (tonal energy). FIX (decode-time): breathe on a BALANCED energy
+  (perc+harm / chroma), not p_onset. Deeper layer (H-onset-perc-bias): the onset HEAD itself may under-place on
+  melodic sections → audio-feature/retrain thread (the user's "audio features need tuning").
+- **H-japa1-transient:** the onset head over-fires on the opening thunderclap/witch-laugh (loud non-musical
+  transient); breathing relaxed it (low musical energy there → thinned). Same root as H-arc-energy (the energy
+  signal). A balanced/cleaner energy may also down-weight non-musical transients.
+
+### RESOLUTION (this session)
+- **H-arc-end → FIXED (ceiling floor).** Confirmed on the real chaos charts: breathe1.8 floor=0 emptied tails
+  (HSL/Star Trail last-10% density 0.156/0.054 → 0.000); `stamina_breathe_floor=0.4` (clamp the effective ceiling
+  to 0.4× base) restores them to the OFF baseline (0.094/0.054). Breathing-induced emptying gone (residual fade =
+  pre-existing H5). Sets regenerated with the floor + reinstalled. (diag_breathe_energy/diag_stamina_arc.)
+- **H-arc-energy → REFUTED at the breathing-signal level, REDIRECTED to the onset head (diag_breathe_energy.py on
+  the actual playtest songs).** p_onset is NOT percussion-biased on these songs: c_harm (0.34) ≥ c_perc (0.30), and
+  on melodic-loud/perc-quiet frames p_onset is POSITIVE (+0.47) — it already reads piano-solo regions as HIGH energy
+  and would KEEP them. So swapping the breathing energy to perc+harm would NOT help (data says so) — NOT shipped.
+  The "ignored piano solo" perception is therefore the ONSET HEAD under-placing on melodic-only sections (present at
+  OFF too; breathing inherits, doesn't cause) = the user's deeper "audio features need tuning" thread
+  (H-onset-perc-bias), a retrain/feature investigation, NOT a Stage-3 decode knob. japa1 thunderclap: onset head
+  over-fires on the loud transient; breathing incidentally relaxes it (low phrase-energy intro → ceiling drops).
+
+### Action / next
+- [ ] Re-playtest the regenerated breathe sets — endings fixed? (japa1/HSL/IN BETWEEN no longer end short.)
+- [ ] Pick breathe default (1.2 vs 1.8) by feel; the floor makes 1.8 safe to try.
+- [ ] PARKED thread H-onset-perc-bias (melodic note-placement) — revisit if it bugs you post-release.
+- [ ] Then: map the region of good settings → release.
+
+### Original gen note
+### What was generated
 Two new sets added to the chaos family: `~/sm-generated/chaos_stamina_g25_breathe{12,18}` — same cranked recipe
 (`--style chaos=q0.99 g3.0`, density 0.400) + `--stamina_ceiling 25`, but the ceiling now BREATHES with audio
 energy (`--stamina_breathe 1.2 / 1.8`). The A/B is **`chaos_stamina_g25` (flat) vs `chaos_stamina_g25_breathe12`
