@@ -18,8 +18,9 @@ MANDATORY_PLAYABILITY = {
 # hard-required exertion cap (H13): a fast same-panel jack is one foot hammering one arrow at 16th speed =
 # brutal/un-danceable. A finite cap MUST be present. Default injected = 2 (user-approved 2026-06-25): a 2-note
 # 16th jack is sometimes musically justified, so allow the DOUBLE but hard-forbid 3+ at 16th speed. The graded
-# escalation across spacings is the SOFT foot-exertion governor (generate(jack_penalty=..., bpm=...), default
-# ~1.5 in the exporter) — see notes/foot_exertion_findings.md; H13 history notes/h13_exertion_findings.md.
+# escalation across spacings is the SOFT foot governor — as of the release map (notes/governor_release_region.md)
+# the default is the PER-FOOT FATIGUE model (generate(fatigue_penalty=2, bpm=...), exporter default), which
+# generalizes the old jack_penalty=1.5 and is required for the stamina/arc layers. H13 history h13_exertion_findings.md.
 MANDATORY_JACK_CAP = 2
 # soft (warn, not fail): the arrow-coherence sweet spot (H2: greedy collapses, 1.0 over-randomizes)
 PATTERN_TEMP_RANGE = (0.6, 0.85)

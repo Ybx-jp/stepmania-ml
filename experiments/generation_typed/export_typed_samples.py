@@ -93,15 +93,15 @@ def parse_args():
     p.add_argument('--max_jack_run', type=int, default=2,
                    help='HARD 16th-jack cap: max consecutive same-panel 16th-adjacent presses. =2 (default, '
                         'user-approved) allows a justified 2-note 16th jack, hard-forbids 3+. 0/negative = off.')
-    p.add_argument('--jack_penalty', type=float, default=1.5,
-                   help='SOFT foot-exertion governor (lambda): escalating BPM-aware penalty to extend a same-panel '
-                        'run (penalty = lambda * accumulated exertion). Gates unnatural jack STREAMS (8th + long) '
-                        'while keeping short justified ones; preserves density (re-routes to alternation). '
-                        '0 = off; ~1.5 gentle (default), ~3 aggressive. Uses the song BPM. notes/foot_exertion_findings.md')
-    p.add_argument('--fatigue_penalty', type=float, default=0.0,
-                   help='PER-FOOT FATIGUE governor (lambda): two-foot biomechanical simulator; governs jacks AND '
-                        'jump streams via min-exertion footing (gen generalizes the jack governor). 0=off; ~2 gentle. '
-                        'Set with --jack_penalty 0 to REPLACE the jack governor. notes/foot_fatigue_design.md')
+    p.add_argument('--jack_penalty', type=float, default=0.0,
+                   help='OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
+                        'generalizes it), so default 0 = off. Set >0 only to use the jack governor INSTEAD of fatigue. '
+                        'notes/foot_exertion_findings.md')
+    p.add_argument('--fatigue_penalty', type=float, default=2.0,
+                   help='PER-FOOT FATIGUE governor (lambda) — the RELEASE per-note governor (default 2.0). Two-foot '
+                        'biomechanical simulator; governs jacks AND jump streams via min-exertion footing (generalizes '
+                        'the jack governor; required for --stamina_ceiling). Good range 1.5-3 (matches real jack dist, '
+                        'density held); 0=off. notes/governor_release_region.md')
     p.add_argument('--fatigue_free', type=float, default=6.0,
                    help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams gated)')
     p.add_argument('--stamina_ceiling', type=float, default=None,

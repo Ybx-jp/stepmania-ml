@@ -106,16 +106,19 @@ fight the difficulty/radar conditioning).
 - **ml-gloss hook is active** (gloss ML jargon on first use). **Memory** at `~/.claude/projects/.../memory/` —
   read `phase-state.md` for the running state; update it as you go.
 
-## 8. OPEN THREADS (priority order, user's stated plan)
-1. **Stage 2 (this handoff)** → if it works, **Stage 3 (the arc)**. This is the user's chosen next build.
-2. **Release assessment** — circle back AFTER Stage 2/3, especially if successful. Current release candidate
-   (`gen_motif_full_fixed` + jack governor λ=1.5, playtest-validated) is ready independent of fatigue.
-3. **SKIPPED by the user:** the `ab_fatigue_*` playtest (jack-penalty vs fatigue). Reason: the fatigue/jack
-   trade just shuffles between jacks and jumps without a clear feel win; the user would rather get Stage 2/3
-   (the real fix) working than A/B the incomplete version. (Sets still in `~/sm-generated/ab_fatigue_*` if needed.)
-- Lower priority / parked: the body-turn rotation discount (per-note model charges full per-foot travel for a
-  coordinated body rotation — ranking right, magnitude too high; see foot_fatigue_design.md §math gaps).
+## 8. STATUS — STAGE 2/3 DONE, REGION MAPPED, RELEASING (2026-06-26)
+1. **Stage 2 (stamina relief) + Stage 3 (breathing arc): BUILT + VALIDATED + PLAYTEST-CONFIRMED** ("a tasteful
+   edit, not a rewrite"). Hold-aware E_slow built (per-foot effort; the "reach veto" was an invented reframe —
+   corrected). Stage-3 ending bug (ceiling collapse) FIXED via `stamina_breathe_floor`.
+2. **Region of good settings MAPPED → notes/governor_release_region.md.** RELEASE CENTER: `fatigue_penalty=2`
+   (`jack_penalty=0`) — supersedes the old jack λ=1.5 (matches real jacks, density held, AND stamina needs
+   fatigue_on); stamina + breathe OFF by default (opt-in levers for cranked conditioning). Exporter defaults
+   flipped to this center. Good ranges: fatigue 1.5–3, stamina_ceiling 15–50, breathe 1.2–1.8 (floor 0.4).
+3. **PARKED (not release blockers):** H-onset-perc-bias (onset head under-places on melodic-only sections = the
+   piano-solo feel; a feature/retrain thread, NOT a governor knob); model under-jumps (separate density thread);
+   body-turn rotation discount (magnitude too high).
 
 ## 9. BRANCH/PR STATE
-`gen/foot-fatigue` → **PR #40** (base main). #36–#39 all merged to main (H15 motif arc, repr bug fixes, H19
-retrain). The fatigue work is opt-in (default off), so merging #40 is safe; it doesn't change default behavior.
+**RELEASE PR: `gen/foot-fatigue-stage2` → main** (16 commits = Stage 2/3 + hold-aware + region map + playtest docs
++ the `--radar` disable). origin/main already has the per-note governor (PR #40 merged). Default behavior CHANGES
+this time (per-note governor now fatigue=2 by default), unlike #40 — but it's the validated release center.
