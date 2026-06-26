@@ -750,7 +750,22 @@ class LayeredTypedChartGenerator(nn.Module):
                 foot_panel[:, 0] = torch.where(both & ~cu[:, 0], torch.full_like(foot_panel[:, 0], -1), foot_panel[:, 0])
                 foot_panel[:, 1] = torch.where(both & ~cu[:, 1], torch.full_like(foot_panel[:, 1], -1), foot_panel[:, 1])
                 if stamina_on:  # feed the REALIZED footing effort of this note into the slow stamina accumulator
-                    inc = ((cE - decayE) * cu.float()).sum(1).clamp(min=0)   # added per-foot exertion (one-foot grind = big)
+                    inc = ((cE - decayE) * cu.float()).sum(1).clamp(min=0)   # normal: two-foot footing cost
+                    # HOLD-AWARE (user design): during an open hold ONE foot is pinned on the held panel, so the
+                    # FREE foot does EVERY note -- a one-foot grind. The unpinned foot model under-counts this by
+                    # alternating feet, so a hold-stream looked no harder than an alternating stream (diag_stamina_
+                    # holds.py null). Charge the FREE foot's single-foot grind cost instead: onset-spacing rate
+                    # (one foot every onset) x travel/jack unit to its last panel -> a sustained hold-stream raises
+                    # stamina ~2x faster than an equally-dense alternating stream, so the onset thins it. Placement
+                    # is untouched (no jack explosion); this only re-attributes the COST that feeds the onset gate.
+                    in_hold = held_start.any(1) & on & (fresh_press.sum(1) == 1)
+                    if in_hold.any():
+                        pp = fresh_press.float().argmax(1)                       # the lone fresh press = the free foot's note
+                        rate_free = frame_hz / since_onset.float().clamp(min=1)  # one foot every onset -> onset-spacing rate
+                        same = (free_last == pp) | (free_last < 0)              # jack (or first note this hold) vs travel
+                        unit_free = torch.where(same, torch.tensor(float(jack_weight), device=device),
+                                                travel_weight * PAD_DIST[free_last.clamp(min=0), pp])
+                        inc = torch.where(in_hold, (rate_free * unit_free).clamp(min=0), inc)
                     E_slow = E_slow + torch.where(on, inc, torch.zeros_like(inc))
             # free-foot tracking for no_cross_during_hold: a single note placed while a hold was already open
             free_gap = free_gap + 1

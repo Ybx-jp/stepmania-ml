@@ -143,13 +143,31 @@ def main():
 
     nh, h0, h1, hd = summarize(hold_dense)
     nn, n0, n1, nd = summarize(nohold_dense)
-    # secondary: during-hold one-foot-grind jacking, and press density on pinned frames, OFF vs ON
+    # PRIMARY frame-level test (controls for density at the FRAME level, not the diluted window level):
+    # does the onset thin MORE on PINNED grind-frames than on equally-dense NON-pinned frames? Masks fixed
+    # from baseline. A pinned frame = the held foot is stuck; a one-foot grind there should thin more if the
+    # hold-aware cost works.
     pin_frames = sum(int(b['pin'].sum()) for b in base)
     mjk_hold_off = max(max_jack_run_within(b['g'], b['pin']) for b in base)
     mjk_hold_on = max(max_jack_run_within(o['g'], o['pin']) for o in on)
-    def pin_press_density(runs):
-        num = sum(int((np.isin(r['g'], (1, 2, 4)).any(1) & r['pin']).sum()) for r in runs)
-        den = sum(int(r['pin'].sum()) for r in runs); return num / max(den, 1)
+    # per-song baseline dense-FRAME mask (expand dense windows to frames) and the baseline pin mask
+    dense_frame, pin_frame = [], []
+    for b, wd in zip(base, bd):
+        T = len(b['press']); nwin = len(wd)
+        df = np.repeat(wd >= med, win)[:T]
+        if len(df) < T:
+            df = np.concatenate([df, np.zeros(T - len(df), bool)])
+        dense_frame.append(df); pin_frame.append(b['pin'][:T])
+
+    def masked_press_density(runs, masks):
+        num = sum(int((np.isin(r['g'], (1, 2, 4)).any(1)[:len(m)] & m).sum()) for r, m in zip(runs, masks))
+        den = sum(int(m.sum()) for m in masks); return num / max(den, 1), den
+    pin_masks = pin_frame
+    nonpin_dense_masks = [d & ~p for d, p in zip(dense_frame, pin_frame)]
+    p_off, np_pin = masked_press_density(base, pin_masks)
+    p_on, _ = masked_press_density(on, pin_masks)
+    q_off, nq = masked_press_density(base, nonpin_dense_masks)
+    q_on, _ = masked_press_density(on, nonpin_dense_masks)
 
     print(f"\nSTAGE-2 STAMINA — HOLDS-SPECIFIC test  [{args.ckpt}]  {len(songs)} songs  ceiling={args.ceiling}")
     print(f"  win={win}f  hold-window if >= {args.hold_frac:.0%} frames pinned  | total pinned frames (OFF) = {pin_frames}")
@@ -158,11 +176,15 @@ def main():
     print("  " + "-" * 50)
     print(f"  {'HOLD-open':>14} {nh:>5} {h0:>8.3f} {h1:>8.3f} {hd:>+8.3f}")
     print(f"  {'no-hold':>14} {nn:>5} {n0:>8.3f} {n1:>8.3f} {nd:>+8.3f}")
-    print(f"\n  during-hold (pinned frames):  press-density OFF {pin_press_density(base):.3f} -> ON {pin_press_density(on):.3f}"
-          f"   | maxJackRun-in-holds OFF {mjk_hold_off} -> ON {mjk_hold_on}")
-    print("\nREAD: holdΔ noticeably more negative than noholdΔ => stamina specifically relieves hold-grind sections "
-          "(motivation met). Roughly equal => density-general relief only (foot model not pinning the held foot; "
-          "holds-blindness still needs pin-aware cost). during-hold press-density drop + jack-in-holds drop = bonus.")
+    print(f"\n  FRAME-LEVEL (the clean test) — press-density on matched frame sets, OFF -> ON:")
+    print(f"  {'frames':>22} {'n':>7} {'OFF':>8} {'ON':>8} {'Δ':>8}")
+    print("  " + "-" * 56)
+    print(f"  {'PINNED (hold grind)':>22} {np_pin:>7} {p_off:>8.3f} {p_on:>8.3f} {p_on-p_off:>+8.3f}")
+    print(f"  {'non-pinned dense':>22} {nq:>7} {q_off:>8.3f} {q_on:>8.3f} {q_on-q_off:>+8.3f}")
+    print(f"  maxJackRun-in-holds OFF {mjk_hold_off} -> ON {mjk_hold_on}")
+    print("\nREAD: PINNED Δ noticeably more negative than non-pinned-dense Δ => the hold-aware free-foot cost makes "
+          "the onset thin the one-foot grind MORE than equally-dense two-foot play = holds-blindness relief (user "
+          "design met). Roughly equal => the pin signal isn't moving E_slow enough (holds too short / ceiling too high).")
 
 
 if __name__ == "__main__":
