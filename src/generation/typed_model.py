@@ -388,7 +388,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
                  footswitch_pen=4.0, fatigue_cap=30.0,
                  stamina_ceiling=None, stamina_tau=8.0, stamina_scale=15.0, stamina_max_bump=0.45,
-                 stamina_breathe=0.0, stamina_breathe_win=96):
+                 stamina_breathe=0.0, stamina_breathe_win=96, stamina_breathe_floor=0.4):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -464,7 +464,8 @@ class LayeredTypedChartGenerator(nn.Module):
         climax-verse Δ 0.180, flat ceiling=25 drops to 0.876 / 0.131, breathe=1.2 RECOVERS+AMPLIFIES to 0.918 /
         0.185 (1.8 → 0.200) at held overall density (redistribution, not a cut). 0 = off (flat Stage-2 ceiling);
         ~1.2 = the validated default, up to ~1.8 (diminishing). `stamina_breathe_win` ~96 frames (~6 measures) =
-        the phrase scale."""
+        the phrase scale. `stamina_breathe_floor` (~0.4) floors the effective ceiling at that fraction of the base
+        so a low-energy OUTRO isn't collapsed to ~0 (which empties the tail = abrupt early ending — playtest H-arc-end)."""
         self.eval()
         device = audio.device
         B, T, _ = audio.shape
@@ -597,7 +598,12 @@ class LayeredTypedChartGenerator(nn.Module):
                 else:
                     mu = env.mean(1, keepdim=True); var = env.var(1, keepdim=True, unbiased=False)
                 z = (env - mu) / var.clamp(min=1e-6).sqrt()
-                ceiling_t = (float(stamina_ceiling) * (1.0 + float(stamina_breathe) * z)).clamp(min=1e-3)
+                # FLOOR the effective ceiling at stamina_breathe_floor x base: without it, a low-energy outro
+                # (z very negative) collapses the ceiling to ~0 -> max thinning -> EMPTY tail = abrupt early ending
+                # (worse at high breathe). The floor keeps low-energy/low-workload sections (outros) from being
+                # emptied while still letting verses (higher workload) thin. Climaxes still raise the ceiling freely.
+                floor = float(stamina_ceiling) * float(stamina_breathe_floor)
+                ceiling_t = (float(stamina_ceiling) * (1.0 + float(stamina_breathe) * z)).clamp(min=floor)
 
         reset_at = set(int(x) for x in boundary_reset) if boundary_reset is not None else set()
         for t in range(T):

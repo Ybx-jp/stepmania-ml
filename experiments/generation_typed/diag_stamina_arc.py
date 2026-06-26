@@ -76,8 +76,8 @@ def main():
                                              count_include_pad=False).view(-1).numpy()
         return (env - env.mean()) / (env.std() + 1e-6)
 
-    def run(ceiling, breathe):
-        corrs, contrasts, dens = [], [], []
+    def run(ceiling, breathe, floor=0.4):
+        corrs, contrasts, dens, tails = [], [], [], []
         for s in songs:
             set_seed(42)
             T = s['len']; audio = torch.from_numpy(s['audio']).unsqueeze(0).to(device)
@@ -88,7 +88,7 @@ def main():
             gk = dict(onset_threshold=tau, type_sample=True, type_temperature=0.4, pattern_sample=True,
                       pattern_temperature=0.7, max_jack_run=2, bpm=s['bpm'], fatigue_penalty=args.fatigue,
                       stamina_ceiling=(ceiling if ceiling is not None else None),
-                      stamina_breathe=breathe, stamina_breathe_win=args.breathe_win)
+                      stamina_breathe=breathe, stamina_breathe_win=args.breathe_win, stamina_breathe_floor=floor)
             enforce_playability(gk)
             with torch.no_grad():
                 g = pair_holds(model.generate(audio, diff, lengths=torch.tensor([T], device=device), **gk)[0].cpu().numpy())
@@ -101,19 +101,22 @@ def main():
                 hi = wd[we >= np.quantile(we, 2 / 3)].mean(); lo = wd[we <= np.quantile(we, 1 / 3)].mean()
                 contrasts.append(hi - lo)
             dens.append(float(occ.mean()))
-        return float(np.mean(corrs)), float(np.mean(contrasts)), float(np.mean(dens))
+            tails.append(occ[-32:].mean() / max(occ.mean(), 1e-6))   # last-2-measures density / song mean (END-FADE)
+        return float(np.mean(corrs)), float(np.mean(contrasts)), float(np.mean(dens)), float(np.mean(tails))
 
     print(f"\nSTAGE-3 ARC  [{args.ckpt}]  {len(songs)} Hard songs  win={args.win}f  breathe_win={args.breathe_win}f")
-    print(f"  energy = phrase-smoothed z(p_onset); arc = density tracking energy (climax dense, verse thin)")
-    print(f"  {'condition':>20} {'corr(dens,energy)':>18} {'climax-verse Δ':>15} {'overall_dens':>13}")
-    print("  " + "-" * 70)
-    for name, ceil, br in [("OFF (no stamina)", None, 0.0), (f"flat ceiling={args.ceiling:.0f}", args.ceiling, 0.0),
-                           (f"breathe={args.breathe:.2f}", args.ceiling, args.breathe)]:
-        c, ct, d = run(ceil, br)
-        print(f"  {name:>20} {c:>18.3f} {ct:>+15.3f} {d:>13.3f}")
-    print("\nREAD: breathe should RAISE corr + climax-verse Δ vs flat (density develops an ARC: climax kept, verse "
-          "rested) while overall_dens holds ~flat = REDISTRIBUTION not a global cut. If overall drops a lot, the "
-          "low-energy ceiling is too aggressive (lower --breathe).")
+    print(f"  energy = phrase-smoothed z(p_onset); arc = density tracking energy; tail = last-2-meas dens / song mean")
+    print(f"  {'condition':>26} {'corr(dens,energy)':>18} {'climax-verse Δ':>15} {'overall_dens':>13} {'tail/mean':>10}")
+    print("  " + "-" * 86)
+    conds = [("OFF (no stamina)", None, 0.0, 0.4), (f"flat ceiling={args.ceiling:.0f}", args.ceiling, 0.0, 0.4),
+             (f"breathe={args.breathe:.1f} floor=0.0", args.ceiling, args.breathe, 0.0),   # the OLD (no-floor) bug
+             (f"breathe={args.breathe:.1f} floor=0.4", args.ceiling, args.breathe, 0.4)]   # the FIX
+    for name, ceil, br, fl in conds:
+        c, ct, d, tl = run(ceil, br, fl)
+        print(f"  {name:>26} {c:>18.3f} {ct:>+15.3f} {d:>13.3f} {tl:>10.2f}")
+    print("\nREAD: breathe should RAISE corr + climax-verse Δ vs flat (the ARC), overall_dens ~held (redistribution). "
+          "tail/mean ~1 = ending intact; << 1 = EMPTY tail (abrupt ending). floor=0.0 should show the tail bug; "
+          "floor=0.4 should fix the tail while keeping most of the arc.")
 
 
 if __name__ == "__main__":
