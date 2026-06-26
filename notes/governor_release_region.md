@@ -1,10 +1,13 @@
-# Governor "region of good settings" — the release map (2026-06-26)
+# Governor knobs — vouched-for ranges + release defaults (2026-06-26)
 
-The release gate (per [[geometry_feasible_region]]): characterize the good region to its BOUNDARIES + a recommended
-CENTER, not one lucky point. This maps the decode-time GOVERNOR stack (the fatigue / stamina / arc work, Stages
-1–3) for `gen_motif_full_fixed`. "Good" = playable (code-enforced) AND the jack/jump RUN-LENGTH distribution matches
-real Hard charts (calib_foot_fatigue.py) AND density held AND the qualitative levers (relief, arc) do their job
-without breaking. Each range is backed by a diag; rerun them to re-walk a boundary.
+⚠️ **SCOPE — this is NOT "the region of good settings mapped."** It is a **table of per-knob ranges the user
+PERSONALLY VOUCHED FOR** (hands-on playtest + a few targeted offline sweeps), for the decode-time GOVERNOR stack
+ONLY (fatigue / stamina / arc, Stages 1–3) on `gen_motif_full_fixed`. It gives a defensible shipping DEFAULT + a
+safe tuning envelope per knob — it does NOT characterize the joint, song-conditional feasible region across all
+conditioning knobs. **That real region-mapping is V2** (see [[geometry_feasible_region]] "V2 — MAP THE REGION");
+this table is its seed, not the map. "Good" here = playable (code-enforced) AND the jack/jump RUN-LENGTH
+distribution matches real Hard charts (calib_foot_fatigue.py) AND density held AND the levers (relief, arc) work
+without breaking. Each range is backed by a diag; rerun them to re-check a value.
 
 ## RECOMMENDED RELEASE CENTER (the default config)
 ```
