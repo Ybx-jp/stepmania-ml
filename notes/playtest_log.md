@@ -18,8 +18,8 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 ## 2026-06-25 — ⏳ PENDING: Stage-2 STAMINA density governor A/B (does thinning feel like relief?)
 ### What was generated (not yet played)
 Three sets, **same 5 dense Hard songs** (groove-selected on `stream`: High School Love, nightbird lost wing,
-AFRONOVA, 突撃ガラスのニーソ姫, IN BETWEEN), `gen_motif_full_fixed` highres, seed 42, identical except `stamina_ceiling`.
-Per-note governor identical across all (`fatigue_penalty=2, jack_penalty=0, max_jack_run=2`); only the new Stage-2
+AFRONOVA, 突撃ガラスのニーソ姫 [= **japa1**], IN BETWEEN), `gen_motif_full_fixed` highres, seed 42, identical except
+`stamina_ceiling`. Per-note governor identical across all (`fatigue_penalty=2, jack_penalty=0, max_jack_run=2`); only the new Stage-2
 STAMINA layer differs. Mandatory pad-playability ON; 3/3 sets re-parse + installed to `~/sm-generated/`.
 Guide: `outputs/playtest_stamina/SET_GUIDE.md`. Offline validation in `notes/foot_fatigue_design.md` "STAGE 2".
 - `ab_stamina_OFF` (baseline) → `ab_stamina_g25` (validated gentle, ~10–13% thinner, ~Hard) → `ab_stamina_g12`
