@@ -15,8 +15,27 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
-## 2026-06-25 — ⏳ PENDING: STAMINA under AGGRESSIVE conditioning + HOLD-AWARE (the "noticeable test")
-### What was generated (not yet played)
+## 2026-06-25 — ✅ PLAYED — STAMINA WIN: "a tasteful edit, not a rewrite" (chaos over-crank relief)
+### Raw feedback (japa1 + High School Love, OFF vs g50)
+> "japa1 at **g50 was much more playable than at off without being much different overall, it felt like a tasteful
+> edit — not a rewrite**. high school love felt the same. the stamina and fatigue system is **DEFINITELY an
+> improvement**, and I do feel like stage 3 will give it that extra room for that handful of spicy extra notes to
+> give the deserving sections some flair."
+
+### Verdict / commentary (the FEEL the metrics can't see — resolved)
+- **H-stamina CONFIRMED at the gentle end.** g50 took japa1 0.400→0.391 (−2%) / HSL 0.400→0.371, critic stayed
+  **Hard** — and that mapped to "much more playable, not much different" = the onset thinning read as **RELIEF, not
+  dropped notes**. The CEILING property (bite only the genuinely-over-cranked spots) is what makes it "edit not
+  rewrite." This is the qualitative answer the offline peak/rest diag (peak −0.039 / rest −0.002) predicted but
+  couldn't prove. The stamina (per-region density) + fatigue (per-note footing) system is a play-confirmed
+  improvement on the deployed generator.
+- **g50 is the felt sweet spot for the OVER-CRANK case** (chaos g3.0, density 0.400): relieve the worst spots, keep
+  it Hard. g25/g12 (→ Medium) are the stronger relief options if a chart needs more.
+- **Stage-3 endorsed by the user, framed as the additive mirror:** g50 *removes* a few notes from over-cranked
+  spots; Stage 3's breathing ceiling would *add* "a handful of spicy extra notes in the deserving sections" (the
+  difficulty arc) — same ceiling lever, made to breathe with audio energy.
+
+### What was generated
 Three sets, **same 5 chaos-Hard songs** (`--groove_select chaos`: High School Love, NIGHT IN MOTION, IN BETWEEN,
 Star Trail, **japa1 = 突撃ガラスのニーソ姫**), `gen_motif_full_fixed` highres, seed 42, conditioned with the
 `chaos2_manifold_q99` recipe **`--style "chaos=q0.99" --guidance 3.0`** (MANIFOLD path — NOT the off-manifold
