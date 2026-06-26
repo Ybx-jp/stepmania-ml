@@ -15,6 +15,84 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-25 — ⏳ PENDING: trill A/B — deployed vs clean-retrained model (the H19 retrain feel gate)
+### What was generated (not yet played)
+Two sets, `~/sm-generated/ab_trill_A_old` vs `ab_trill_B_fixed`, **identical songs** (the h15 set: Deja loin,
+Pound the Alarm, IN BETWEEN, nightbird, japa1) + **identical knob** (trill=+3 g2, matching the old
+`h15_08_motif_trill`). Only the MODEL differs: A = deployed `gen_motif_full` (buggy representation), B =
+`gen_motif_full_fixed` (retrained after the two repr fixes). Mandatory pad-playability ON both; 5/5 re-parse.
+Guide: `outputs/playtest_ab_trill/SET_GUIDE.md`. Offline validation: [[h19_retrain_findings]].
+
+### What to evaluate
+- **Trill honesty (the point):** B's trill knob is honestly LOWER offline (+0.32 vs +0.47). Does B's trill feel
+  *better-judged* or just *less*? (A/B the SAME song A-vs-B.)
+- **HONEST CAVEAT for the "jacks during holds" (your old report):** the retrain did NOT reduce it — measured
+  presses-during-holds A 3.1% vs B 5.4% (slightly MORE on B, small/noisy). That phenomenon is GENERATION-side,
+  separate from the H19 DETECTOR fix. So this A/B does not promise a cleaner-around-holds feel; watch whether B
+  feels busier there.
+- **Decision it gates:** swap the default to `gen_motif_full_fixed`? It's offline strictly-better-or-equal
+  (candle preserved, trill honest, sweep improved, quality equal), but H15 is a feel thesis → ears decide.
+
+### Action / next
+- [ ] Play A vs B same-song; log whether honest-lower-trill is better/wash/worse + the during-holds feel.
+- [ ] If B ≥ A by ear → swap default exporter/eval/playtest checkpoint to gen_motif_full_fixed (PR #39).
+- [ ] If the during-holds busyness bugs you → open a SEPARATE generation-side thread (not the repr fix).
+
+---
+
+## 2026-06-25 — ⏳ PENDING: jack-penalty vs PER-FOOT-FATIGUE A/B (does fatigue dissolve the jump displacement?)
+### What was generated (not yet played)
+`~/sm-generated/ab_fatigue_A_jack` (jack_penalty 1.5, the CURRENT default) vs `ab_fatigue_B_foot` (fatigue
+penalty 2, jack OFF), SAME rich-Hard songs, `gen_motif_full_fixed`. Guide: `outputs/playtest_ab_fatigue/SET_GUIDE.md`.
+Mechanism + calibration: [[foot_fatigue_design]].
+### Why — the calibration REFRAMED the problem
+The "consecutive jumps" felt earlier were INDUCED by the jack penalty displacing jacks→jumps. On installed charts:
+A (jack penalty) has a **59-note jump WALL**, 23.3% jumps; B (fatigue) cuts longest jump stream to **3**, 4.6%
+jumps, density identical (0.346). Real rich-Hard charts = 31% jumps / streams to 10 (the model UNDER-jumps), so
+the risk now FLIPS: not walls but whether B feels jump-STARVED.
+### What to evaluate
+- Does B feel cleaner (no jump walls), jacks controlled? Or **too flat / jump-starved** (4.6% vs real 31%)?
+- **Earned vs unearned:** does B flatten jump streams that SHOULD be there (musical bursts), or only the ugly ones?
+  (The governor penalizes length, can't see musicality — this is the offline-blind question.)
+### Action / next
+- [ ] Play A vs B same-song; log clean-vs-starved + whether musical jump streams survive.
+- [ ] If B better → fatigue REPLACES the jack penalty as default (dissolves displacement). If jump-starved → lower
+      λ, OR pursue the SEPARATE model-under-jumps/under-density thread (manifold density/air, not the governor).
+
+---
+
+## 2026-06-25 — ⏳ PENDING: jack-governor A/B — foot-exertion penalty OFF vs ON (the "long jack streams" fix)
+### What was generated (not yet played)
+`~/sm-generated/ab_jack_OFF` (`--jack_penalty 0`) vs `ab_jack_ON` (`--jack_penalty 1.5`), SAME rich-Hard songs
+(seed 42, the IN BETWEEN-type jack-heavy set), same clean model `gen_motif_full_fixed`, same hard cap
+(max_jack_run=2). Only the SOFT foot-exertion governor differs. 5/5 reparse. Guide:
+`outputs/playtest_ab_jack/SET_GUIDE.md`. Mechanism: [[foot_exertion_findings]].
+### Why (audit)
+The user's "long jack streams" = 8th-note jacks, which `max_jack_run` (16th-only) was BLIND to. New governor =
+escalating BPM-aware penalty on extending a same-panel run. Offline on the INSTALLED charts: longest jack stream
+**14→4 notes**, runs≥4 7.0→1.3%, **density identical (0.346)** — re-routes to alternation, doesn't delete.
+### What to evaluate
+- Does ON feel more natural / less mechanically jacky (esp. IN BETWEEN)? Does it feel like it LOST anything
+  (it shouldn't — density preserved)? Is λ=1.5 right / too gentle / too strong?
+- **Gates the default:** λ=1.5 is proposed as the standing default for all future playtests.
+### Raw feedback (PLAYED 2026-06-25)
+> "this definitely solved the unnatural jack problem." — the foot-exertion governor (λ=1.5) WORKS by ear.
+Revealed the next issue: **consecutive JUMPS need a similar mechanism.**
+
+### Commentary — the jack fix DISPLACED mass into jumps (measured)
+The jack penalty only suppresses the jack-panel SINGLE; that probability redistributes (softmax) into jumps,
+AND a jump RESETS the exertion accumulator (escape valve). Measured OFF→ON (same songs): jump rate 15.7→**23.2%**,
+jump-laundered-jacks 21→40, **longest consecutive-jump stream 11→59**. So the consecutive-jump problem is partly
+INDUCED by our jack fix. ⇒ jump governor needed (next: foot-exertion v2, jumps). H13b handle. Mechanism +
+design in [[foot_exertion_findings]].
+
+### Action / next
+- [x] Jack governor λ=1.5 VALIDATED by ear ("solved the unnatural jack problem"). Stays the exporter default.
+- [ ] DESIGN jump governor (H13b): jumps differ (foot-TRAVEL/span geometry, no single-foot re-route, must not
+      fight the AIR radar, shared exertion budget to stop jack↔jump laundering). Designing with the user.
+
+---
+
 ## 2026-06-24 — ★ H15 + CHAOS sets PLAYED — candle knob validated by ear, "model might be ready", felt-chaos ≠ proxy
 
 ### What was played

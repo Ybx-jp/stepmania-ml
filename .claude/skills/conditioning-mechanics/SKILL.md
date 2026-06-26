@@ -110,10 +110,62 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   subtracts from off-beat logits (a gate; doesn't rescue chaos because chaos MOVES notes off-beat).
 
 ## 7. Decode / playability (mandatory — see the `playtest` skill)
-`hold_aware` automaton + `no_jump_during_hold` + `no_cross_during_hold` + `max_jack_run=1` +
-`pattern_temperature ~0.7`. Constraints act on the FINAL playable symbols, NOT the pre-automaton pattern (a fix
-written against the pattern leaks because `hold_aware` remaps it). Any new export/probe the user PLAYS must call
-`enforce_playability(gen_kwargs)`.
+`hold_aware` automaton + `no_jump_during_hold` + `no_cross_during_hold` + `max_jack_run=2` (was 1; user-approved
+2026-06-25 — allow a justified 2-note 16th jack, hard-forbid 3+) + `pattern_temperature ~0.7`. Constraints act on
+the FINAL playable symbols, NOT the pre-automaton pattern (a fix written against the pattern leaks because
+`hold_aware` remaps it). Any new export/probe the user PLAYS must call `enforce_playability(gen_kwargs)`. The
+graded escalation across spacings is the soft FOOT GOVERNORS (§8).
+
+## 8. Decode-time FOOT GOVERNORS — jack governor + per-foot fatigue (act on `pat_logits`, NOT onset)
+Both govern WHICH-panels (placement), never density (the onset/radar's job) — so they change footwork, not note
+count. Both need the song BPM (`bpm=`); `frame_hz = BPM·4/60` (16th-frames/sec). MEASURE their effect with
+same-panel / jump-stream RUN-LENGTH distributions vs REAL charts (`calib_foot_fatigue.py`), NOT raw figure mass.
+Both decode-time, in `LayeredTypedChartGenerator.generate`. Full derivation + the failures in
+`notes/foot_fatigue_design.md`; next-build context in `notes/HANDOFF.md`.
+
+### 8a. Soft JACK governor (`jack_penalty`, def 1.5 in exporter; SHIPPED, playtest-validated) — single-foot
+Accumulate `jack_exertion` over a same-panel single-run: on a repeat at gap `g` frames (≤ `jack_max_gap`=4),
+`jack_exertion += (frame_hz/g)/jack_free_rate` (`jack_free_rate`=5). PERSISTS across empty frames; RESETS to 0 on
+a different-panel single or a jump. Penalty to EXTEND: `pat_logits[single on jack_panel] -= jack_penalty ·
+(jack_exertion + (frame_hz/since_onset)/jack_free_rate)` — escalates with run length + rate; a 2-note jack is
+~free (accumulator starts at 0). Hard backstop `max_jack_run`=2 forbids a fresh single making a 3rd consecutive
+16th-adjacent (`since_onset==1`) same-panel press. DENSITY-PRESERVING (re-routes to alternation). "solved the
+unnatural jack problem" by ear. **GOTCHA:** it only watches the SINGLE on the jack panel → it nudges JUMPS up via
+softmax (suppressing one single redistributes mass), and on jumpy songs it DISPLACES jacks into jumps (the felt
+"consecutive jumps" were this, not intrinsic).
+
+### 8b. Per-foot FATIGUE governor (`fatigue_penalty`, opt-in default OFF) — two-foot biomechanical model
+Generalizes 8a (a jack = one foot stays & re-hits). State per chart: feet `f∈{L,R}` with `pos_f∈{L,D,U,R,∅}`
+(= body orientation), `E_f` (exertion at last-hit time), `t_f`; plus same-panel run `(sp_run, sp_panel)`.
+Per frame `t` (PAD_DIST = Euclidean on the cross `L=(-1,0) R=(1,0) U=(0,1) D=(0,-1)`):
+```
+Ẽ_f = E_f · exp(-(t-t_f)/τ)              τ = fatigue_tau·4 frames   (fatigue_tau=2 beats = half measure)
+r_f = frame_hz / max(t-t_f, 1)           per-foot press rate
+unit_f(p) = jack_weight  if pos_f==p (stay/jack)  else  travel_weight·d(pos_f,p)  (move)   [jack_weight 1.0 > travel_weight 0.6]
+cost_f(p) = r_f·unit_f(p)·1[pos_f≠∅]  +  fs_add·1[other foot holds p]   (footswitch)
+fs_add: runp=sp_run+1 → 0 (runp≤2, free) | footswitch_pen=4 (runp==3) | ∞ (runp≥4, hard cap)
+fatigue(P) = min over the ≤2 footings of  max(Ẽ_L+cost_L, Ẽ_R+cost_R)    (player foots it the EASY way; crossovers when cheaper, NO surcharge)
+pat_logits[P] -= ∞                                       if fatigue(P) ≥ fatigue_cap (30, unplayable)
+              -= fatigue_penalty · relu(fatigue(P) − fatigue_free)   else   (fatigue_free=12 set HIGH → BARRIER/ceiling, NOT a downward pull)
+```
+After the chosen pattern: used feet `pos_f←p, E_f←Ẽ_f+cost_f, t_f←t` (idle feet keep state = lazy decay); a
+footswitch LIFTS the displaced foot (both feet on one panel → the one that didn't act → ∅); `sp_run` +1 on
+same-panel single / reset on new-panel or jump / persist on empty frames. E is BPM-coupled (cost ∝ rate) → a
+fixed `fatigue_cap` auto-allows "fewer fast notes at higher BPM". Governor owns the CEILING; the difficulty/radar
+conditioning owns where in the playable zone (NO lower bound — would fight the difficulty knob). Governs jacks
+onto the human distribution (maxJackRun 6.2→4.1, real 3.5) with density held.
+
+### 8c. KNOWN GAPS — a probe must NOT assume these are modeled
+- **HOLDS-BLINDNESS:** fatigue reads the chosen pattern's panels, does NOT pin the held foot — a stream during a
+  hold is a ONE-foot grind but it's scored as a shared TWO-foot load (inverted). Pinning in the PATTERN penalty
+  REGRESSED (jacks explode non-monotonically — placement can't fix a COUNT problem). Fix = the unbuilt per-region
+  ONSET stamina governor.
+- **NO stamina / NO arc yet:** only fast decay (τ~2 beats); sustained-load density thinning + the audio-energy
+  "breathing ceiling" arc are SPECIFIED not built (Stage 2/3, HANDOFF.md). A hard per-note onset veto on
+  accumulated E was tried and CRASHED density (0.32→0.145) — stamina must modulate density COHERENTLY, not veto.
+- **BODY-TURN:** charges full per-foot travel for a coordinated rotation (ranking right, magnitude too high).
+- **MODEL UNDER-JUMPS** these songs (6% vs real 31%) — a separate density/air thread; do NOT calibrate the
+  governor to close that gap (the calib "dist-to-real" is dominated by it — the wrong target).
 
 ## THE ALIGNMENT CHECKLIST (run before any probe / eval / export)
 1. **Radar:** built via `manifold.build_target` (matches `--style`)? Or a deliberate, labeled `--radar` OOD
@@ -126,6 +178,9 @@ written against the pattern leaks because `hold_aware` remaps it). Any new expor
    own artifact (the eval used temp 1.0/radar=real; export uses temp 0.7).
 7. **Song affords the axis** (`--groove_select <axis>`) — you can't test chaos on a quarter-heavy song.
 8. **Sign/label check:** k0+ = jack not sweep; `null_motif` ≠ motif=0; `high` is a quantile not a raw value.
+9. **Foot governors (§8):** passing `bpm=` (no bpm → governor silent)? Measuring effect with same-panel /
+   jump-stream RUN-LENGTH vs REAL (not raw mass)? Not calibrating to "match real jump%" (the model under-jumps —
+   wrong target)? Remember fatigue is HOLDS-BLIND + has no stamina/arc yet.
 
 ## Catalog of REAL misalignments (each cost a wrong conclusion)
 - **mean-pin vs manifold conditional-fill** (this is why a chaos probe gave 16th 0.96 everywhere): set
