@@ -4,6 +4,12 @@ Map of `notes/`, organized by phase and thread. Findings notes (`*_findings.md`)
 results; plans/roadmaps hold forward design; `playtest_log.md` is the subjective play-feel ledger. Arcs are
 roughly chronological; the newest (motif → governor → release) is at the bottom.
 
+> **📚 NARRATIVE BRIEFS — start here for the claims audit.** [`briefs/`](briefs/README.md) holds one
+> quote-grounded narrative brief per arc, each with an **"audit hooks"** table tracing README claims to
+> verbatim evidence + a verb-precision check (measured / vouched / mapped). Built to replace the distrusted
+> first-pass `readme-0.1.0-audit.md` (now untracked). The README re-audit reconciles against the briefs;
+> the source notes below stay flat (the briefs are an overlay, so no `see notes/X` pointer broke).
+
 **CURRENT STATE (2026-06-26):** deployed model = **`gen_motif_full_fixed`** (42-dim highres, the H19 clean
 retrain). Two arcs shipped on top of it: (1) the **H15 motif arc** — steerable section-level candle/trill
 figure levers (jack↔sweep is the lone dead axis); (2) the **biomechanical governor** — per-note foot fatigue

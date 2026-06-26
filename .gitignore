@@ -5510,3 +5510,6 @@ outputs/phase3_staged/
 outputs/phase3_staged_v4/
 outputs/phase3_quotafree/
 outputs/phase3_quotafree_v4/
+
+# Personal release-prep audit scratch (distrusted v1; superseded by notes/briefs/ narrative briefs)
+readme-0.1.0-audit.md

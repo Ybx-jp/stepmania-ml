@@ -64,9 +64,13 @@ A release is **0.1.0-ready** when every box is checked.
       major subsystem the code contains).
 - [x] README's "Live demo / Sample charts" promises are honest (no "coming soon" that points
       at nothing the reader can reach).
-- [x] **README claims audit** published (`readme-0.1.0-audit.md`): every significant claim traced
-      to a `notes/` finding, source file, or test. Fixed a broken `--radar` example (→ `--style`),
-      recalibrated the song-structure + chaos framings, added the batch-of-4 KV-cache nuance.
+- [ ] **README claims audit** — REOPENED. The first-pass audit (`readme-0.1.0-audit.md`) was
+      distrusted (claims kept surfacing after it was declared done) and **untracked from git**
+      (now gitignored, kept locally as scratch). Replaced by a more thorough method: every `notes/`
+      arc is read in full and condensed into a **narrative brief** under `notes/briefs/<arc>/`,
+      each connecting the experiment arc with **direct quotes** from its source notes. The re-audit
+      reconciles the README against those briefs (one brief = one checklist unit). Briefs: DONE.
+      Re-audit against them: PENDING (next session, fresh context).
 
 ### Repo hygiene / packaging
 - [x] Git-tracking privacy audit: no secrets, no copyrighted data/audio/weights tracked. Untracked
