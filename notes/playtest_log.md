@@ -23,8 +23,9 @@ Star Trail, **japa1 = 突撃ガラスのニーソ姫**), `gen_motif_full_fixed` 
 `--radar` mean-pin, now disabled in the exporter). The manifold density coupling cranks every song to **0.400**
 (over its natural 0.32–0.39). Stamina is now **HOLD-AWARE** (free-foot one-foot-grind cost drives the thinning).
 Per-note governor identical (`fatigue_penalty=2, jack_penalty=0, max_jack_run=2`). Mandatory pad-playability ON;
-3/3 re-parse + installed `~/sm-generated/chaos_stamina_{OFF,g25,g12}`. Guide: `outputs/playtest_stamina_chaos/SET_GUIDE.md`.
-- OFF (0.400, over-cranked) → g25 (0.26–0.34, ≈ natural density) → g12 (0.17–0.25, over-relieved → Medium).
+4/4 re-parse + installed `~/sm-generated/chaos_stamina_{OFF,g50,g25,g12}`. Guide: `outputs/playtest_stamina_chaos/SET_GUIDE.md`.
+- OFF (0.400, over-cranked) → g50 (0.37–0.40, barely; 2/5 untouched, stays Hard) → g25 (0.26–0.34, ≈ natural density,
+  →Medium) → g12 (0.17–0.25, over-relieved → Medium).
 
 ### Why this set (carry-forward from the default-conditioned A/B)
 The default japa1 OFF-vs-g25 was ~imperceptible — correct (the default chart isn't over its ceiling). The user:
