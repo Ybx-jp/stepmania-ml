@@ -18,6 +18,14 @@ candle knob did nothing"). This skill is the exact mechanism so the harness matc
 probe must build its conditioning EXACTLY as `export_typed_samples.py` / `generate()` do, and measure with the
 SAME metric the conditioning targets.**
 
+**Pairs with the `experiment-design` skill — use both, in order.** This skill = the MATH (what the deployed path
+does); experiment-design = the DISCIPLINE for using it (attribution order HARNESS→DATA→MODEL; the pre-flight
+checklist; don't blame the model for a harness bug). The mapping: experiment-design Rule 2 (match deployment) and
+Rules 3–4 (in-distribution coherent inputs) are *satisfied* by replicating §1–§8 here; experiment-design's catalog
+of attribution errors is the failure half, this skill's "Catalog of REAL misalignments" is the mechanism half of
+the same bugs. Reach for experiment-design BEFORE a probe to pick a fair setup; reach for this to make the setup
+literally match the code.
+
 Model: `LayeredTypedChartGenerator` (`src/generation/typed_model.py`). Deliverable: `gen_motif_full` (42-dim
 highres audio; radar + continuous motif + discrete figure). Pipeline per frame: **onset head** (audio-driven,
 non-causal, which frames get a note) → **pattern head** (AR, which-panels, 15-way) → **type head** (per-panel
@@ -189,7 +197,10 @@ DULLS the model's own arc (it thins the dense climaxes); breathing fixes + ampli
 `stamina_breathe_win` 96. **MEASURE:** stamina = paired peak/rest density-window thinning (`diag_stamina.py`,
 ~20:1 at ceiling 25), holds = pinned vs non-pinned-dense frames (`diag_stamina_holds.py`), arc = corr(window-
 density, window-energy) + climax-verse Δ (`diag_stamina_arc.py`); the energy must be the SAME p_onset, smoothed+
-z-normed. NOT the density mean (redistribution). VALIDATED + playtest-confirmed ("a tasteful edit, not a rewrite").
+z-normed. NOT the density mean — the effect is REDISTRIBUTION (experiment-design Rule 1: a summary stat blind to
+the property; the mean held while the shape moved). Stamina is also the canonical POSITIVE case of experiment-
+design Rule 13 (global-quota anti-pattern): it's a per-frame emergent THRESHOLD, not an imposed density count —
+contrast `onset_phase_alloc` (§6, a flat quota that SMEARS). VALIDATED + playtest-confirmed ("a tasteful edit").
 
 ### 8d. KNOWN GAPS — a probe must NOT assume these are modeled
 - **HOLDS-BLINDNESS (per-NOTE only):** the PATTERN penalty (8b) still does NOT pin the held foot (pinning it there
@@ -228,3 +239,9 @@ z-normed. NOT the density mean (redistribution). VALIDATED + playtest-confirmed 
 - **eval-vs-export decode mismatch**: candle steered Δ+1.7/+3.9 at eval (temp 1.0, radar=real) but must be
   re-checked at export settings (temp 0.7, radar off) — characterize the EXPORTED charts to confirm it landed.
 - **knob-0 sign**: pushing k0 "+" toward "sweep" actually pushes toward JACK; sweep is the − pole (and weak).
+- **stale onset path (Stage-2)**: the onset decision is now made IN the AR loop (stamina gate), not a precomputed
+  `(B,T)` mask. A probe that rebuilds onset as `p > tau` and skips the per-frame stamina bump silently diverges
+  whenever stamina is on (exp-design Rule 2: match deployment). Replicate the §8c gate or set stamina off.
+- **wrong probe population**: the breathing-energy probe run on the default Hard-song order gave a noisy NON-answer;
+  re-run on the ACTUAL complaint songs (HSL/japa1, via `--match`) it flipped and REFUTED the percussion-bias
+  hypothesis (exp-design Rules 5+11: bin the real reference / the population that actually exhibits the effect).
