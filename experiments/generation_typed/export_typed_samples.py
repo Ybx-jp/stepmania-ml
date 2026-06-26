@@ -171,6 +171,12 @@ def typed_binary(t):
 
 def main():
     args = parse_args(); set_seed(args.seed)
+    if args.radar and not args.radar_ood:  # fail FAST (before the slow data load) -- see conditioning-mechanics §2
+        raise SystemExit(
+            "⛔ --radar is DISABLED: it mean-pins unset dims (others at the dataset mean) = OFF-MANIFOLD, which\n"
+            "   SMEARS at high single-dim values (a knob-shaped artifact, not the deployed knob). Use --style for\n"
+            "   the manifold conditional-fill (e.g. --style \"chaos=q0.99\"). If you truly want the raw off-manifold\n"
+            "   reach test, re-run with --radar_ood. See the conditioning-mechanics skill §2.")
     phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
                    if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
     phase_calib = (tuple(float(x) for x in args.onset_phase_calib.split(','))
@@ -245,13 +251,7 @@ def main():
     # groove-radar target: base at the dataset mean, override the requested dims
     RADAR_DIMS = ['stream', 'voltage', 'air', 'freeze', 'chaos']
     radar_vec = None
-    if args.radar and not args.radar_ood:
-        raise SystemExit(
-            "⛔ --radar is DISABLED: it mean-pins unset dims (others at the dataset mean) = OFF-MANIFOLD, which\n"
-            "   SMEARS at high single-dim values (a knob-shaped artifact, not the deployed knob). Use --style for\n"
-            "   the manifold conditional-fill (e.g. --style \"chaos=q0.99\"). If you truly want the raw off-manifold\n"
-            "   reach test, re-run with --radar_ood. See the conditioning-mechanics skill §2.")
-    if args.radar:  # only reached with --radar_ood (deliberate OOD test)
+    if args.radar:  # guarded at main() entry -> only reached with --radar_ood (deliberate off-manifold reach test)
         radars = [m['groove_radar'].to_vector() for m in ds.valid_samples if 'groove_radar' in m]
         base = np.mean(radars, 0).astype(np.float32) if radars else np.full(5, 0.5, np.float32)
         for tok in args.radar.split(','):
