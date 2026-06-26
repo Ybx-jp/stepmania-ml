@@ -15,6 +15,41 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-25 — ⏳ PENDING: STAMINA under AGGRESSIVE conditioning + HOLD-AWARE (the "noticeable test")
+### What was generated (not yet played)
+Three sets, **same 5 chaos-Hard songs** (`--groove_select chaos`: High School Love, NIGHT IN MOTION, IN BETWEEN,
+Star Trail, **japa1 = 突撃ガラスのニーソ姫**), `gen_motif_full_fixed` highres, seed 42, conditioned with the
+`chaos2_manifold_q99` recipe **`--style "chaos=q0.99" --guidance 3.0`** (MANIFOLD path — NOT the off-manifold
+`--radar` mean-pin, now disabled in the exporter). The manifold density coupling cranks every song to **0.400**
+(over its natural 0.32–0.39). Stamina is now **HOLD-AWARE** (free-foot one-foot-grind cost drives the thinning).
+Per-note governor identical (`fatigue_penalty=2, jack_penalty=0, max_jack_run=2`). Mandatory pad-playability ON;
+3/3 re-parse + installed `~/sm-generated/chaos_stamina_{OFF,g25,g12}`. Guide: `outputs/playtest_stamina_chaos/SET_GUIDE.md`.
+- OFF (0.400, over-cranked) → g25 (0.26–0.34, ≈ natural density) → g12 (0.17–0.25, over-relieved → Medium).
+
+### Why this set (carry-forward from the default-conditioned A/B)
+The default japa1 OFF-vs-g25 was ~imperceptible — correct (the default chart isn't over its ceiling). The user:
+"crank the conditioning to what chaos2_manifold_q99 used and see the effect there." Under chaos the OFF chart is
+genuinely over-cranked (0.400), so stamina engages HARD (g25 thins 16–34% here vs ~12% on default) and pulls it
+back toward the song's natural density. This is also the venue where hold-grinds appear (the brutal "jack streams
+during holds" was under aggressive trill conditioning).
+
+### What to evaluate
+- **Relief of the over-crank (the core Q):** does g25 feel like the over-dense chaos chart pulled back to "what the
+  song wants" (relief, groove intact), while OFF feels overwhelming and g12 too sparse?
+- **japa1 holds (hold-aware test):** watch the hold sections — do they grind under OFF, and does g25 ease them MORE
+  than the rest? (Offline: the model's holds aren't actually grinds [pinned frames only 0.138 dense], so this may be
+  subtle — ears decide. diag in foot_fatigue_design.md "HOLD-AWARE".)
+- **Mirroring side-effect (watch):** heavier thinning here may make the re-footed/mirrored local sequences (you
+  spotted these at g25 default) more visible — does it ever read as incoherent? (handle: H-stamina-mirror)
+
+### Action / next
+- [ ] Play japa1 + High School Love OFF→g25→g12; log relief-vs-overwhelming verdict + whether g25 ≈ "right".
+- [ ] Note any hold-section easing on japa1 (the hold-aware payoff, if any).
+- [ ] If g25 lands as the over-crank relief → that's the headline use (stamina as an over-conditioning safety valve);
+  feeds the Stage-3 breathing-ceiling arc.
+
+---
+
 ## 2026-06-25 — 🔬 PARTIAL: Stage-2 STAMINA density governor A/B (does thinning feel like relief?)
 ### Raw feedback (japa1, OFF vs g25)
 > "they didn't feel majorly different — which is good! the off was already at an intensity that I wouldn't want
