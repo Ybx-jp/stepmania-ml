@@ -154,6 +154,17 @@ per-foot fatigue model as the difficulty currency that should follow the song. A
   **Holds-blindness remains the top open problem for this model** — needs a different mechanism (e.g. choose the
   holding foot to keep the other free; or model the hold cost without forcing all assignment to one foot).
 
+## ⚠️ CORRECTION (2026-06-25, user) — the "reach / affordability veto" below was an INVENTED reframe
+The user's ACTUAL design was two sentences: **make the onset head hold-aware, and track the effort PER FOOT.**
+i.e. during a hold one foot is pinned, so the free foot carries a one-foot grind, and THAT per-foot effort should
+drive the onset thinning. The "LOCAL anaerobic reach/affordability veto — can THIS transition physically happen"
+framing in the spec below was NOT the user's design; a prior session invented it, built a hard veto on ACCUMULATED
+fatigue (`decayE + cost ≥ cap`), watched it hole-punch density 0.320→0.145, and then wrongly concluded "hard veto
+is the wrong tool, the local layer is near-vacuous, skip it" — refuting a strawman it had invented. The real design
+was never a reach veto. It is now BUILT correctly as the HOLD-AWARE E_slow increment (see "STAGE 2" → hold-aware
+result): during a hold, charge the FREE foot's single-foot grind cost to the stamina accumulator. Read the spec
+below as historical context, not as the design.
+
 ## TWO-TIMESCALE ONSET GOVERNOR (spec, 2026-06-25 — user-designed) — the holds-blindness + arc resolution
 ROOT CAUSE of the hold-pinning regression (user diagnosed): the PATTERN penalty can only redistribute load, not
 remove it. During a hold (one foot pinned) a one-foot WIDE stream costs MORE than a jack (travel_weight·2 >
@@ -221,16 +232,26 @@ compose. This is the per-region density relief valve done RIGHT — coherent thi
 spots, NOT the Stage-1 global hole-punch (which crashed density 0.320→0.145 everywhere). Knobs in `generate`:
 `stamina_ceiling` (None=off), `stamina_tau=8`, `stamina_scale=15`, `stamina_max_bump=0.45`.
 
-**HOLDS-SPECIFIC TEST → DENSITY-GENERAL, NOT HOLDS-AWARE (diag_stamina_holds.py, 12 songs, ceiling=25).**
-Controlled for density (dense windows only, median split): stamina thins HOLD-open dense windows (Δ -0.021) at
-essentially the SAME rate as equally-dense NO-HOLD windows (Δ -0.019). So stamina is a per-region DENSITY governor
-that relieves hold sections only because they're dense, NOT because it knows about the pin -- expected, since the
-foot model does not pin the held foot (hold-pinning was reverted). The original holds-blindness motivation is NOT
-specifically met; it still needs PIN-AWARE footing cost (hold-pinning done right). BUT the pathology is barely live:
-maxJackRun-in-holds is only 3 OFF (already human-level; no_cross_during_hold + the per-note governor handle in-hold
-jacking), so there's little hold-grind to relieve in the model's actual output. during-hold press density drops
-modestly 0.138->0.123 from the general thinning. ⇒ ship Stage 2 as the validated GENERAL density relief valve; the
-holds-specific fix is a separate, lower-priority open thread (pin-aware E_slow).
+**HOLD-AWARE E_slow — BUILT (2026-06-25, the user's actual design).** During an open hold the held foot is pinned,
+so the FREE foot does every note (a one-foot grind). The unpinned foot model under-counted this by alternating feet
+→ a hold-stream looked no harder than an alternating stream. Now, during a hold, E_slow is fed the FREE foot's
+single-foot grind cost: `rate_free × unit_free`, rate_free = `frame_hz / since_onset` (one foot every onset),
+unit_free = jack_weight (same panel / first note) or `travel_weight × PAD_DIST[free_last, pp]`, in the same
+exertion units as the normal increment. So a sustained one-foot stream during a hold raises stamina ~2× faster than
+an equally-dense alternating stream. Placement is UNTOUCHED (this only re-attributes the COST that drives the onset
+gate → no jack explosion, unlike the reverted pin-in-pattern-penalty).
+
+**RESULT — correct, but the pathology is ABSENT under default conditioning (diag_stamina_holds.py frame-level
+test, 12 songs).** The clean test = press-density thinning on PINNED grind-frames vs matched NON-pinned dense
+frames. At ceiling 25: pinned 0.138→0.127 (−7.2% rel) vs non-pinned-dense 0.311→0.292 (−6.1% rel); at ceiling 12:
+pinned −16.7% rel vs non-pinned −18.0% rel. So pinned frames thin at ~the SAME relative rate as non-pinned dense —
+no preferential hold relief. The reason is in the baseline: pinned frames are only **0.138** dense — i.e. during a
+hold the free foot presses on just ~14% of frames. **The model's default holds are NOT grinds** (consistent with
+maxJackRun-in-holds = 3, human-level), so a correct hold-aware cost correctly has almost nothing to bite on. The
+brutal "jack streams during holds" the user felt was under AGGRESSIVE conditioning (the trill +3 g2 playtest), so
+that — not gentle defaults — is the venue to demonstrate the hold-aware cost. CARRY-FORWARD: stamina A/B under
+chaos2_manifold_q99 conditioning (chaos=0.47 g3.0). The mechanism stays in (no-op when there's no grind, bites when
+there is).
 
 **Still UNTESTED:** (a) playtest — does the GENERAL thinning FEEL like a relief valve or like dropped notes?
 (b) Stage 3 (breathing ceiling = the arc) builds directly on this.

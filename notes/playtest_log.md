@@ -15,7 +15,33 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
-## 2026-06-25 — ⏳ PENDING: Stage-2 STAMINA density governor A/B (does thinning feel like relief?)
+## 2026-06-25 — 🔬 PARTIAL: Stage-2 STAMINA density governor A/B (does thinning feel like relief?)
+### Raw feedback (japa1, OFF vs g25)
+> "they didn't feel majorly different — which is good! the off was already at an intensity that I wouldn't want
+> majorly curbed. some notes must have been dropped, because I noticed a few local sequences were **mirrored**,
+> which is likely an artifact of the onset head thinning sections and the pattern head reallocating note selection.
+> a more noticeable test would be to crank up the conditioning to what `chaos2_manifold_q99` used and see the
+> effect there."
+
+### Commentary / hypothesis
+- **H-stamina (gentle = safe, as designed):** g25 on an already-good chart was ~imperceptible → the CEILING did its
+  job (it doesn't curb a chart that isn't over its workload ceiling). This is the no-op-below-ceiling invariant
+  *felt*, not just measured. Confirms the offline finding (peak −0.039 / rest −0.002): gentle stamina preserves
+  charts you'd want preserved.
+- **Mirroring side-effect (new, user-spotted, real):** dropping an onset shifts the decoder context (`prev_emb`),
+  so the **pattern head re-derives placement** for the remaining notes from the new context → a thinned run can come
+  out mirrored/re-footed. Benign (mandatory playability holds) but a genuine architectural consequence of the
+  onset/pattern factorization: onset and pattern are separate heads, and the pattern head wasn't trained on
+  stamina-thinned onset streams (mild train/decode mismatch). Handle = **H-stamina-mirror**: watch whether it ever
+  reads as incoherent under heavier thinning; if so, a fix is to keep the pattern head's context stable across a
+  dropped onset (e.g. don't advance `prev_emb` on a suppressed frame — though the current code already emits an
+  empty state there, so this is subtle).
+- **Carry-forward = the user's instinct, validated by the holds diag:** under DEFAULT conditioning the model isn't
+  over-cranked (pinned grind-frames only 0.138 dense; maxJackRun-in-holds=3), so there's little for stamina (or its
+  new hold-aware refinement) to bite on. The brutal "jack streams during holds" was the **trill +3 g2** set. So the
+  decisive test is **aggressive conditioning** — `chaos2_manifold_q99` (radar chaos=0.47 g3.0). See the new pending
+  entry below.
+
 ### What was generated (not yet played)
 Three sets, **same 5 dense Hard songs** (groove-selected on `stream`: High School Love, nightbird lost wing,
 AFRONOVA, 突撃ガラスのニーソ姫 [= **japa1**], IN BETWEEN), `gen_motif_full_fixed` highres, seed 42, identical except

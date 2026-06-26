@@ -119,9 +119,18 @@ def parse_args():
                    help='H15 discrete figure-token conditioning (gen_motif_full), e.g. "sweep" -> a constant '
                         f'per-section figure schedule. One of {[c for c in FIGURE_CLASSES if c != "sparse"]}.')
     p.add_argument('--prefer', type=str, default=None, help='panel preference, e.g. "U,R" to favor Up+Right')
+    # ⛔ --radar is DISABLED by default. It MEAN-PINS unset dims (others at the dataset mean), which is OFF-MANIFOLD:
+    # the radar dims are correlated (stream/voltage/air/chaos r 0.71-0.92), so a single-dim pin at high values
+    # SMEARS (chaos=0.9 g3 -> 16th-share 0.98, quarter backbone ~0) -- a knob-shaped artifact, NOT the deployed
+    # knob. The CORRECT path is --style (RadarManifold conditional-fill + projection; coupled dims move together,
+    # backbone preserved). See the conditioning-mechanics skill §2 + its misalignment catalog ("mean-pin vs
+    # manifold conditional-fill"). Only --radar_ood (a deliberate, labeled "see the raw OOD reach" test) re-enables it.
     p.add_argument('--radar', type=str, default=None,
-                   help='groove-radar target as dim=val list over [stream,voltage,air,freeze,chaos], '
-                        'e.g. "chaos=0.9,air=0.85"; unset dims default to the dataset mean. Use with --guidance to amplify.')
+                   help='DISABLED (mean-pin = OFF-MANIFOLD smear, not the real knob). Use --style for the manifold '
+                        'path. For a deliberate OOD reach test, pass --radar_ood too. See conditioning-mechanics skill §2.')
+    p.add_argument('--radar_ood', action='store_true',
+                   help='acknowledge that --radar is an off-manifold mean-pin (OOD smear) and run it anyway '
+                        '(deliberate raw-reach test only). Without this, --radar errors out.')
     p.add_argument('--match_radar', action='store_true',
                    help="condition each song's generation on its OWN source-chart radar (with --guidance) so "
                         "the output matches the original's groove profile -- avoids profile drift when you "
@@ -236,7 +245,13 @@ def main():
     # groove-radar target: base at the dataset mean, override the requested dims
     RADAR_DIMS = ['stream', 'voltage', 'air', 'freeze', 'chaos']
     radar_vec = None
-    if args.radar:
+    if args.radar and not args.radar_ood:
+        raise SystemExit(
+            "⛔ --radar is DISABLED: it mean-pins unset dims (others at the dataset mean) = OFF-MANIFOLD, which\n"
+            "   SMEARS at high single-dim values (a knob-shaped artifact, not the deployed knob). Use --style for\n"
+            "   the manifold conditional-fill (e.g. --style \"chaos=q0.99\"). If you truly want the raw off-manifold\n"
+            "   reach test, re-run with --radar_ood. See the conditioning-mechanics skill §2.")
+    if args.radar:  # only reached with --radar_ood (deliberate OOD test)
         radars = [m['groove_radar'].to_vector() for m in ds.valid_samples if 'groove_radar' in m]
         base = np.mean(radars, 0).astype(np.float32) if radars else np.full(5, 0.5, np.float32)
         for tok in args.radar.split(','):
