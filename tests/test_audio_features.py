@@ -59,7 +59,9 @@ def test_default_config_unchanged_23dim():
 
 def test_audio_feature_alignment():
     """Test audio features align with chart and have correct properties"""
-    parser = StepManiaParser()
+    # Relax the song-length gate so the tiny (~4s) fixture chart isn't filtered out;
+    # the default window (75-130s) is for real songs, not the unit-test fixture.
+    parser = StepManiaParser(min_song_length=1, max_song_length=100000)
     extractor = AudioFeatureExtractor()
 
     # Use same fixture as parser test
@@ -94,7 +96,10 @@ def test_audio_feature_alignment():
         f"Audio/chart alignment mismatch: {audio_tensor.shape[0]} != {chart_tensor.shape[0]}"
 
     # Assert: MFCC dim is exactly 13
-    assert audio_tensor.shape[1] == 13, f"Expected 13 MFCC features, got {audio_tensor.shape[1]}"
+    # Canonical audio feature dim is 23 (= MFCC 13 + onset_env 1 + onset_rate 1 + tempo 1
+    # + spectral_contrast 7), per ExperimentConfig.audio_features_dim. Optional Stage-1
+    # musical features (chroma/perc/harm/metric-phase) append after index 22 when enabled.
+    assert audio_tensor.shape[1] == 23, f"Expected 23 audio features, got {audio_tensor.shape[1]}"
 
     # Assert: no NaNs or infs
     assert not np.any(np.isnan(audio_tensor)), "Audio features contain NaN values"

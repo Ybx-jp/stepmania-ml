@@ -9,6 +9,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from torch.utils.data import DataLoader
 from src.data.dataset import StepManiaDataset
+from src.data.stepmania_parser import StepManiaParser
+
+# The default parser filters charts shorter than 75s (a real-song gate); the unit-test
+# fixture is ~4s, so inject a parser with a relaxed window or the dataset comes up empty.
+def _fixture_parser():
+    return StepManiaParser(min_song_length=1, max_song_length=100000)
 
 def test_dataset_sample_contract():
     """Test dataset[0] returns correct contract"""
@@ -29,6 +35,7 @@ def test_dataset_sample_contract():
     dataset = StepManiaDataset(
         chart_files=[chart_path],
         audio_dir=audio_dir,
+        parser=_fixture_parser(),
         max_sequence_length=1200
     )
 
@@ -37,9 +44,12 @@ def test_dataset_sample_contract():
     # Get sample
     sample = dataset[0]
 
-    # Assert: keys exist
+    # Assert: the required keys exist. The contract is "at least these"; the dataset also
+    # carries additive metadata (e.g. groove_radar, difficulty_value) that downstream code
+    # ignores when unused, so use a subset check rather than exact equality.
     required_keys = {'chart', 'audio', 'mask', 'difficulty', 'length'}
-    assert set(sample.keys()) == required_keys, f"Expected keys {required_keys}, got {set(sample.keys())}"
+    assert required_keys.issubset(sample.keys()), \
+        f"Missing required keys {required_keys - set(sample.keys())}; got {set(sample.keys())}"
 
     # Assert: dtypes are correct
     assert sample['chart'].dtype == torch.float32, f"chart dtype: expected float32, got {sample['chart'].dtype}"
@@ -73,6 +83,7 @@ def test_dataloader_batch():
     dataset = StepManiaDataset(
         chart_files=[chart_path],
         audio_dir=audio_dir,
+        parser=_fixture_parser(),
         max_sequence_length=1200
     )
 
@@ -83,6 +94,6 @@ def test_dataloader_batch():
 
     # Assert: batch shapes are correct
     assert batch['chart'].shape == (1, 1200, 4), f"Chart batch shape: expected (1, 1200, 4), got {batch['chart'].shape}"
-    assert batch['audio'].shape == (1, 1200, 13), f"Audio batch shape: expected (1, 1200, 13), got {batch['audio'].shape}"
+    assert batch['audio'].shape == (1, 1200, 23), f"Audio batch shape: expected (1, 1200, 23), got {batch['audio'].shape}"
     assert batch['mask'].shape == (1, 1200), f"Mask batch shape: expected (1, 1200), got {batch['mask'].shape}"
     assert batch['difficulty'].shape == (1,), f"Difficulty batch shape: expected (1,), got {batch['difficulty'].shape}"
