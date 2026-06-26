@@ -3,7 +3,7 @@
 Fit + persist the H15 MotifBasis (named radar-orthogonal motif-style knobs) to cache/motif_basis.npz, and
 print the knobs. The motif analog of diag_radar_manifold.py's manifold fit. No training.
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python \
+  python \
       experiments/generation_typed/fit_motif_basis.py [--K 12]
 """
 import warnings, os

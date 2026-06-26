@@ -16,7 +16,7 @@ next-panel predictability of the SECTION vector over the GLOBAL chart vector (th
   excess = acc(section_vec -> panel_at_onset_in_section) - acc(global_vec -> same panel).
 Small section -> higher excess -> leakier. Pick the SMALLEST section that VARIES (A) yet has LOW excess (B).
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python \
+  python \
       experiments/generation_typed/diag_local_motif_gate.py [--sizes 16 32 64 128] [--charts 600]
 """
 import warnings, os

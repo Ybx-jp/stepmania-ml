@@ -26,7 +26,7 @@ Two parts:
         more motif-similar than random, matching the radar does NOT give you the motifs -> the vocabulary is a
         FREE axis -> a genuinely distinct lever.
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python \
+  python \
       experiments/generation_typed/diag_motif_gate.py [--topk 200] [--folds 5]
 """
 import warnings, os

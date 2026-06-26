@@ -7,7 +7,7 @@ extremes with their actually-most-used motifs. If knob 'jack<->sweep' high chart
 low charts sweep-heavy, the knob is a meaningful, steerable axis -> safe to condition on. (Grounds the basis
 in artifacts; experiment-design Rule 8.)
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python \
+  python \
       experiments/generation_typed/sanity_motif_knobs.py [--knobs 0 1 3 10]
 """
 import warnings, os

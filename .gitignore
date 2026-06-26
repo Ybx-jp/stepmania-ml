@@ -57,6 +57,7 @@ checkpoints/*
 outputs/charts/*
 outputs/figures/*
 outputs/logs/*
+outputs/**/*.log
 !outputs/charts/.gitkeep
 !outputs/figures/.gitkeep
 !outputs/logs/.gitkeep
