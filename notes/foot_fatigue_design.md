@@ -154,6 +154,47 @@ per-foot fatigue model as the difficulty currency that should follow the song. A
   **Holds-blindness remains the top open problem for this model** — needs a different mechanism (e.g. choose the
   holding foot to keep the other free; or model the hold cost without forcing all assignment to one foot).
 
+## TWO-TIMESCALE ONSET GOVERNOR (spec, 2026-06-25 — user-designed) — the holds-blindness + arc resolution
+ROOT CAUSE of the hold-pinning regression (user diagnosed): the PATTERN penalty can only redistribute load, not
+remove it. During a hold (one foot pinned) a one-foot WIDE stream costs MORE than a jack (travel_weight·2 >
+jack_weight), so minimizing E picks the JACK — a stronger penalty picks it harder (the non-monotonicity). The
+real lever for "this is too much to play" is the ONSET head (whether a note exists), not placement. So the same
+exertion model must govern ONSET too — at TWO timescales (a greedy per-frame onset gate would punch incoherent
+holes; "awkward note fallout"):
+- **LOCAL / anaerobic (fast decay ~sub-measure):** can THIS transition physically happen? Foot speed / reach. A
+  surgical HARD veto on the impossible note. The held-foot pin lives HERE (one foot ⇒ some notes unreachable).
+- **SEMI-GLOBAL / aerobic STAMINA (slow decay ~phrase, trailing/exponential = a soft sliding window):** can you
+  SUSTAIN this? When high, it raises onset tau over the UPCOMING stretch → COHERENT density thinning (onset head
+  re-selects its most-salient notes), not hole-punching. AR-causal: trailing window thins forward = correct (you
+  tire from past work). This IS the ARC: tie the stamina CEILING to AUDIO ENERGY/NOVELTY (user-chosen shape) →
+  hard sections cluster at the climax, rest in verses. Arc emerges from a BREATHING ceiling (governor owns the
+  ceiling; the breathing gives the shape) — unifies holds-blindness + jump-starving + structural flatness (H5).
+
+### Architectural note
+Onsets are PRECOMPUTED as a (B,T) mask before the pattern loop (typed_model.generate ~L480), so foot state isn't
+available at onset-decision time. ⇒ the onset gate is an in-loop AFFORDABILITY VETO: with the held foot pinned in
+the COST, if the cheapest footing's fatigue ≥ fatigue_cap (no affordable placement), drop the note
+(`on_eff = onset[:,t] & affordable`). Hold-pinning moves HERE (removes the unplayable note) instead of the
+pattern penalty (where it shuffled to jacks). The pattern penalty then foots only the affordable remainder → no
+forced jacks. (This is why pinning alone regressed: without the onset gate, the pattern penalty was forced to
+foot an unplayable stream and picked jacks.)
+
+### STAGED BUILD (one change at a time)
+1. ~~LOCAL affordability veto~~ **ATTEMPTED + REVERTED (2026-06-25).** Built it as a hard onset veto on
+   `min_aff = decayE + cost ≥ cap` → DENSITY CRASHED 0.320→0.145 (>half the notes removed). This is EXACTLY the
+   user's predicted "greedy accumulator → awkward note fallout": vetoing on ACCUMULATED fatigue punches holes
+   through every dense section, not just impossible spots. LESSON (the user called it): a **hard per-note veto is
+   the wrong tool for the stamina dimension.** Genuine INSTANTANEOUS impossibility is rare and mostly already
+   handled by `no_jump_during_hold`; the holds problem is SUSTAINED one-foot load = STAMINA, which must modulate
+   DENSITY coherently, never veto single notes. ⇒ Stage 1 (instantaneous hard veto) is near-vacuous; skip it.
+2. **STAMINA → COHERENT tau MODULATION (the real fix, next).** Trailing stamina accumulator E_slow (long τ),
+   hold-pinning feeds IT (sustained one-foot work raises stamina). When E_slow high → RAISE onset tau over the
+   upcoming stretch → onset head re-selects its most-salient notes (coherent thinning, NOT hole-punching). This
+   is the holds fix done right + avoids the fallout.
+3. **BREATHING ceiling**: stamina ceiling tied to audio energy/novelty → the ARC.
+Revised plan: the substance is in 2+3 (stamina tau-modulation + breathing ceiling). Foot model + barrier penalty
+(jacks/jumps) stay as the per-note governor; stamina is the per-region density governor.
+
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).
 - `tau` default (half vs full measure) — expose configurable.
