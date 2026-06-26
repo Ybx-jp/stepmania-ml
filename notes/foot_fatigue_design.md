@@ -221,9 +221,19 @@ compose. This is the per-region density relief valve done RIGHT — coherent thi
 spots, NOT the Stage-1 global hole-punch (which crashed density 0.320→0.145 everywhere). Knobs in `generate`:
 `stamina_ceiling` (None=off), `stamina_tau=8`, `stamina_scale=15`, `stamina_max_bump=0.45`.
 
-**Still UNTESTED:** (a) playtest — does the thinning FEEL like a relief valve or like dropped notes? (b) does
-hold-pinning route enough load into E_slow to fix holds-blindness (the original motivation)? — needs a holds-heavy
-diag. (c) Stage 3 (breathing ceiling = the arc) builds directly on this.
+**HOLDS-SPECIFIC TEST → DENSITY-GENERAL, NOT HOLDS-AWARE (diag_stamina_holds.py, 12 songs, ceiling=25).**
+Controlled for density (dense windows only, median split): stamina thins HOLD-open dense windows (Δ -0.021) at
+essentially the SAME rate as equally-dense NO-HOLD windows (Δ -0.019). So stamina is a per-region DENSITY governor
+that relieves hold sections only because they're dense, NOT because it knows about the pin -- expected, since the
+foot model does not pin the held foot (hold-pinning was reverted). The original holds-blindness motivation is NOT
+specifically met; it still needs PIN-AWARE footing cost (hold-pinning done right). BUT the pathology is barely live:
+maxJackRun-in-holds is only 3 OFF (already human-level; no_cross_during_hold + the per-note governor handle in-hold
+jacking), so there's little hold-grind to relieve in the model's actual output. during-hold press density drops
+modestly 0.138->0.123 from the general thinning. ⇒ ship Stage 2 as the validated GENERAL density relief valve; the
+holds-specific fix is a separate, lower-priority open thread (pin-aware E_slow).
+
+**Still UNTESTED:** (a) playtest — does the GENERAL thinning FEEL like a relief valve or like dropped notes?
+(b) Stage 3 (breathing ceiling = the arc) builds directly on this.
 
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).
