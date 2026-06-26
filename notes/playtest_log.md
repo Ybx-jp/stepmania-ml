@@ -15,6 +15,33 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-25 — ⏳ PENDING: Stage-2 STAMINA density governor A/B (does thinning feel like relief?)
+### What was generated (not yet played)
+Three sets, **same 5 dense Hard songs** (groove-selected on `stream`: High School Love, nightbird lost wing,
+AFRONOVA, 突撃ガラスのニーソ姫, IN BETWEEN), `gen_motif_full_fixed` highres, seed 42, identical except `stamina_ceiling`.
+Per-note governor identical across all (`fatigue_penalty=2, jack_penalty=0, max_jack_run=2`); only the new Stage-2
+STAMINA layer differs. Mandatory pad-playability ON; 3/3 sets re-parse + installed to `~/sm-generated/`.
+Guide: `outputs/playtest_stamina/SET_GUIDE.md`. Offline validation in `notes/foot_fatigue_design.md` "STAGE 2".
+- `ab_stamina_OFF` (baseline) → `ab_stamina_g25` (validated gentle, ~10–13% thinner, ~Hard) → `ab_stamina_g12`
+  (strong, ~33% thinner, →Medium). Per-song densities in the guide.
+
+### What to evaluate (the FEEL the metrics can't see)
+- **H-stamina (the core question):** play OFF→g25→g12 on the SAME song. Does each step feel like the chart
+  *easing where it was hardest* (relief valve = success), or like notes *missing from a phrase* (dropped notes =
+  fail)? The mechanism sheds the LEAST-salient onsets when E_slow is high, so it SHOULD feel like the busy
+  stretches breathing, not holes.
+- **Selectivity caveat:** these `stream`-selected songs are uniformly dense → E_slow stays high → relief may read
+  as global easing rather than "only the hard spots." The per-region selectivity (diag-proven ~20:1) would show
+  best on a VARIED-density song (dense climax + sparse verses). If g25 feels good-but-uniform, that's the next set.
+- **Calibration:** is gentle (25) enough to feel, or is 12 needed? Gates the shipped default ceiling.
+- **NOT a holds test** — diag_stamina_holds.py confirmed stamina is density-general, not holds-aware.
+
+### Action / next
+- [ ] Play OFF vs g25 vs g12 same-song (AFRONOVA = cleanest, no holds; High School Love / IN BETWEEN = biggest swing).
+- [ ] Log relief-vs-dropped verdict + the ceiling that feels right → sets the exporter default.
+- [ ] If promising but too uniform → generate a varied-density set to feel the per-region selectivity.
+- [ ] If the feel lands → proceed to Stage 3 (breathing ceiling = the difficulty arc), which builds on this.
+
 ## 2026-06-25 — ⏳ PENDING: trill A/B — deployed vs clean-retrained model (the H19 retrain feel gate)
 ### What was generated (not yet played)
 Two sets, `~/sm-generated/ab_trill_A_old` vs `ab_trill_B_fixed`, **identical songs** (the h15 set: Deja loin,

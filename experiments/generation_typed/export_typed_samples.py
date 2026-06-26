@@ -104,6 +104,13 @@ def parse_args():
                         'Set with --jack_penalty 0 to REPLACE the jack governor. notes/foot_fatigue_design.md')
     p.add_argument('--fatigue_free', type=float, default=6.0,
                    help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams gated)')
+    p.add_argument('--stamina_ceiling', type=float, default=None,
+                   help='STAGE-2 STAMINA governor (per-region DENSITY): a slow exertion accumulator thins UPCOMING '
+                        'onset density only where sustained workload is high (a CEILING, never a global dent). Needs '
+                        '--fatigue_penalty (the foot model supplies the cost). ~25 = validated gentle relief; lower '
+                        '= more thinning. None = off. notes/foot_fatigue_design.md "STAGE 2".')
+    p.add_argument('--stamina_tau', type=float, default=8.0, help='stamina slow-decay (beats, ~several measures)')
+    p.add_argument('--stamina_scale', type=float, default=15.0, help='excess-workload scale for the tau bump (tanh)')
     p.add_argument('--motif', type=str, default=None,
                    help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
                         '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
@@ -361,6 +368,8 @@ def main():
                           jack_penalty=(args.jack_penalty if args.jack_penalty and args.jack_penalty > 0 else None),
                           fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
                           fatigue_free=args.fatigue_free,
+                          stamina_ceiling=args.stamina_ceiling,  # Stage-2 per-region density relief (needs fatigue_penalty)
+                          stamina_tau=args.stamina_tau, stamina_scale=args.stamina_scale,
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
