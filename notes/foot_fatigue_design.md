@@ -202,7 +202,8 @@ foot an unplayable stream and picked jacks.)
    stamina accumulator E_slow (long τ), fed the REALIZED per-note footing cost; when E_slow > ceiling, RAISE the
    onset tau over the upcoming stretch → onset head sheds its LEAST-salient notes (coherent thinning, NOT
    hole-punching). See "STAGE 2 — BUILT + VALIDATED" section below.
-3. **BREATHING ceiling**: stamina ceiling tied to audio energy/novelty → the ARC. **(Stage 3 — NEXT, unbuilt.)**
+3. **BREATHING ceiling**: stamina ceiling tied to audio energy/novelty → the ARC. **(Stage 3 — BUILT + VALIDATED
+   2026-06-25; see "STAGE 3 — THE ARC" below.)**
 Revised plan: the substance is in 2+3 (stamina tau-modulation + breathing ceiling). Foot model + barrier penalty
 (jacks/jumps) stay as the per-note governor; stamina is the per-region density governor.
 
@@ -253,8 +254,28 @@ that — not gentle defaults — is the venue to demonstrate the hold-aware cost
 chaos2_manifold_q99 conditioning (chaos=0.47 g3.0). The mechanism stays in (no-op when there's no grind, bites when
 there is).
 
-**Still UNTESTED:** (a) playtest — does the GENERAL thinning FEEL like a relief valve or like dropped notes?
-(b) Stage 3 (breathing ceiling = the arc) builds directly on this.
+**PLAYTEST ✅ WIN (2026-06-25):** under aggressive chaos conditioning (--style chaos=q0.99 g3.0, density cranked
+to 0.400), g50 on japa1 was "much more playable than off without being much different — a TASTEFUL EDIT, not a
+rewrite"; HSL "felt the same"; "the stamina and fatigue system is DEFINITELY an improvement." H-stamina confirmed:
+the onset thinning reads as RELIEF, not dropped notes, at the gentle end. The default-conditioned A/B was
+imperceptible (correct — the chart wasn't over its ceiling); the relief is visible/felt under over-conditioning.
+
+## STAGE 3 — THE ARC (breathing ceiling) — BUILT + VALIDATED (2026-06-25)
+The `stamina_ceiling` becomes a per-frame schedule that BREATHES with a phrase-smoothed audio-energy envelope (the
+onset head's own `p_onset`, box-smoothed over `stamina_breathe_win`~96 frames, z-normalized per song):
+`eff_ceiling[t] = stamina_ceiling · (1 + stamina_breathe · z_energy[t])`. HIGH at climaxes (ceiling up → stamina
+doesn't thin → the dense spicy notes survive), LOW in verses (ceiling down → thin → rest). Ceiling-only, NO lower
+bound (never fights radar/difficulty). Knobs: `stamina_breathe` (0=off, ~1.2 validated), `stamina_breathe_win`.
+
+**KEY FINDING (diag_stamina_arc.py, 10 Hard songs, plain generation; arc = corr(window-density, window-energy) +
+climax-vs-verse density Δ):** the model is NOT structurally flat in this metric — its onset head already tracks
+energy at corr 0.898. The problem is that FLAT stamina DULLS that arc: it thins the dense CLIMAXES (corr 0.898→
+0.876, Δ 0.180→0.131). Breathing makes the thinning ARC-AWARE — protect climax, rest verses — recovering AND
+amplifying past baseline: breathe=1.2 → corr 0.918 / Δ 0.185 (1.8 → 0.200) at held overall density 0.31
+(REDISTRIBUTION, not a cut). ⇒ Stage 3 lets you run stamina relief AND keep/sharpen the arc (the user's "extra
+room for that handful of spicy extra notes in the deserving sections"). The arc lever can only THIN (ceiling), so
+it amplifies the arc by resting verses, not by adding climax notes beyond what the onset head places.
+**UNTESTED:** playtest feel of the arc (does the climax-verse contrast read as musical pacing?).
 
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).

@@ -111,6 +111,10 @@ def parse_args():
                         '= more thinning. None = off. notes/foot_fatigue_design.md "STAGE 2".')
     p.add_argument('--stamina_tau', type=float, default=8.0, help='stamina slow-decay (beats, ~several measures)')
     p.add_argument('--stamina_scale', type=float, default=15.0, help='excess-workload scale for the tau bump (tanh)')
+    p.add_argument('--stamina_breathe', type=float, default=0.0,
+                   help='STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high at climaxes -> keep '
+                        'the spicy notes, low in verses -> rest) = a difficulty arc. Needs --stamina_ceiling. '
+                        '0=off (flat), ~1.2 validated. notes/foot_fatigue_design.md "STAGE 3".')
     p.add_argument('--motif', type=str, default=None,
                    help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
                         '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
@@ -385,6 +389,7 @@ def main():
                           fatigue_free=args.fatigue_free,
                           stamina_ceiling=args.stamina_ceiling,  # Stage-2 per-region density relief (needs fatigue_penalty)
                           stamina_tau=args.stamina_tau, stamina_scale=args.stamina_scale,
+                          stamina_breathe=args.stamina_breathe,  # Stage-3 ARC: ceiling breathes with audio energy
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
