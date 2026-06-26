@@ -187,13 +187,43 @@ foot an unplayable stream and picked jacks.)
    the wrong tool for the stamina dimension.** Genuine INSTANTANEOUS impossibility is rare and mostly already
    handled by `no_jump_during_hold`; the holds problem is SUSTAINED one-foot load = STAMINA, which must modulate
    DENSITY coherently, never veto single notes. ⇒ Stage 1 (instantaneous hard veto) is near-vacuous; skip it.
-2. **STAMINA → COHERENT tau MODULATION (the real fix, next).** Trailing stamina accumulator E_slow (long τ),
-   hold-pinning feeds IT (sustained one-foot work raises stamina). When E_slow high → RAISE onset tau over the
-   upcoming stretch → onset head re-selects its most-salient notes (coherent thinning, NOT hole-punching). This
-   is the holds fix done right + avoids the fallout.
-3. **BREATHING ceiling**: stamina ceiling tied to audio energy/novelty → the ARC.
+2. **STAMINA → COHERENT tau MODULATION — BUILT + VALIDATED (2026-06-25, gen/foot-fatigue-stage2).** Trailing
+   stamina accumulator E_slow (long τ), fed the REALIZED per-note footing cost; when E_slow > ceiling, RAISE the
+   onset tau over the upcoming stretch → onset head sheds its LEAST-salient notes (coherent thinning, NOT
+   hole-punching). See "STAGE 2 — BUILT + VALIDATED" section below.
+3. **BREATHING ceiling**: stamina ceiling tied to audio energy/novelty → the ARC. **(Stage 3 — NEXT, unbuilt.)**
 Revised plan: the substance is in 2+3 (stamina tau-modulation + breathing ceiling). Foot model + barrier penalty
 (jacks/jumps) stay as the per-note governor; stamina is the per-region density governor.
+
+## STAGE 2 — BUILT + VALIDATED (2026-06-25, gen/foot-fatigue-stage2)
+**The architectural refactor:** the onset mask was precomputed as a full `(B,T)` tensor BEFORE the AR loop, so an
+in-loop stamina value couldn't reach the decision. Fixed by moving the onset DECISION into the loop: keep
+`p_onset = sigmoid(...)` (B,T) precomputed (audio-driven, with all CFG/phase adjustments), but decide `on_t`
+per-frame. `on_t = onset[:,t] & ~(tired)` where `tired = p_onset[:,t] <= onset_threshold + bump`. The gate is a
+SUPPRESSION-only operation layered on TOP of whatever onset mode produced the base `onset` (threshold / Bernoulli /
+phase_alloc) → all modes preserved; skipped under `onset_override` (caller owns onsets). Both consumers (`active`,
+`on`) now read `on_t`, so a suppressed frame is a true rest everywhere downstream (foot model, jack trackers,
+since_onset all key off `on`).
+
+**The stamina math:** global `E_slow` (B,), per-frame slow decay `exp(-1/(stamina_tau·4))` (tau in beats, ~several
+measures). On each onset, `E_slow += ((cE - decayE)·cu).sum()` = the REALIZED added foot exertion of the chosen
+footing (reuses the per-note governor's committed footing — a one-foot grind dumps a bigger increment than
+alternating feet at equal density, so E_slow integrates total load = rate × footing-difficulty, not raw count).
+Effective threshold bump = `stamina_max_bump · tanh((E_slow - ceiling)⁺ / stamina_scale)`. A CEILING: below the
+ceiling, output is BYTE-IDENTICAL to OFF (verified: ceiling 200 → identical onset count). Needs `fatigue_penalty`
+(the foot model supplies the cost signal).
+
+**Validation (diag_stamina.py, paired before/after on FIXED baseline-defined windows, 8 val songs, fatigue=2):**
+the decisive test is the density PROFILE, not the mean. At `ceiling=25, scale=15, tau=8`: the top-decile
+sustained-dense 4-measure windows thin 14% (peakΔ -0.039, 0.281→0.242) while moderate windows hold (restΔ -0.002)
+= ~20:1 peak/rest selectivity. maxJackRun unchanged (6) → the per-note governor is untouched; the two layers
+compose. This is the per-region density relief valve done RIGHT — coherent thinning of the genuinely-too-dense
+spots, NOT the Stage-1 global hole-punch (which crashed density 0.320→0.145 everywhere). Knobs in `generate`:
+`stamina_ceiling` (None=off), `stamina_tau=8`, `stamina_scale=15`, `stamina_max_bump=0.45`.
+
+**Still UNTESTED:** (a) playtest — does the thinning FEEL like a relief valve or like dropped notes? (b) does
+hold-pinning route enough load into E_slow to fix holds-blindness (the original motivation)? — needs a holds-heavy
+diag. (c) Stage 3 (breathing ceiling = the arc) builds directly on this.
 
 ## Open / to calibrate (not blocking the build)
 - `JACK_W : TRAVEL_W` ratio + `lambda_fat` (sweep like the jack λ).

@@ -24,7 +24,19 @@ Two governors, two scopes:
   (density). This is the lever the per-note layer fundamentally lacks — placement can only redistribute load,
   never remove it (that's why hold-streams collapse to jacks: see §4).
 
-## 3. THE IMMEDIATE NEXT TASK (Stage 2), and its blocker
+## ✅ STAGE 2 DONE (2026-06-25, branch gen/foot-fatigue-stage2)
+The onset decision is now IN the AR loop and stamina-gated. `typed_model.generate` gained `stamina_ceiling`
+(None=off), `stamina_tau=8`, `stamina_scale=15`, `stamina_max_bump=0.45`. Global `E_slow` accumulates the realized
+per-note footing cost (decays slowly); when it exceeds the ceiling it raises the effective onset threshold so the
+onset head sheds its least-salient upcoming notes (CEILING, suppression-only, all onset modes preserved, byte-
+identical to OFF below the ceiling). VALIDATED (diag_stamina.py, paired/fixed-window): at ceiling=25 the sustained-
+dense windows thin 14% while moderate windows hold (~20:1 selectivity); maxJackRun unchanged (per-note governor
+intact). 36/36 tests. Full writeup in foot_fatigue_design.md "STAGE 2 — BUILT + VALIDATED". **NEXT = Stage 3 (the
+arc): make `stamina_ceiling` BREATHE with audio energy (§ below).** Also UNTESTED: playtest feel + does hold-pinning
+feed E_slow enough to fix holds-blindness (needs a holds-heavy diag). The §3 below is the now-COMPLETED spec, kept
+for reference.
+
+## 3. ~~THE IMMEDIATE NEXT TASK (Stage 2)~~ — DONE (see above); spec kept for reference
 **Goal:** when sustained workload is high, thin UPCOMING onset density COHERENTLY (raise tau → the onset head
 re-selects its most-salient notes), never veto individual notes.
 
