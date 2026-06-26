@@ -387,7 +387,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
                  footswitch_pen=4.0, fatigue_cap=30.0,
-                 stamina_ceiling=None, stamina_tau=8.0, stamina_scale=15.0, stamina_max_bump=0.45):
+                 stamina_ceiling=None, stamina_tau=8.0, stamina_scale=15.0, stamina_max_bump=0.45,
+                 stamina_breathe=0.0, stamina_breathe_win=96):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -450,8 +451,20 @@ class LayeredTypedChartGenerator(nn.Module):
         for `onset_override` (caller-supplied onsets are respected). None = off. Validated operating point
         (diag_stamina.py, 8 val songs, fatigue_penalty=2): `stamina_ceiling~25, stamina_scale=15, stamina_tau=8`
         shaves the top-decile dense 4-measure windows ~14% (peakΔ -0.039) while moderate windows hold (restΔ
-        -0.002) -- a ~20:1 peak/rest selectivity. Stage 3 makes the ceiling BREATHE with audio energy for a
-        difficulty arc."""
+        -0.002) -- a ~20:1 peak/rest selectivity.
+
+        `stamina_breathe` (Stage 3 ARC, needs `stamina_ceiling`): makes the stamina ceiling BREATHE with a
+        phrase-smoothed audio-energy envelope (the onset head's own `p_onset`, box-smoothed over
+        `stamina_breathe_win` frames, z-normalized per song). The effective ceiling is `stamina_ceiling ·
+        (1 + stamina_breathe · z_energy[t])`: HIGH at the climax (ceiling up → stamina doesn't thin → the dense
+        spicy notes survive) and LOW in the verses (ceiling down → thin → forced rest). The CONTRAST is a difficulty
+        ARC. Ceiling-only — NO lower bound, so it never fights the radar/difficulty conditioning. Note FLAT stamina
+        DULLS the model's own arc (it thins the dense climaxes); breathing fixes that and pushes the arc PAST the
+        no-stamina baseline. Validated (diag_stamina_arc.py, 10 Hard songs): vs OFF corr(density,energy) 0.898 /
+        climax-verse Δ 0.180, flat ceiling=25 drops to 0.876 / 0.131, breathe=1.2 RECOVERS+AMPLIFIES to 0.918 /
+        0.185 (1.8 → 0.200) at held overall density (redistribution, not a cut). 0 = off (flat Stage-2 ceiling);
+        ~1.2 = the validated default, up to ~1.8 (diminishing). `stamina_breathe_win` ~96 frames (~6 measures) =
+        the phrase scale."""
         self.eval()
         device = audio.device
         B, T, _ = audio.shape
@@ -566,6 +579,25 @@ class LayeredTypedChartGenerator(nn.Module):
         stamina_on = (stamina_ceiling is not None) and fatigue_on and (p_onset is not None)
         stamina_decay = float(np.exp(-1.0 / max(float(stamina_tau) * 4.0, 1e-3)))   # per-16th-frame slow decay
         E_slow = torch.zeros(B, device=device)                               # accumulated sustained workload
+        # STAGE-3 ARC: the stamina ceiling BREATHES with a phrase-smoothed audio-energy envelope. High energy
+        # (climax) -> high ceiling -> stamina doesn't thin (the spicy notes survive); low energy (verse) -> low
+        # ceiling -> thin/rest. The CONTRAST is the difficulty arc (H5). Ceiling-only (no lower bound -> doesn't
+        # fight the radar/difficulty conditioning). Energy = the onset head's own p_onset (where the audio affords
+        # notes), box-smoothed over ~stamina_breathe_win frames (a phrase) and z-normalized per song.
+        if stamina_on:
+            ceiling_t = torch.full((B, T), float(stamina_ceiling), device=device)
+            if stamina_breathe and stamina_breathe > 0:
+                w = max(int(stamina_breathe_win), 1)
+                env = torch.nn.functional.avg_pool1d(p_onset.unsqueeze(1), kernel_size=2 * w + 1,
+                                                     stride=1, padding=w, count_include_pad=False).squeeze(1)  # (B,T) phrase energy
+                if lengths is not None:  # z-normalize over VALID frames per song (pad frames excluded)
+                    vmask = (torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)).float()
+                    mu = (env * vmask).sum(1, keepdim=True) / vmask.sum(1, keepdim=True).clamp(min=1)
+                    var = ((env - mu) ** 2 * vmask).sum(1, keepdim=True) / vmask.sum(1, keepdim=True).clamp(min=1)
+                else:
+                    mu = env.mean(1, keepdim=True); var = env.var(1, keepdim=True, unbiased=False)
+                z = (env - mu) / var.clamp(min=1e-6).sqrt()
+                ceiling_t = (float(stamina_ceiling) * (1.0 + float(stamina_breathe) * z)).clamp(min=1e-3)
 
         reset_at = set(int(x) for x in boundary_reset) if boundary_reset is not None else set()
         for t in range(T):
@@ -579,7 +611,7 @@ class LayeredTypedChartGenerator(nn.Module):
             held_start = held                                              # hold state at frame start (hold_aware rebinds held later)
             if stamina_on:  # in-loop onset decision: raise the bar when sustained workload is high, shedding the
                 E_slow = E_slow * stamina_decay                            # least-salient upcoming notes (CEILING)
-                excess = (E_slow - float(stamina_ceiling)).clamp(min=0)
+                excess = (E_slow - ceiling_t[:, t]).clamp(min=0)           # ceiling BREATHES with audio energy (Stage 3)
                 bump = float(stamina_max_bump) * torch.tanh(excess / max(float(stamina_scale), 1e-6))
                 tired = onset[:, t] & (p_onset[:, t] <= (onset_threshold + bump))  # drop lowest-p onsets when tired
                 on_t = onset[:, t] & ~tired
