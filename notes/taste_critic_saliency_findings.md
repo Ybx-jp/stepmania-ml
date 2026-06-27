@@ -31,15 +31,44 @@ Goal: before interpreting ANY real chart, prove the attribution method localizes
 not gradient-from-empty; (c) size the perturbation to the critic's scale — it pools globally, so frame-local
 defects are invisible.
 
-## PHASE B — what the critic measures on real generations (PLANNED, not yet run)
-Using the validated perturbation/repair saliency, run on the matched quartet from the chaos isolation
-(REAL / MEANPIN-chaos / MANIFOLD-chaos / BASE, same songs). Hypotheses (overturnable):
-- **H1 (off-grid):** the critic's "fake" signal concentrates on off-grid 16th-offbeat frames (phase grid
-  `t%4 ∈ {1,3}`). Operationalize as a **per-frame scramble-saliency** (scramble each block's panels at fixed
-  count, measure Δmargin) and correlate with the off-beat indicator. If MEANPIN's low score is driven by
-  saliency on its off-grid flood, that explains the chaos finding at the input level.
-- **H2 (alignment):** audio-branch perturbation (local shift) carries weight where notes are off-onset.
-- **Null to rule out:** the score is a global density/fingerprint artifact (then per-frame saliency is diffuse).
+## PHASE B — what the critic measures on real generations: H1 CONFIRMED (off-grid FLOODING is the fake evidence)
+`critic_saliency_phaseB.py`, the matched quartet from the chaos isolation (REAL / BASE / MANIFOLD-chaos /
+MEANPIN-chaos, same model, n=12 songs). Primary tool = **phase ablation** (remove all off-grid vs all on-grid
+notes, measure margin change — the validated perturbation family, no clean reference needed).
+
+| rung | logit margin | off-grid note frac | Δm (remove off-grid) | Δm (remove on-grid) |
+|---|---|---|---|---|
+| REAL | +1.91 | **0.02** | **−0.73** | −5.05 |
+| BASE | −2.36 | 0.00 | +0.00 | −0.41 |
+| MANIFOLD | −1.90 | 0.00 | +0.00 | −0.86 |
+| MEANPIN | −5.27 | **0.85** | **+2.55** | −0.01 |
+
+- **Only the mean-pin flood is off-grid** (off-grid note fraction 0.85 vs ~0 for REAL/BASE/MANIFOLD) — the
+  conditioning-mechanics prediction, confirmed: mean-pin smears onto 16th-offbeats, the manifold stays on-grid.
+- **The off-grid flood IS the fake evidence.** Removing MEANPIN's off-grid notes RAISES its margin by **+2.55**
+  (recovers ~half the gap to BASE); removing its on-grid notes does nothing (−0.01).
+- **The on-grid backbone is what "real" rests on:** removing REAL's on-grid notes tanks its margin **−5.05**.
+- **cross-chart corr(margin, off-grid fraction) = −0.50** — more off-grid → more fake.
+- **NUANCE (n=12 surfaced it): the critic is NOT off-grid-phobic.** REAL carries a few off-grid notes (frac
+  0.02) and removing them HURTS (−0.73) — sparse syncopation is *tasteful*. So the learned rule is "coherent
+  on-grid backbone + tasteful sparse off-beats, penalize off-grid FLOODING," not "off-grid = bad." This is the
+  mechanistic, input-level version of the README's "felt chaos peaks mid-range, not at the flood."
+
+**This explains the chaos isolation ([[taste_critic_transfer_findings]]) at the input level:** mean-pin scores low
+*because* the critic's fake evidence sits on the off-grid flood it produces; the manifold scores higher *because*
+it refuses to flood (stays on-grid). The taste critic and the conditioning redesign agree on the same axis.
+
+- **H2 (alignment)** and the **block-scramble spatial map** were not decisive here: off-grid content is
+  concentrated in a single rung (MEANPIN), so within-chart block contrast is near-zero (the map reported n/a for
+  the on-grid rungs). The phase ablation was the decisive tool. H2 (audio-shift saliency) is left for a follow-up
+  on deliberately-misaligned charts.
+- **Null ruled out:** the signal is localized to a musically-meaningful axis (on/off-grid), not a diffuse
+  density/fingerprint artifact (a diffuse-artifact critic would show ~0 ablation contrast).
+
+## PHASE C — activation maps (NOT yet run)
+The other half of the user's ask: forward-hook the `audio_encoder`/`chart_encoder`/`fusion`/`Conv1DBackbone` and
+look for a channel that tracks on/off-grid or alignment — to corroborate the input-level H1 finding at the
+representation level. Deferred; the input-level evidence above already answers the headline question.
 
 ## Threads
 [[taste_critic_transfer_findings]] (the chaos isolation Phase B explains), [[taste_critic_interpretability_plan]]
