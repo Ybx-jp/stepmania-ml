@@ -20,9 +20,24 @@ import torch
 import torch.nn as nn
 
 from .tokenizer import ChartTokenizer, NUM_PANEL_STATES
+from .foot_model import (
+    FootState,
+    NUM_PANELS,
+    JACK_WEIGHT,
+    TRAVEL_WEIGHT,
+    FATIGUE_TAU,
+    FOOTSWITCH_PEN,
+    HARD_CAP,
+)
 
 # A dedicated "start" context for the first frame's bigram lookup.
 START_CONTEXT = NUM_PANEL_STATES  # 16 (one past the real states)
+
+# Candidate placements for the foot-physics baseline: the 4 single steps and the
+# 6 two-panel jumps. (Holds/rolls are out of this baseline's scope, matching the
+# other Phase-1 baselines.)
+_SINGLES = [(p,) for p in range(NUM_PANELS)]
+_JUMPS = [(a, b) for a in range(NUM_PANELS) for b in range(a + 1, NUM_PANELS)]
 
 
 def _to_numpy(x) -> np.ndarray:
@@ -113,6 +128,144 @@ class PerFrameMLP(nn.Module):
         # decode each row's 16-state token to 4 panel bits
         bits = ((tokens.unsqueeze(-1) >> torch.arange(4, device=tokens.device)) & 1).float()
         return bits
+
+
+class FootPhysicsBaseline:
+    """A learned-model-FREE generator that chooses panels purely by foot physics.
+
+    This is the standalone counterpart of the decode-time fatigue governor: it
+    reuses the SAME `foot_model.FootState` cost (pad geometry, jack/travel/
+    footswitch exertion) but as a *generator* rather than a logit penalty. It
+    takes onsets as GIVEN (the same "which frames get a note" the model's onset
+    head decides) and only picks WHICH arrows — so a comparison against the
+    learned pattern head isolates one variable: panel choice, not density
+    (experiment-design Rule 11). It is the foot-physics analogue of ArrowVortex's
+    auto-stream, and the difficulty CRITIC/oracle anticipated in
+    notes/foot_fatigue_design.md.
+
+    At each onset frame it scores every candidate placement P by the more-fatigued
+    foot of its easiest footing (`FootState.eval_pattern`), hard-forbids the
+    unplayable (`E_eff >= fatigue_cap`) and over-long jacks (`max_jack_run`), then
+    picks `P ~ softmax(-beta * E_eff + jump_bias·[P is a jump])` — i.e. it prefers
+    low-fatigue footings, with `beta` as an inverse-temperature for variety. If
+    every candidate is forbidden it falls back to the globally least-fatiguing one
+    (always emit a note where the onset asked for one).
+
+    Difficulty is a COARSE knob here (not the radar's calibrated conditioning): it
+    nudges the jump rate and loosens the fatigue ceiling. The headline use is
+    pattern-realism comparison (same-panel / jump-stream run-length vs REAL,
+    stratified by difficulty), NOT difficulty conditioning — don't overclaim it
+    (experiment-design Rule 15).
+    """
+
+    def __init__(
+        self,
+        beta: float = 1.0,
+        allow_jumps: bool = True,
+        jump_bias: float = -2.0,
+        max_jack_run: Optional[int] = 2,
+        fatigue_cap: float = 30.0,
+        jack_weight: float = JACK_WEIGHT,
+        travel_weight: float = TRAVEL_WEIGHT,
+        fatigue_tau: float = FATIGUE_TAU,
+        footswitch_pen: float = FOOTSWITCH_PEN,
+        num_difficulties: int = 4,
+    ):
+        self.beta = beta
+        self.allow_jumps = allow_jumps
+        self.jump_bias = jump_bias
+        self.max_jack_run = max_jack_run
+        self.fatigue_cap = fatigue_cap
+        self.jack_weight = jack_weight
+        self.travel_weight = travel_weight
+        self.fatigue_tau = fatigue_tau
+        self.footswitch_pen = footswitch_pen
+        self.num_difficulties = num_difficulties
+
+    def _candidates(self, difficulty: int):
+        """Candidate placements and their per-placement additive bias."""
+        cands = list(_SINGLES)
+        biases = [0.0] * len(cands)
+        if self.allow_jumps:
+            # Higher difficulty -> jumps become relatively more likely (coarse).
+            dscale = (difficulty / max(self.num_difficulties - 1, 1)) if self.num_difficulties > 1 else 0.0
+            jbias = self.jump_bias + 1.5 * dscale
+            cands += list(_JUMPS)
+            biases += [jbias] * len(_JUMPS)
+        return cands, np.asarray(biases, dtype=np.float64)
+
+    def generate(
+        self,
+        onsets: Union[np.ndarray, torch.Tensor, Sequence[int]],
+        difficulty: int,
+        bpm: float,
+        rng: Optional[np.random.Generator] = None,
+    ) -> np.ndarray:
+        """Generate a (T, 4) binary chart placing a note at each onset frame.
+
+        Args:
+            onsets: (T,) truthy where a note should be placed (e.g. the onset mask
+                of a reference or model-generated chart: `chart.any(axis=1)`).
+            difficulty: difficulty class (coarse jump/ceiling knob).
+            bpm: chart BPM, for the rate term (notes are at 16th-frame resolution).
+            rng: optional numpy Generator for reproducible sampling.
+
+        Returns:
+            (T, 4) float32 binary chart.
+        """
+        rng = rng or np.random.default_rng()
+        onset_arr = _to_numpy(onsets).reshape(-1)
+        onset_idx = np.flatnonzero(onset_arr > 0.5)
+        T = int(onset_arr.shape[0])
+        chart = np.zeros((T, NUM_PANELS), dtype=np.float32)
+
+        frame_hz = float(bpm) * 4.0 / 60.0
+        cap = self.fatigue_cap * (1.0 + 0.15 * difficulty)  # higher difficulty tolerates more fatigue
+        state = FootState(
+            jack_weight=self.jack_weight,
+            travel_weight=self.travel_weight,
+            fatigue_tau=self.fatigue_tau,
+            footswitch_pen=self.footswitch_pen,
+        )
+        cands, biases = self._candidates(int(difficulty))
+
+        for frame in onset_idx:
+            frame = int(frame)
+            E_eff = np.empty(len(cands), dtype=np.float64)
+            footings = []
+            forbidden = np.zeros(len(cands), dtype=bool)
+            for i, panels in enumerate(cands):
+                e, footing = state.eval_pattern(panels, frame, frame_hz)
+                E_eff[i] = e
+                footings.append(footing)
+                if e >= cap:
+                    forbidden[i] = True
+                # Hard jack cap: a fresh single extending a same-panel run past the cap.
+                if (
+                    self.max_jack_run is not None
+                    and len(panels) == 1
+                    and panels[0] == state.sp_panel
+                    and state.sp_run + 1 > self.max_jack_run
+                ):
+                    forbidden[i] = True
+
+            logits = -self.beta * E_eff + biases
+            logits[forbidden] = -np.inf
+            if not np.isfinite(logits).any():       # everything forbidden -> least-bad footing
+                choice = int(np.argmin(E_eff))
+            else:
+                logits -= np.nanmax(logits[np.isfinite(logits)])
+                probs = np.exp(logits)
+                probs[~np.isfinite(probs)] = 0.0
+                probs /= probs.sum()
+                choice = int(rng.choice(len(cands), p=probs))
+
+            panels = cands[choice]
+            state.commit(panels, footings[choice], frame)
+            for p in panels:
+                chart[frame, p] = 1.0
+
+        return chart
 
 
 def compute_state_class_weights(charts: Sequence[Union[np.ndarray, torch.Tensor]],
