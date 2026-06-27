@@ -200,8 +200,14 @@ class StepManiaParser:
 
     def _validate_phase1_requirements(self, chart: StepManiaChart) -> bool:
         """Validate chart meets basic requirements"""
-        # Check primary BPM range (use average for variable BPM charts)
-        avg_bpm = self.compute_average_bpm(chart.timing_events, chart.song_length_seconds)
+        # Check primary BPM range (use average for variable BPM charts).
+        # A chart with no BPM events cannot be used -> reject (return False) rather
+        # than letting the ValueError escape this bool-typed validator.
+        try:
+            avg_bpm = self.compute_average_bpm(chart.timing_events, chart.song_length_seconds)
+        except ValueError:
+            print(f"{chart.title} failed bpm requirement (no BPM events)")
+            return False
         if not (self.min_bpm <= avg_bpm <= self.max_bpm):
             print(f"{chart.title} failed bpm requirement (avg_bpm={avg_bpm:.1f})")
             return False

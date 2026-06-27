@@ -14,7 +14,7 @@ Per knob/guidance, on the SAME songs+decode:
   - track_r   = corr( per-section realized-k , per-section target sign ) [does it follow the schedule?]
 local_Δ > 0 and a healthy fraction of global_Δ  =>  local control is real.
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python experiments/generation_typed/eval_motif_schedule.py \
+  python experiments/generation_typed/eval_motif_schedule.py \
       --ckpt checkpoints/gen_motif_local2/best_val.pt --highres --knobs 3 10 0 --guidance 1 3 --songs 12
 """
 import warnings, os

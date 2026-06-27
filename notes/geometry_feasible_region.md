@@ -73,6 +73,60 @@ product-of-experts / feasible-region theory in this note. Scope: the boundary-wa
 interior + the governor axes, run as a real sweep, not vouched-for ranges. Pairs with the GDL/equivariance v2 work
 (a symmetry-respecting generator would reshape the region). Lives here with the rest of v2.
 
+### Proposed starting method (v2 entry point — sweep × healthy song sample × best-of-N, critic-scored)
+The way in: a **comprehensive sweep of the conditioning settings, run against a healthy sample of songs**, where each
+(setting, song) cell is scored by **best-of-N** — generate N candidates, keep the best — and "best" is judged by
+the **difficulty critic** (the Phase-1 LateFusionClassifier difficulty head: is the chart in the requested class)
+**and** the **taste critic** (the v2 realism critic's P(real), `checkpoints/realism_critic/best_val.pt`,
+`eval_taste.py`; AUC 0.964, ranks REAL 0.823 > BASE 0.290 > CHAOS 0.003). A cell is "good" only if a candidate
+clears both gates: on-difficulty AND tasteful. This gives an automated goodness surface over the knob grid that we
+then spot-check by ear, instead of vouching for ranges one knob at a time.
+
+**PREREQUISITE — re-evaluate the taste critic against the LATEST decode machinery first. → DONE 2026-06-26,
+[[taste_critic_transfer_findings]].** Result: the critic's ranking TRANSFERS to the current decoder (REAL 0.823 >
+BASE 0.269 > CHAOS 0.228 at n=64; REAL>BASE 86% per-song; the old-machinery control reproduced 0.823/0.290/0.003
+exactly, so the harness is faithful). The density-OOD worry is largely cleared (`corr(P(real),density)=-0.09` over
+0.05–0.44). **BUT** the binding caveat for best-of-N is NOT density — it's that the critic is **near-binary** (only
+14–30% of scores in the discriminating middle; generated candidates cluster on the low rail), a strong SEPARATOR
+but weak GRADER. So best-of-N reranking likely needs the critic's low end recalibrated/temperature-rescaled before
+it can rank *among generated candidates*, and two gates still remain: (a) confirm by ear that high-P(real)
+generations actually play better than low-P(real) ones for the same song/setting (experiment-design Rule 8), and
+(b) understand WHAT the critic measures before trusting it as the inner judge — the activation + saliency probe in
+[[taste_critic_interpretability_plan]] (does it key on a coherent musical property like off-grid penalty/alignment,
+or a density/fingerprint artifact?). The route is viable, conditional on the recalibration + those two gates.
+Supporting evidence the critic tracks a real quality axis: the chaos-conditioning isolation
+([[taste_critic_transfer_findings]]) — holding the model fixed, manifold chaos scored 0.228 vs mean-pin 0.028, so
+the critic registered the conditioning redesign as more tasteful, matching play experience. (Original instruction kept below for the record.)
+
+  *Original instruction:* before it is allowed to be the goodness signal for a sweep, re-run on charts decoded by
+  the current machinery across the difficulty/density/knob range we intend to sweep, and confirm P(real) still
+  ranks by play-feel there (not just on the old 0.2-density split). Done via
+  `experiments/realism_critic/eval_taste_current.py` (mirrors `scripts/generate.py`'s decode path).
+
+Design points so the harness measures the model, not itself (experiment-design skill):
+- **"Healthy sample of songs" is load-bearing, not decoration.** The feasible set is **song-conditional** (audio
+  gates which settings are realizable — H17, the moving boundary). A single song maps *its* slice, not the region.
+  Sample across the audio axes that move the boundary (tempo, onset density, genre/energy) so the swept region is
+  the *intersection* (settings good across songs) — and also report the *spread* (how much the boundary moves), which
+  is itself the H17 result quantified.
+- **Don't import the old "no headroom at Hard" finding as a constraint — re-test it.** [[stage2a_critic_findings]]
+  §2b observed best-of-N had little headroom at Hard because *all candidates came out tame*. That was almost certainly
+  an artifact of the **poorly-tuned conditioning of that era's generator**, not a property of best-of-N — the decode
+  machinery has moved on a lot since (governor, motif arc, the highres retrain). Treat it as a hypothesis to re-check
+  under current conditioning, not a known limit. If candidate diversity is still flat at Hard with the latest stack,
+  *that* is a finding; assuming it up front would bias the sweep.
+- **The critic's density range is a known unknown, not a settled caveat.** The 2026-06-20 critic was trained only on
+  ~0.2-density charts and scored OOD-high-density chaos spuriously. Whether the *current* critic-vs-current-decoder
+  pairing has that blind spot is exactly what the prerequisite re-evaluation answers — fold the density-range check
+  into it rather than pre-restricting the sweep on a stale assumption.
+- **Pick N and the selection metric before running** (don't tune them on the same sweep that reports the region), and
+  **keep test-by-ear as a separate, once-only confirmation** of a handful of swept cells, not an inner loop.
+
+This is the *automation* of the boundary-walk + multi-knob-interior scope above: the critics are the cheap inner
+goodness proxy that lets the sweep cover the joint grid; the by-ear pass and the difficulty-corner walks remain the
+ground truth that keeps the proxy honest — but the proxy itself has to clear the re-evaluation gate before it earns
+that role.
+
 ## Threads this connects to
 - [[two-generator-tracks]] (the manifold conditioning track), conditioning-mechanics skill (the exact math),
   experiment-design skill (don't mistake a rigged harness for a model defect when probing the boundary).

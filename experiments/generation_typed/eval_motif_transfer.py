@@ -15,7 +15,7 @@ each, re-encode the generated charts -> r+ / r-, and report:
   - realized Δ on knob k itself (directly comparable to the single-knob eval's Δself)
   - quality (onset_F1 / density) and the realized top figures at each pole.
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python \
+  python \
       experiments/generation_typed/eval_motif_transfer.py [--knobs 0 3 10] [--guidance 1 3] [--songs 20]
 """
 import warnings, os

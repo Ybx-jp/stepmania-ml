@@ -15,7 +15,7 @@ building it, check on REAL charts (section=64):
       figure control to mean anything.)
   (4) DOMINANCE — how dominant is a section's top figure class (is a section one figure, or a mush)?
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python \
+  python \
       experiments/generation_typed/diag_figure_labels.py [--section 64] [--charts 600]
 """
 import warnings, os

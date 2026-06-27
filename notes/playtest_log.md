@@ -341,7 +341,8 @@ named: **japa1** (a Japanese-titled song — extremely hard), **deja loin**, **i
   trill/tap mass? If yes, exclude hold-occupied frames from the figure detector and re-measure trill steerability.
 - **H20 (NEW) — missing advanced-pattern VOCABULARY (a coverage gap, not a steering gap).** Charts are jack-heavy
   ("jacks should only go lower") and the user notes **gallops and foot-switches are barely represented**, prompted
-  by nightbird lost wing. From the ddrcommunity guide, the advanced vocabulary the model isn't producing:
+  by nightbird lost wing. (Pattern vocabulary + the motif control surface are consolidated in
+  `notes/note_patterns_and_motifs.md`.) From the ddrcommunity guide, the advanced vocabulary the model isn't producing:
   **gallops** (a quick 1/16 grace-note before a beat — a "da-dum" burst, not on the grid), **foot-switches** (a
   two-note jack that's actually a foot swap, not a same-foot hammer), **laterals** (extended crossovers like the
   AFRONOVA walk that stay crossed), **half-spins**, **freeze-switches** (lift-and-replace on a freeze to keep

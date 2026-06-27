@@ -24,7 +24,7 @@ The cheap gate (commit to training only if ALL pass):
   4. STABLE — do the top motif-style axes reproduce across a random split-half (loading-vector cosine)? Not
      an overfit artifact.
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python \
+  python \
       experiments/generation_typed/diag_motif_codebook.py [--scales 2 3 4 6] [--topn 120]
 """
 import warnings, os

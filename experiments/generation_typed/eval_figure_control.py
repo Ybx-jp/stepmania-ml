@@ -9,7 +9,7 @@ the target. Compare to the figure=null baseline (the model's natural rate) and t
 ~15.5%). A positive lift on the target figure = the discrete token steers that figure. motif=null so figure is
 isolated; radar=real for density realism (onset is decoupled from figure, so density stays put).
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python experiments/generation_typed/eval_figure_control.py \
+  python experiments/generation_typed/eval_figure_control.py \
       --ckpt checkpoints/gen_motif_figure/best_val.pt --highres --figures 2 1 4 3 --guidance 1 3 --songs 12
 """
 import warnings, os

@@ -8,7 +8,7 @@ realized k(+) >> k(-), the knob steers the vocabulary. We also report cross-talk
 quality (onset_F1 / density vs real), and the realized dominant figures at each pole (the qualitative check —
 do they look like jacks vs sweeps?).
 
-  /home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python \
+  python \
       experiments/generation_typed/eval_motif.py [--knobs 0 3 10] [--z 3] [--guidance 1 3] [--songs 24]
 """
 import warnings, os
