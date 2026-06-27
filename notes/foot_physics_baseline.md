@@ -63,12 +63,35 @@ missing — a learned-model-FREE generator built from the same physics.
   the same simulator that governs decode can now score/seed charts, the bridge
   toward a v2 equivariant fatigue-aware generator.
 
+## Comparison harness (2026-06-27 — BUILT)
+
+- **`src/generation/playability_metrics.py`** — the ONE importable home for the
+  footwork metrics (`chart_metrics`, `same_panel_run_lengths`, `run_length_shares`)
+  that the `experiments/generation_typed/*` scripts each re-implement inline
+  (`metrics` is copied across ≥6 of them — the drift Rule 14 warns about). New code
+  routes through here. **Drift guard:** `test_playability_metrics.py::
+  test_chart_metrics_matches_calib` pins it to `calib_foot_fatigue.metrics`, so the
+  shared numbers stay comparable to the fatigue-calibration history. (The 6 existing
+  copies are left untouched — migrating them is a separate, low-risk cleanup.)
+
+- **`experiments/generation_typed/compare_foot_physics.py`** — the harness. Feeds
+  the **REAL onset mask** to every generator so density is held and only PANEL
+  CHOICE varies (Rule 11):
+    * `real` (human reference) · `foot_phys` (FootPhysicsBaseline) ·
+      `model_raw` (learned head, `onset_override`, NO governor) ·
+      `model_gov` (learned head + fatigue governor).
+  Reports `chart_metrics` + same-panel run-length shares vs `real`, **stratified by
+  difficulty** (Rule 12), a distance-to-real summary, and `--export_sm` for an
+  ear-check (Rule 8). Verified end-to-end on a random-init model + synthetic song:
+  the isolation check holds (identical density across all four generators).
+
+  Run: `python experiments/generation_typed/compare_foot_physics.py --songs 12 --export_sm 2`
+
 ## Next (not yet done)
 
-- Wire a comparison cell/script: feed real-chart onsets (and model-generated
-  onsets) to `FootPhysicsBaseline` and the learned model, run the existing
-  run-length-vs-REAL diagnostics, stratified by difficulty.
+- Run the harness for real (needs `data/` + the `gen_motif_full_fixed` checkpoint,
+  absent in this container) and read off whether `model_raw` beats `foot_phys` at
+  footwork realism vs `real`, per difficulty.
 - Calibrate `beta` / `jump_bias` on the EGREGIOUS rich-Hard set (where the
   governor calibration already lives), not the mild val set.
-- Spot-check by EAR (export to .sm via `charts_to_sm`) — metrics are blind to
-  musicality (Rule 8).
+- Optionally migrate the 6 inline `metrics` copies to `playability_metrics`.
