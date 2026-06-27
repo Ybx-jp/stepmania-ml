@@ -1,107 +1,96 @@
-# HANDOFF — fatigue/stamina governor COMPLETE, release prepped (PR #41)
+# HANDOFF — taste-critic re-validation + interpretability arc (ACTIVE); fatigue governor SHIPPED
 
-**Written 2026-06-26 for the next Claude.** The biomechanical decode-time governor (Stages 1–3) is built,
-validated, playtest-confirmed, and its governor knobs have a vouched-for range table + shipping default. Release is
-**prepped but NOT merged**. (NB: the governor table is per-knob ranges the user vouched for — NOT the joint
-"region of good settings across all conditioning knobs"; that's an explicit V2 item, see §6.)
-Read this, then `notes/governor_release_region.md` (the governor range table) and `notes/foot_fatigue_design.md` (full
-spec + every failure). Env: conda `stepmania-chart-gen`. Tests: `pytest tests/test_generation.py` (36/36).
-Memory: `~/.claude/projects/.../memory/fatigue-governor.md` is the running state.
+**Written 2026-06-27 for the next Claude.** Two arcs are current. The **fatigue/stamina governor is SHIPPED**
+(PR #41 MERGED to `main`). The **active thread** is the **taste-critic re-validation + interpretability** work,
+which lives on `release/v0.1.0-prep` and is staged for `main` via **PR #42 (OPEN)**. Read this, then the memory
+(`~/.claude/projects/.../memory/taste-critic-transfer.md` = active state; `fatigue-governor.md` = the shipped prior
+arc). Env: conda `stepmania-chart-gen` (interpreter `/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`).
 
 ---
 
 ## 1. WHERE WE ARE (one paragraph)
-The generator (`checkpoints/gen_motif_full_fixed/best_val.pt`, 42-dim highres) has a complete decode-time
-governor in `typed_model.generate`: **(Stage 1, per-note)** a two-foot fatigue model that foots jacks/jumps onto
-the human distribution with density held; **(Stage 2, per-region)** a STAMINA accumulator that thins onset DENSITY
-where sustained workload is high (a relief valve — a CEILING, never a global cut), hold-aware; **(Stage 3)** the
-stamina ceiling BREATHES with audio energy = a difficulty ARC (climax kept, verses rested). All validated by
-`diag_*` scripts AND playtest-confirmed ("a tasteful edit, not a rewrite… DEFINITELY an improvement"). The
-**governor knobs have a vouched-for range table + default** (`notes/governor_release_region.md` — per-knob,
-playtest-vouched, NOT the joint region) and the exporter default flipped to the
-center. Everything is on **PR #41** (`gen/foot-fatigue-stage2` → main, 19 commits), open and awaiting the user.
+The generator (`checkpoints/gen_motif_full_fixed/best_val.pt`, 42-dim highres) ships with a complete decode-time
+**governor** (per-note foot model + per-region stamina + breathing arc; PR #41 merged, default `fatigue_penalty=2`,
+stamina/breathe opt-in). This session re-validated the **taste critic** against that current decode stack and then
+opened up *what it measures*: (a) the critic's REAL>BASE>CHAOS ranking **transfers** to the current decoder (an
+old-machinery control reproduced the historical numbers exactly), but it is a **near-binary separator, not a graded
+scorer**; (b) holding the model fixed, the **manifold chaos conditioning** scores far above the old **mean-pin**
+flood — so the chaos tastefulness gain is the *conditioning redesign, not the model upgrade*; (c) an
+**interpretability** probe (validation-gate-first) shows the critic's "fake" evidence is **off-grid FLOODING** —
+removing a bad chart's off-grid notes recovers ~half its score, the on-grid backbone is what "real" rests on, and
+sparse off-grid syncopation is *tasteful* (not penalized). Folded into README + marketing. All on
+`release/v0.1.0-prep`, staged for main via PR #42.
 
-## 2. IMMEDIATE NEXT (the user's open decisions — do NOT act without them)
-1. **Merge PR #41?** It's release-prepped (tests pass, governor ranges vouched, skill+docs updated). Merging is the
-   outward/irreversible step = the user's call. Ask squash vs merge-commit. This is a **behavior-changing**
-   release (default per-note governor now `fatigue_penalty=2`), unlike the opt-in PR #40.
-2. **Re-playtest the floored arc endings + pick the breathe default.** The Stage-3 ending bug was fixed
-   (`stamina_breathe_floor`) and the sets regenerated/reinstalled: `~/sm-generated/chaos_stamina_g25_breathe{12,18}`
-   (vs `chaos_stamina_g25` flat, `chaos_stamina_OFF`). The user was going to feel whether the endings are fixed and
-   pick breathe **1.2 vs 1.8**. Pending entry at top of `notes/playtest_log.md`.
+## 2. IMMEDIATE NEXT (open decisions — do NOT act without the user)
+1. **Merge PR #42?** (`release/v0.1.0-prep` → `main`, 18 commits = v0.1.0 release prep + taste-critic
+   re-validation + chaos isolation + interpretability arc). This is the live gate to ship everything to main. It is
+   a behavior-neutral docs/eval release (no generator default changes beyond what #41 already shipped).
+2. **best-of-N viability (the v2 region-map inner judge):** before the critic can rank generated candidates, two
+   gates remain — (a) **recalibrate its near-binary low end** (it's a strong separator, weak grader), and (b) a
+   **by-ear** check that high-P(real) generations actually play better than low-P(real) for the same setting
+   (experiment-design Rule 8). See `notes/taste_critic_transfer_findings.md` "Next gate".
+3. **Governor follow-up (still pending from the prior arc):** re-playtest the floored arc endings and pick the
+   breathe default (**1.2 vs 1.8**); sets at `~/sm-generated/chaos_stamina_g25_breathe{12,18}`. Pending entry at top
+   of `notes/playtest_log.md`.
 
-## 3. THE SYSTEM (mental model + the release config)
-Two scopes, both in `LayeredTypedChartGenerator.generate`, both need `bpm=` (no bpm → silent). The exact math is in
-the **`conditioning-mechanics` skill §8** (read it before any probe/export that touches a governor knob).
-- **Per-NOTE foot model** (`fatigue_penalty`): acts on `pat_logits` → which-panels (footwork), never note count.
-  `jack_penalty` is the OLD single-foot version, now SUPERSEDED (default 0).
-- **Per-REGION stamina** (`stamina_ceiling`): acts on the ONSET decision (now made IN the AR loop, not precomputed)
-  → density. A global `E_slow` accumulator (fed the realized per-note footing cost; hold-aware = free-foot grind)
-  raises the effective onset threshold when tired. CEILING only; byte-identical to OFF below it; needs `fatigue_on`.
-- **Stage-3 ARC** (`stamina_breathe`): the ceiling = `stamina_ceiling·(1+breathe·z_energy[t]).clamp(min=floor·ceiling)`,
-  energy = phrase-smoothed z-scored `p_onset`. `stamina_breathe_floor=0.4` stops low-energy outros emptying.
+## 3. THE TASTE-CRITIC ARC (this session — the active work)
+Critic = `checkpoints/realism_critic/best_val.pt` (the v2 corrupted-real critic; `LateFusionClassifier`, mean_max
+pooling, fusion_dim 256). Always attribute on the **logit margin** `z_real−z_fake`, never the saturated P(real).
+- **Transfer** (`experiments/realism_critic/eval_taste_current.py`, mirrors `scripts/generate.py`): REAL 0.823 >
+  BASE 0.269 > CHAOS 0.228 (n=64); control = original `eval_taste.py` reproduced 0.823/0.290/0.003 exactly.
+  corr(P(real),density) = −0.09 (density-OOD worry cleared). Near-binary (only 14–30% of scores in the middle).
+- **Chaos isolation** (`eval_chaos_mechanism.py`, model held fixed): MANIFOLD 0.228 vs MEANPIN 0.028 (73%/song);
+  the old mean-pin request still scores ~0.028 on the new model ⇒ the conditioning redesign, not the model.
+- **Interpretability** (`critic_saliency.py` gate → `critic_saliency_phaseB.py` → `critic_interpretability.ipynb`):
+  - **Phase A gate PASSED + chose the method.** Whole-chart panels-scramble drops the margin +9.85 (cue = arrow
+    CONFIGURATION, GLOBAL — a 1/24th local scramble is invisible). **Perturbation/repair attribution localizes a
+    known defect (~251×); gradient-IG-from-EMPTY does NOT (1.4×)** — empty baseline measures note PRESENCE, not
+    configuration. So Phase B uses perturbation, not IG.
+  - **Phase B = H1 CONFIRMED.** Off-grid note frac: only MEANPIN (0.85) vs ~0; removing MEANPIN off-grid notes
+    RAISES margin +2.55, removing REAL on-grid backbone tanks it −5.05; corr(margin, off-grid frac) = −0.50. NOT
+    off-grid-phobic (REAL's sparse off-grid notes tasteful, removing hurts −0.73).
+  - **Phase C** = executed notebook (figures embedded; `outputs/critic_interp_fig{1..5}.png`). Confound caught:
+    raw corr(activation, off-grid INDICATOR) is confounded by metric-grid periodicity → use NOTE-conditioned
+    contrast (channel #121 fires +10.3 higher on off-grid notes). Phase C corroborative; H1 ablation is causal.
+- Findings: `notes/taste_critic_transfer_findings.md`, `notes/taste_critic_saliency_findings.md`. Plan:
+  `notes/taste_critic_interpretability_plan.md`. v2 prereq marked DONE in `notes/geometry_feasible_region.md`.
 
-**RELEASE CENTER (shipped defaults):** `fatigue_penalty=2, jack_penalty=0`; stamina + breathe **OFF by default**
-(opt-in levers — near-no-op on normal charts; they earn their keep only when conditioning is cranked past the human
-density envelope, e.g. `--style chaos=q0.99 --guidance 3.0` → density 0.400). GOOD RANGES (vouched, per-knob — not a joint map): fatigue 1.5–3,
-stamina_ceiling 15–50 (<10 = global cut, 200 ≡ off), breathe 1.2–1.8 (floor 0.4). MANDATORY playability (fixed,
-code-enforced via `enforce_playability`): hold_aware, no_jump_during_hold, no_cross_during_hold, max_jack_run=2,
-pattern_temperature≈0.7.
+## 4. THE FATIGUE GOVERNOR (prior arc — SHIPPED, pointers only)
+PR #41 MERGED 2026-06-26 (`origin/main` head `37257d1`). Decode-time governor in
+`LayeredTypedChartGenerator.generate`: per-NOTE foot model (`fatigue_penalty`, default 2), per-REGION stamina
+(`stamina_ceiling`, opt-in), breathing arc (`stamina_breathe`, opt-in). The math is the **conditioning-mechanics
+skill §8**; spec + every failure in `notes/foot_fatigue_design.md`; vouched per-knob ranges in
+`notes/governor_release_region.md`. Diags: `experiments/generation_typed/diag_*.py`. RELEASE CENTER:
+`fatigue_penalty=2, jack_penalty=0`, stamina/breathe OFF by default. Mandatory playability is code-enforced via
+`enforce_playability`. The governor memory file has the full detail + the failure log.
 
-## 4. WHAT FAILED (don't repeat — these cost real time)
-- **Hold-pinning in the PATTERN penalty → non-monotonic jack explosion** (maxJackRun 4→14). A one-foot wide stream
-  costs MORE than a jack, so minimizing E picks the jack. Placement can't fix a COUNT problem. ⇒ holds belong on
-  the ONSET/density side. (The Stage-2 stamina cost IS now hold-aware; the pattern penalty is still holds-blind —
-  fine, the pathology barely exists: pinned frames ~0.14 dense, maxJackRun-in-holds 3 = human.)
-- **Stage-1 hard onset veto on accumulated `decayE` → density CRASH 0.320→0.145** (hole-punched every dense
-  section). A hard per-note veto is the WRONG tool for stamina; it must modulate density COHERENTLY (the Stage-2
-  ceiling). **METHOD failure to learn from:** a prior session invented a "reach/affordability veto," built it on
-  accumulated fatigue, refuted IT, and committed "the local layer is near-vacuous" — but the user's ACTUAL design
-  (onset hold-aware + per-foot effort) was never tested. Re-read the spec against the build. (experiment-design Rule 16.)
-- **Stage-3 abrupt endings:** the breathing ceiling collapsed to ~0 at low-energy outros → empty tail. Fixed by the
-  floor. Confirmed on real charts, not the truncated diag (which didn't reach the outro — measure the right artifact).
-- **`--radar` mean-pin** is OFF-MANIFOLD (smears); DISABLED (errors → use `--style`). See conditioning-mechanics §2.
+## 5. BRANCH / PR / PROTECTION STATE
+- **PR #41** (`gen/foot-fatigue-stage2` → main) **MERGED** — governor on `origin/main` `37257d1`.
+- **PR #43** (`taste-critic-saliency` → `release/v0.1.0-prep`) **MERGED** — interp arc on the release branch.
+- **PR #42** (`release/v0.1.0-prep` → `main`) **OPEN** — 18 commits, the live gate to ship the v0.1.0 release +
+  taste-critic work to main. `origin/release/v0.1.0-prep` head `db164e8`.
+- **`main` protected** by branch ruleset **`protect-main`** (id 18199761): require-PR (0 approvals → solo self-merge
+  OK), require conversation resolution, block force-push (`non_fast_forward`), block deletion; **auto-merge OFF**
+  on the repo; no bypass actors. Edit: `gh api repos/Ybx-jp/stepmania-ml/rulesets/18199761`. (Solo-repo note:
+  do NOT set required approvals ≥1 while single-identity — you can't approve your own PR, it would lock merges.)
 
-## 5. KEY FILES, COMMANDS, ANCHORS
-- `src/generation/typed_model.py` → `LayeredTypedChartGenerator.generate`: fatigue block (`if fatigue_on:`), the
-  in-loop stamina gate (`if stamina_on:` at loop top), the `ceiling_t` breathing schedule (before the loop), the
-  E_slow increment (in the foot-commit block, with the hold-aware override).
-- Diags (repo root, conda env): `diag_stamina.py` (paired peak/rest relief), `diag_stamina_holds.py` (pinned vs
-  non-pinned frames), `diag_stamina_arc.py` (corr(density,energy)+climax-verse Δ, tail check), `diag_breathe_energy.py`
-  (`--match` to probe specific songs), `calib_foot_fatigue.py` (per-note vs REAL Hard charts), `diag_foot_fatigue.py`.
-- Exporter: `experiments/generation_typed/export_typed_samples.py` — `--fatigue_penalty` (def 2), `--stamina_ceiling`,
-  `--stamina_breathe`, `--style "chaos=q0.99" --guidance 3.0` (the crank). Playtest via the `playtest` skill.
-- Skills to consult FIRST: `conditioning-mechanics` (the decode math — §8 now covers stamina/arc), `experiment-design`
-  (attribution HARNESS→DATA→MODEL; the two now cross-reference each other), `playtest`.
-- `notes/governor_release_region.md` (the vouched governor range table), `notes/foot_fatigue_design.md` (spec+failures), `notes/playtest_log.md`.
+## 6. OPEN THREADS (priority; none block PR #42)
+1. **best-of-N reranking** = the v2 region-map inner judge — gated on critic low-end recalibration + the by-ear
+   pass (§2.2). The interpretability result (critic keys on a coherent musical axis, off-grid flooding) supports
+   that reranking-by-P(real) is *principled*, not an artifact.
+2. **V2 — MAP THE REAL REGION OF GOOD SETTINGS** (`notes/geometry_feasible_region.md` §V2): joint, song-conditional
+   feasible set across ALL conditioning + governor knobs, by sweep × best-of-N × difficulty+taste critics. The
+   critic re-validation was its prerequisite (DONE).
+3. **H-onset-perc-bias** (onset head under-places on melodic-only sections) — a feature/retrain thread, not a knob.
+4. **Model UNDER-JUMPS** (6% vs real 31%) — separate density/air thread; don't tune the governor to it.
+5. **GDL/equivariance** (pad L↔R / Klein-four symmetry) — v2 redesign / paper angle, parked.
 
-## 6. OPEN THREADS (priority order — none block the release)
-1. **H-onset-perc-bias** (the user's deeper hypothesis): the onset HEAD under-places on melodic-only sections (the
-   HSL piano-solo "feel"). NOT a governor knob — a feature/retrain thread. `diag_breathe_energy.py` REFUTED that the
-   breathing energy signal is at fault (p_onset tracks harmonic energy fine); the gap is the onset head itself.
-2. **Model UNDER-JUMPS** (6% vs real 31%) — a separate density/air thread. Do NOT tune the governor to close it
-   (calib "dist-to-real" is dominated by this — the wrong target).
-3. **V2 — MAP THE REAL REGION OF GOOD SETTINGS** (`notes/geometry_feasible_region.md` "V2 — MAP THE REGION"): the
-   v1 governor table is per-knob VOUCHED ranges, NOT the joint feasible set. The real region = ALL conditioning
-   knobs (radar/motif/figure/CFG/density/phase + governor), coupled + SONG-CONDITIONAL, by ACTUAL experiment +
-   measurement (sweep interior, walk boundaries; the easy/hard difficulty corners are the only walks done so far,
-   `difficulty_corner_findings`). User explicitly scoped this to v2 (2026-06-26).
-4. **GDL/equivariance** (the pad's L↔R / Klein-four symmetry) — a v2 redesign / paper angle (pairs with #3), parked.
-5. Parked per-note math gaps: body-turn rotation discount (magnitude too high).
-
-## 7. DISCIPLINE (this project's hard-won rules)
-- **ONE change at a time**; isolate with a toggle, re-run the diag, compare.
-- **Validate on REAL data via the diags, not by reading code.** Every bug here was caught by a number moving wrong.
-- **Measure the property at its resolution.** Stamina relief is REDISTRIBUTION — the density MEAN is blind; use
-  paired peak/rest windows (and frame-level for holds). The arc shows in corr(density,energy), not the mean.
-- **Don't optimize the wrong metric** (the model under-jumps for non-governor reasons; ignore jump% for the governor).
-- **Attribution HARNESS→DATA→MODEL**; write conclusions as conditional until a fair test clears the harness. A
-  committed "model defect" that gets overturned means you ran the fair test second instead of first.
-- **ml-gloss hook active** (gloss ML jargon on first use). Update `memory/fatigue-governor.md` + `playtest_log.md` as you go.
-
-## 8. BRANCH / PR STATE
-`gen/foot-fatigue-stage2` → **PR #41** (base main, OPEN, 19 commits = Stage 2/3 + hold-aware + governor range table + the
-`--radar` disable + the conditioning-mechanics §8 update + the skill cross-refs + playtest docs). `origin/main`
-already has the per-note governor (PR #40 merged). The 4 full-suite failures (`test_audio_features`/`test_dataset`/
-`test_parser`) are PRE-EXISTING on origin/main, unrelated to this PR (it only touches `src/generation/`). 36/36
-generation tests pass. **Not merged — the user's call.**
+## 7. DISCIPLINE (hard-won; the two skills are load-bearing)
+- **conditioning-mechanics skill** = the exact decode math; replicate `scripts/generate.py` for any probe that
+  sets/measures a conditioning or governor knob. **experiment-design skill** = attribution HARNESS→DATA→MODEL;
+  validate the method on a known answer BEFORE trusting it (the saliency gate is the canonical example — it
+  rejected IG-from-empty and caught the periodic-indicator confound).
+- **Match the metric to the property's resolution** (stamina = redistribution, blind to the mean; saliency on a
+  saturated critic needs the logit, not P). **One change at a time; isolate with a toggle; validate on a number.**
+- **ml-gloss hook active** (gloss ML jargon on first use → `notes/ml_glossary.md`). Keep `playtest_log.md` =
+  subjective play-feel only; experiment results get their own `notes/*_findings.md`.

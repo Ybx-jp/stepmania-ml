@@ -64,6 +64,11 @@ pyproject, README claims audit, bring-your-own-audio `scripts/generate.py`, CHAN
 - `taste_critic_interpretability_plan.md` — PLAN: IG saliency (on the LOGIT, saturation-proof) + activation maps
   to pin down what the critic measures; validation-gate-first (localize an injected panels/shift corruption);
   H1 off-grid penalty / H2 alignment. Gates best-of-N + a writeup artifact.
+- `taste_critic_saliency_findings.md` — EXECUTED (Phase A gate / B / C). Cue = arrow CONFIGURATION, global;
+  perturbation/repair attribution validated (~251×), gradient-IG-from-empty rejected (presence≠configuration).
+  H1 CONFIRMED: the "fake" evidence is off-grid FLOODING (remove off-grid → margin +2.55; on-grid backbone is what
+  "real" rests on; NOT off-grid-phobic). Phase C = `experiments/realism_critic/critic_interpretability.ipynb`
+  (note-conditioned, confound-corrected). Pairs with `taste_critic_transfer_findings.md`.
 
 ## Decode / playtest fixes
 - `style_decoding.md` — sample the pattern head (greedy = always-Left).
