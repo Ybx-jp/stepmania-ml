@@ -199,6 +199,9 @@ pytest tests/
 - 4-panel (DDR-style) charts. Difficulty: Beginner / Easy / Medium / Hard.
 - **Holds are supported. Rolls are not** — there are zero rolls in the training data (0/675), so
   the model never learns to place them. A data limit, stated rather than hidden.
+- **Song length is capped to the model's trained context (~3–4 min).** The generator's positional
+  encoding is 2048 sixteenth-note frames; longer songs are charted up to that point and truncated
+  (with a warning), not chunked. A windowed long-song decode is future work.
 - **Musicality is improved, not solved.** Onset F1 in the high-0.7s means most notes land on-beat,
   not every note; and the AR decoder has an awkward cold-start.
 - **Chaos / syncopation is in-distribution-bounded (a studied, bounded behavior, not an open defect).** The
