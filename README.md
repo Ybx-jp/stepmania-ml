@@ -167,11 +167,14 @@ python experiments/generation_typed/train_radar.py
 
 **Generate a chart for your own song** (no dataset needed — just an audio file):
 ```bash
-python scripts/generate.py --audio path/to/song.ogg --difficulty Hard
-# optional: --bpm 174 (else estimated), --style "chaos=q0.7" (groove feel), --out mychart/
+python scripts/generate.py --audio path/to/song.ogg --difficulty Hard --out MyGenerated
+# optional: --bpm 174 (else estimated), --style "chaos=q0.7" (groove feel)
 ```
-Writes a folder with a playable `chart.sm` + the audio; drop it into StepMania. Uses the deployed
-42-dim model and the shipped groove manifold; BPM is auto-estimated. Requires the weights (see below).
+`--out` is the **group** folder; the song is nested inside it as `MyGenerated/<title>/{chart.sm, audio}`,
+because StepMania expects `Songs/<group>/<song>/<files>` (a bare song folder dropped into `Songs/` becomes
+an empty group and won't show). Drop the `MyGenerated` folder into your StepMania Songs directory to play.
+Uses the deployed 42-dim model and the shipped groove manifold; BPM is auto-estimated; songs longer than the
+model's ~3–4 min context are truncated. Requires the weights (see below).
 
 **Evaluate on held-out songs** (A/B vs the human chart — needs the training dataset on disk):
 ```bash

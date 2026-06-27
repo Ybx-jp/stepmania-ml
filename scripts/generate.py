@@ -23,6 +23,7 @@ Density/conditioning needs cache/radar_manifold.npz (shipped with the repo).
 """
 import argparse
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -74,7 +75,9 @@ def parse_args():
     p.add_argument("--audio", required=True, help="path to an audio file (.ogg/.mp3/.wav)")
     p.add_argument("--difficulty", required=True, choices=list(DIFFICULTY_METER),
                    help="target difficulty bucket")
-    p.add_argument("--out", default=None, help="output folder (default: <audio-stem>_sm/)")
+    p.add_argument("--out", default=None,
+                   help="GROUP folder to write into; the song is nested as <out>/<title>/ so StepMania "
+                        "sees Songs/<group>/<song>/ (default: ./Generated/)")
     p.add_argument("--checkpoint", default="checkpoints/gen_motif_full_fixed/best_val.pt",
                    help="generator weights (default: the deployed 42-dim highres model)")
     p.add_argument("--bpm", type=float, default=None, help="song BPM (default: estimate it)")
@@ -180,23 +183,31 @@ def main():
         gen = pair_holds(model.generate(audio, diff, lengths=torch.tensor([T], device=device),
                                         **gen_kwargs)[0].cpu().numpy())
 
-    # 7. write the .sm (single generated chart) + copy the audio next to it
-    out_dir = Path(args.out) if args.out else PROJECT_ROOT / f"{Path(args.audio).stem}_sm"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # 7. write a StepMania-shaped folder: <group>/<song>/{chart.sm, audio}.
+    #    StepMania expects Songs/<group>/<song>/<files> — a song folder placed DIRECTLY in a songs folder
+    #    becomes an empty group and won't appear. So --out is the GROUP folder (you drop it into Songs/);
+    #    the song lives one level in, named after the track.
+    title = Path(args.audio).stem
+    song_name = re.sub(r'[<>:"/\\|?*]', "_", title).strip() or "song"
+    group_dir = Path(args.out) if args.out else PROJECT_ROOT / "Generated"
+    song_dir = group_dir / song_name
+    song_dir.mkdir(parents=True, exist_ok=True)
     music = os.path.basename(args.audio)
     try:
-        shutil.copy2(args.audio, out_dir / music)
+        shutil.copy2(args.audio, song_dir / music)
     except Exception:
         pass
     sm = charts_to_sm(
         charts=[{"chart": gen, "difficulty_name": "Challenge",
                  "difficulty_value": DIFFICULTY_METER[args.difficulty], "author": "generated"}],
-        bpm=bpm, title=Path(args.audio).stem, artist="", music=music, offset=0.0, typed=True,
+        bpm=bpm, title=title, artist="", music=music, offset=0.0, typed=True,
     )
-    (out_dir / "chart.sm").write_text(sm, encoding="utf-8")
+    (song_dir / "chart.sm").write_text(sm, encoding="utf-8")
     gen_d = float((gen != 0).any(1).mean())
-    print(f"wrote {out_dir/'chart.sm'}  ({gen_d:.3f} realized density, "
-          f"{int((gen[:, :] != 0).any(1).sum())} notes). Drop the folder into StepMania to play.")
+    print(f"wrote {song_dir/'chart.sm'}  ({gen_d:.3f} realized density, "
+          f"{int((gen[:, :] != 0).any(1).sum())} notes).")
+    print(f"   Drop the GROUP folder '{group_dir}' into your StepMania Songs directory "
+          f"(it becomes the group; the song '{song_name}' sits inside it).")
 
 
 if __name__ == "__main__":

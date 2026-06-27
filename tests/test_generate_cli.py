@@ -48,8 +48,10 @@ def test_generate_from_audio_roundtrips(tmp_path):
         capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=300,
     )
     assert r.returncode == 0, f"generate.py failed:\n{r.stdout}\n{r.stderr}"
-    sm = out / "chart.sm"
-    assert sm.is_file(), "no chart.sm written"
+    # --out is the GROUP folder; the song is nested one level in (<out>/<title>/chart.sm)
+    sm = next(out.rglob("chart.sm"), None)
+    assert sm is not None and sm.is_file(), "no chart.sm written"
+    assert sm.parent.parent == out, f"chart not nested as <group>/<song>/: {sm}"
 
     chart = StepManiaParser(min_song_length=1, max_song_length=100000).parse_file(str(sm))
     assert chart is not None, "generated .sm did not re-parse"
