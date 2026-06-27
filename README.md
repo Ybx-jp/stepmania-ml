@@ -57,7 +57,10 @@ And the metric the project lacked until late:
   order humans do — **REAL 0.823 > BASE 0.290 > CHAOS 0.003** (that CHAOS is the deliberate off-manifold
   *flood*). It **re-validates on the current decode stack**, and independently scored the **chaos-conditioning
   redesign** as more musical (see Limitations) — the metric catching a quality change humans felt but no prior
-  number could see. Every prior metric was blind to this.
+  number could see. Every prior metric was blind to this. And we can say *what* it measures: an interpretability
+  probe (perturbation saliency + Conv1D activation maps, [`critic_interpretability.ipynb`](experiments/realism_critic/critic_interpretability.ipynb))
+  shows its "fake" evidence is **off-grid flooding** — removing a bad chart's off-grid notes recovers ~half its
+  score, while the on-grid backbone is what "real" rests on.
 
 Plus the engineering that makes it practical:
 
@@ -209,7 +212,10 @@ pytest tests/
   mean-pin flood (P(real) **0.228 vs 0.028**, n=64, 73% of songs), and the old flood-request still scores
   ~0.03 on the current model — so the gain is the *conditioning redesign*, not the model. A quantitative
   echo of the by-ear judgment that the flood reads as worse. (A *separator* signal, not a playtest; and
-  "more musical" here means "stopped flooding off-grid 16ths," not "added spice.")
+  "more musical" here means "stopped flooding off-grid 16ths," not "added spice.") An interpretability probe
+  pins down *why* at the input level: the critic's "fake" evidence lives on the off-grid flood itself —
+  removing those notes recovers ~half the score gap — while it leaves *sparse* off-grid syncopation alone (those
+  are tasteful). The metric and the manifold conditioning agree on the same axis. ([`critic_interpretability.ipynb`](experiments/realism_critic/critic_interpretability.ipynb))
 - **Song structure — a strength, with one open frontier.** Playtests consistently read charts as
   *"in character with the song"* — accents land, choreography escalates, and the model picks jacks
   where the music wants stomping; the audio-driven onset backbone follows energy into an intensity
