@@ -89,7 +89,8 @@ def parse_args():
                    help="opt-in Stage-3 difficulty arc (e.g. 1.2); needs --stamina_ceiling")
     p.add_argument("--pattern_temperature", type=float, default=0.7,
                    help="footwork sampling temperature (coherence range ~0.6-0.85)")
-    p.add_argument("--max_len", type=int, default=2400, help="cap on generated frames")
+    p.add_argument("--max_len", type=int, default=2048,
+                   help="cap on generated frames (clamped to the model's trained context, 2048)")
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
 
@@ -127,13 +128,19 @@ def main():
     audio_tensor = feats.get_aligned_features()  # (T, 42)
     if np.any(~np.isfinite(audio_tensor)):
         raise SystemExit("non-finite audio features — bad/corrupt audio?")
-    T = min(audio_tensor.shape[0], args.max_len)
-    audio = torch.from_numpy(audio_tensor[:T].astype(np.float32)).unsqueeze(0).to(device)
-
     # 3. model
     model = LayeredTypedChartGenerator(audio_dim=42, d_model=128, num_layers=4, onset_layers=2).to(device)
     model.load_state_dict(torch.load(ckpt, map_location=device)["model_state_dict"], strict=False)
     model.eval()
+
+    # the model's positional encoding is a HARD context cap (trained length) — never feed more frames than that,
+    # or the pos-encoding add throws a size mismatch. Longer songs are truncated to the context, with a warning.
+    ctx = int(model.pos_encoding.pe.size(1))
+    T = min(audio_tensor.shape[0], args.max_len, ctx)
+    if audio_tensor.shape[0] > T:
+        print(f"⚠️  song is {audio_tensor.shape[0]} frames; truncating to the model's {ctx}-frame context "
+              f"(~{T * hop / SR:.0f}s). Charting past the trained context isn't supported yet.")
+    audio = torch.from_numpy(audio_tensor[:T].astype(np.float32)).unsqueeze(0).to(device)
 
     diff_idx = list(DIFFICULTY_METER).index(args.difficulty)
     diff = torch.tensor([diff_idx], device=device)
