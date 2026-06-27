@@ -81,7 +81,7 @@ def main():
     ck = torch.load(args.critic, map_location=device, weights_only=False)
     critic = LateFusionClassifier(ck['config']).to(device); critic.load_state_dict(ck['model_state_dict']); critic.eval()
     gen = LayeredTypedChartGenerator(audio_dim=41, d_model=128, num_layers=4, onset_layers=2).to(device)
-    gen.load_state_dict(torch.load(GEN_CKPT, map_location=device)['model_state_dict']); gen.eval()
+    gen.load_state_dict(torch.load(GEN_CKPT, map_location=device)['model_state_dict'], strict=False); gen.eval()
     mean_radar = np.mean([m['groove_radar'].to_vector() for m in val_ds.valid_samples if 'groove_radar' in m], 0).astype(np.float32)
     chaos_radar = mean_radar.copy(); chaos_radar[4] = 0.9
 

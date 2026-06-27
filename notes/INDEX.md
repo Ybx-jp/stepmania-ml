@@ -57,6 +57,13 @@ pyproject, README claims audit, bring-your-own-audio `scripts/generate.py`, CHAN
 - `stage2_realism_critic_plan.md` — plan: critic for "taste" + best-of-N + critic-guided fine-tune.
 - `stage2a_critic_findings.md` — v1 learned generator-fingerprint (failed gate); v2 corrupted-real critic =
   VALID taste metric (REAL>BASE>CHAOS) + best-of-N reranking.
+- `taste_critic_transfer_findings.md` — re-eval vs the CURRENT decoder (2026-06-26): ranking transfers
+  (REAL 0.82>BASE 0.27>CHAOS 0.23), density-OOD cleared, BUT critic is near-binary → strong separator / weak
+  grader; best-of-N needs low-end recalibration + a by-ear grounding gate. + chaos-conditioning ISOLATION:
+  manifold 0.228 vs mean-pin 0.028 (model fixed) → the redesign, not the model, made chaos tasteful.
+- `taste_critic_interpretability_plan.md` — PLAN: IG saliency (on the LOGIT, saturation-proof) + activation maps
+  to pin down what the critic measures; validation-gate-first (localize an injected panels/shift corruption);
+  H1 off-grid penalty / H2 alignment. Gates best-of-N + a writeup artifact.
 
 ## Decode / playtest fixes
 - `style_decoding.md` — sample the pattern head (greedy = always-Left).
