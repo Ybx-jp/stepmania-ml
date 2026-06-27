@@ -65,10 +65,20 @@ it refuses to flood (stays on-grid). The taste critic and the conditioning redes
 - **Null ruled out:** the signal is localized to a musically-meaningful axis (on/off-grid), not a diffuse
   density/fingerprint artifact (a diffuse-artifact critic would show ~0 ablation contrast).
 
-## PHASE C — activation maps (NOT yet run)
-The other half of the user's ask: forward-hook the `audio_encoder`/`chart_encoder`/`fusion`/`Conv1DBackbone` and
-look for a channel that tracks on/off-grid or alignment — to corroborate the input-level H1 finding at the
-representation level. Deferred; the input-level evidence above already answers the headline question.
+## PHASE C — activation maps (DONE, as a notebook for visualization)
+`experiments/realism_critic/critic_interpretability.ipynb` (executed, figures embedded; built by `/tmp/build_nb.py`
+pattern). Forward-hook the Conv1D backbone (output (B,T,256)) and look for off-grid-content channels; then
+visualize H1.
+
+- **Confound caught + fixed (experiment-design):** a raw `corr(channel activation, off-grid INDICATOR)` is
+  confounded — the indicator is periodic, so any metric-grid-tracking channel correlates with it on ANY chart
+  (REAL read +0.56 vs MEANPIN +0.65, a false near-tie). Fix = **note-conditioned** contrast: within the mean-pin
+  flood, activation on off-grid NOTE frames minus on-grid NOTE frames. That gives a clean result: **channel #121
+  fires +10.30 higher on off-grid notes** than on-grid notes. The representation encodes the on/off-grid split.
+- **Framing:** Phase C is CORROBORATIVE/illustrative; the CAUSAL proof remains the H1 ablation (perturbation).
+- **Figures:** backbone activation heatmaps (REAL vs MEANPIN), the note-conditioned off-grid-channel bar, the top
+  channel's trace, the H1 summary bars, and "the flood visualized" (note positions, off-grid in orange).
+  Exported to `outputs/critic_interp_fig{1..5}.png`.
 
 ## Threads
 [[taste_critic_transfer_findings]] (the chaos isolation Phase B explains), [[taste_critic_interpretability_plan]]
