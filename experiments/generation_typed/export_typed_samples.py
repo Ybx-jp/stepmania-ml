@@ -43,13 +43,75 @@ from src.generation.evaluation import DifficultyCritic
 DEFAULT_BPM = 150.0
 
 
+# ============================================================================================
+# THE KNOB MAP — how all these args fit together (read before adding/trusting a flag)
+# --------------------------------------------------------------------------------------------
+# This script grew a LOT of knobs across experiments. They are NOT a flat bag — they are one
+# decode PIPELINE with a lever at each stage. Read in decode order; STATUS tags tell you what to
+# actually use. Authoritative mechanism: the `conditioning-mechanics` skill (§ refs below).
+#
+#   STATUS legend:  [LIVE] use it  ·  [DEFAULT] on unless you change it  ·  [OPT-IN] off until you pass it
+#                   [DEPRECATED] superseded, kept only for legacy/ablation  ·  [TRAP] off-manifold/guarded
+#                   [NICHE] narrow special-case
+#
+# 0. SELECT songs ....... --num_songs --groove_select --difficulty_select --song_filter --seed
+#
+# 1. CONDITION (one groove profile, fed to the onset+pattern heads). FOUR routes write the SAME
+#    slot and OVERRIDE each other — pick EXACTLY ONE (precedence high→low; cond-mechanics §1-§3):
+#       --reference / --reference_self  StyleEncoder latent from a full chart        [LIVE/NICHE]
+#       --style "stream=high,..."        manifold partial-spec (the CORRECT radar)    [LIVE]
+#       --match_radar                    the song's OWN 5-dim radar via the manifold  [LIVE]
+#       --radar "chaos=0.9"              mean-pin — OFF-MANIFOLD SMEAR, errors w/o --radar_ood  [TRAP]
+#    --guidance amplifies whichever is set (CFG; 1=off, 1.5-2.5 musical, >3 dissolves backbone). [LIVE]
+#
+# 2. ONSET / DENSITY (which frames fire). cond-mechanics §6.
+#    density target priority:  --target_density  >  manifold E[density|style]  >  source chart.
+#       --onset_phase_calib "b8,b16"  un-buries off-beats so 16ths float w/ audio  [LIVE, DEFAULT-ON "0,1.0"] the 16th lever ("knee not node", song-dep ~0.5-2.0)
+#       --onset_phase_alloc "q,8,16"  flat per-phase QUOTA — SMEARS (exp-design Rule 13)   [DEPRECATED]
+#       --onset_phase_penalty         downbeat gate; does NOT rescue chaos                 [NICHE]
+#    (NOTE: onset is DECOUPLED from motif/figure by design — cond-mechanics §1. Don't re-couple.)
+#
+# 3. PATTERN (which panels): --pattern_temperature (1.0≈real) --repetition_penalty --jump_bias
+#    --prefer --no_crossovers · H15 figure knobs: --motif (continuous) --figure (discrete, soft/capped)
+#
+# 4. TYPE (tap/hold/roll): --type_temperature
+#
+# 5. GOVERNORS (decode-time biomechanics; ALL need bpm [auto from chart] + fatigue on). cond-mech §8.
+#    per-NOTE footwork:  --fatigue_penalty  the two-foot model, RELEASE default 2  [DEFAULT]
+#                        --jack_penalty     OLD single-foot, superseded by fatigue  [DEPRECATED]
+#                        --fatigue_free --max_jack_run (hard cap 2)
+#    per-REGION density:  --stamina_ceiling  Stage-2 relief, DEFAULT 50              [DEFAULT, <=0=off]
+#                         --stamina_breathe  Stage-3 difficulty ARC, DEFAULT 1.2     [DEFAULT, inert w/o ceiling]
+#                         --stamina_tau --stamina_scale
+#    NOT exposed here (use generate() validated defaults): stamina_breathe_floor=0.4 (the outro-collapse
+#    fix), stamina_max_bump=0.45, stamina_breathe_win=96. Expose them only if you need to retune.
+#    NOTE: this exporter's BARE DEFAULT IS THE ONE CANONICAL CONFIG (the `generation-defaults` skill) — model
+#    gen_motif_full_fixed (42-dim highres) + FULL governor (fatigue 2 + stamina@50 + breathe 1.2) + pattern_temp
+#    1.0 + onset_phase_calib "0,1.0" (the 16th-unlock). Run it with NO flags to reproduce what the user plays.
+#    The shipped generate()/scripts/generate.py release center is SEPARATE and conservative (fatigue-only,
+#    pattern_temp 0.7 = stale) — it is NOT the reference for matching playtests; mirror THIS exporter.
+#
+# 6. PLAYABILITY (MANDATORY — enforce_playability FORCES hold_aware + no_jump/cross_during_hold ON
+#    regardless of the flags). --override_playability REASON to deviate (needs explicit approval).
+#
+# 7. OUTPUT: --out_dir --install --songs_dir --max_len --checkpoint --features
+#
+# NOTE on --fatigue_free: defaults 6.0 here vs 12.0 in generate(); BOTH are inside the vouched 6-12 range
+#   (governor_release_region.md) — 12 = design-note default (barrier set high), 6 = the more-gating end this
+#   exporter has always playtested. Not a bug, just two valid points in the band.
+# ============================================================================================
+
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--out_dir', default='outputs/typed_samples')
-    p.add_argument('--checkpoint', default='checkpoints/gen_style/best_val.pt')
-    p.add_argument('--features', choices=['base', 'stage1', 'highres'], default='base',
-                   help='base=23-dim (cache/samples); stage1=41-dim musical features (cache/samples_v2)')
+    p.add_argument('--checkpoint', default='checkpoints/gen_motif_full_fixed/best_val.pt',
+                   help='DEFAULT = the deployed model (42-dim H19 highres retrain; radar+motif+figure). '
+                        'Legacy gen_style/gen_stage1 are 23/41-dim — pair them with --features base/stage1.')
+    p.add_argument('--features', choices=['base', 'stage1', 'highres'], default='highres',
+                   help='DEFAULT highres=42-dim (cache/samples_v3, what gen_motif_full_fixed expects). '
+                        'stage1=41-dim (cache/samples_v2, legacy gen_stage1); base=23-dim (cache/samples, gen_style).')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
     p.add_argument('--reference', type=str, default=None,
@@ -75,26 +137,28 @@ def parse_args():
                    help='forbid the free foot fast-crossing panels while a hold is open (the B4U one-foot '
                         'jacks-during-hold awkwardness; brings hold_burst ~6.9%%->4.7%% vs real 4.0%%)')
     p.add_argument('--onset_phase_alloc', type=str, default=None,
-                   help='phase-aware onset threshold: target note shares "quarter,8th,16th" (real ~"0.707,0.252,0.041"). '
+                   help='[DEPRECATED — SMEARS, prefer --onset_phase_calib] phase-aware onset threshold: target note shares "quarter,8th,16th" (real ~"0.707,0.252,0.041"). '
                         'Redistributes the density budget across phases so the model\'s own 16th confidence wins 16th '
                         'slots instead of losing to 8ths (which a single threshold buries). None = single threshold.')
-    p.add_argument('--onset_phase_calib', type=str, default=None,
-                   help='per-phase calibration offset "b8,b16" (logit space; e.g. "0,0.19") for VARIABLE '
-                        'per-song chaos: corrects the model\'s 16th under-confidence so the 16th count floats '
-                        'with the audio (chaotic songs get many, calm songs ~none). Preferred over the flat '
-                        '--onset_phase_alloc quota. None = single threshold.')
+    p.add_argument('--onset_phase_calib', type=str, default='0,1.0',
+                   help='[LIVE — the validated 16th-unlock lever; NOW DEFAULT-ON] per-phase calibration offset '
+                        '"b8,b16" (logit space) for VARIABLE per-song chaos: corrects the model\'s 16th '
+                        'under-confidence so the 16th count floats with the audio (chaotic songs get many, calm '
+                        'songs ~none). DEFAULT "0,1.0" = the unlock16_b10 by-ear sweet spot; it is "a KNEE not a '
+                        'node" so the right b16 is song-dependent (~0.5 calm -> 1.0 -> 2.0 near-all-16ths on dense '
+                        'songs). Preferred over the flat --onset_phase_alloc quota. "0,0" or "" = single threshold (off).')
     p.add_argument('--target_density', type=float, default=None,
                    help='override per-chart density (notes/frame) for the onset threshold; default = match the '
                         'source chart. Use to couple density to chaos (real high-chaos charts run ~0.34 vs ~0.22 '
                         'baseline) so raising chaos ADDS off-beats instead of replacing the quarter backbone.')
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
-                   help='metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
+                   help='[NICHE] metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
     p.add_argument('--max_jack_run', type=int, default=2,
                    help='HARD 16th-jack cap: max consecutive same-panel 16th-adjacent presses. =2 (default, '
                         'user-approved) allows a justified 2-note 16th jack, hard-forbids 3+. 0/negative = off.')
     p.add_argument('--jack_penalty', type=float, default=0.0,
-                   help='OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
+                   help='[DEPRECATED] OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
                         'generalizes it), so default 0 = off. Set >0 only to use the jack governor INSTEAD of fatigue. '
                         'notes/foot_exertion_findings.md')
     p.add_argument('--fatigue_penalty', type=float, default=2.0,
@@ -103,18 +167,21 @@ def parse_args():
                         'the jack governor; required for --stamina_ceiling). Good range 1.5-3 (matches real jack dist, '
                         'density held); 0=off. notes/governor_release_region.md')
     p.add_argument('--fatigue_free', type=float, default=6.0,
-                   help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams gated)')
-    p.add_argument('--stamina_ceiling', type=float, default=None,
+                   help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams '
+                        'gated). 6 and generate()\'s 12 are BOTH in the vouched 6-12 range (governor_release_'
+                        'region.md): 12 = design-note default (barrier set high), 6 = the more-gating end this '
+                        'exporter has always playtested. <6 jump-starves, >=18 silent.')
+    p.add_argument('--stamina_ceiling', type=float, default=50.0,
                    help='STAGE-2 STAMINA governor (per-region DENSITY): a slow exertion accumulator thins UPCOMING '
                         'onset density only where sustained workload is high (a CEILING, never a global dent). Needs '
-                        '--fatigue_penalty (the foot model supplies the cost). ~25 = validated gentle relief; lower '
-                        '= more thinning. None = off. notes/foot_fatigue_design.md "STAGE 2".')
+                        '--fatigue_penalty (the foot model supplies the cost). DEFAULT 50 (the full-governor playtest '
+                        'value; 25 thins harder toward natural density). <=0 = off. notes/foot_fatigue_design.md "STAGE 2".')
     p.add_argument('--stamina_tau', type=float, default=8.0, help='stamina slow-decay (beats, ~several measures)')
     p.add_argument('--stamina_scale', type=float, default=15.0, help='excess-workload scale for the tau bump (tanh)')
-    p.add_argument('--stamina_breathe', type=float, default=0.0,
-                   help='STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high at climaxes -> keep '
-                        'the spicy notes, low in verses -> rest) = a difficulty arc. Needs --stamina_ceiling. '
-                        '0=off (flat), ~1.2 validated. notes/foot_fatigue_design.md "STAGE 3".')
+    p.add_argument('--stamina_breathe', type=float, default=1.2,
+                   help='[DEFAULT 1.2 = arc ON] STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high '
+                        'at climaxes -> keep the spicy notes, low in verses -> rest) = a difficulty arc. Needs '
+                        '--stamina_ceiling (inert without it). 0 = flat (no arc). notes/foot_fatigue_design.md "STAGE 3".')
     p.add_argument('--motif', type=str, default=None,
                    help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
                         '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
@@ -130,7 +197,7 @@ def parse_args():
     # backbone preserved). See the conditioning-mechanics skill §2 + its misalignment catalog ("mean-pin vs
     # manifold conditional-fill"). Only --radar_ood (a deliberate, labeled "see the raw OOD reach" test) re-enables it.
     p.add_argument('--radar', type=str, default=None,
-                   help='DISABLED (mean-pin = OFF-MANIFOLD smear, not the real knob). Use --style for the manifold '
+                   help='[TRAP] DISABLED (mean-pin = OFF-MANIFOLD smear, not the real knob). Use --style for the manifold '
                         'path. For a deliberate OOD reach test, pass --radar_ood too. See conditioning-mechanics skill §2.')
     p.add_argument('--radar_ood', action='store_true',
                    help='acknowledge that --radar is an off-manifold mean-pin (OOD smear) and run it anyway '
@@ -413,7 +480,7 @@ def main():
                           jack_penalty=(args.jack_penalty if args.jack_penalty and args.jack_penalty > 0 else None),
                           fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
                           fatigue_free=args.fatigue_free,
-                          stamina_ceiling=args.stamina_ceiling,  # Stage-2 per-region density relief (needs fatigue_penalty)
+                          stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),  # Stage-2 per-region density relief (needs fatigue_penalty); <=0 = off
                           stamina_tau=args.stamina_tau, stamina_scale=args.stamina_scale,
                           stamina_breathe=args.stamina_breathe,  # Stage-3 ARC: ceiling breathes with audio energy
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
