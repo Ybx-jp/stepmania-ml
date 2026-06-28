@@ -42,6 +42,16 @@ from src.generation.evaluation import DifficultyCritic
 
 DEFAULT_BPM = 150.0
 
+# Sparse-harm-in-quiet phrase calibrator (Step 1 mechanism, notes/phrasing_coherence_findings.md). MUST match
+# probe_phrasing_coherence.py:sparse_harm_offset exactly (boxsmooth win 16, norm01, highres dims energy=0 harm=36).
+def _sparse_harm_offset(audio_np, gain, quiet_q):
+    e = audio_np[:, 0].astype(np.float64)
+    e = (e - e.min()) / (np.ptp(e) + 1e-9)                       # norm01
+    w = 16; e = np.convolve(np.pad(e, w, mode='edge'), np.ones(2 * w + 1) / (2 * w + 1), mode='valid')  # boxsmooth
+    q = np.percentile(e, quiet_q)
+    quiet_gate = np.clip((q - e) / (q + 1e-6), 0.0, 1.0)         # 0 above the quiet quantile, ->1 as energy->0
+    return (gain * quiet_gate * audio_np[:, 36]).astype(np.float32)   # harm onset (dim36) already 0-1
+
 
 # ============================================================================================
 # THE KNOB MAP — how all these args fit together (read before adding/trusting a flag)
@@ -182,6 +192,13 @@ def parse_args():
                    help='[DEFAULT 1.2 = arc ON] STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high '
                         'at climaxes -> keep the spicy notes, low in verses -> rest) = a difficulty arc. Needs '
                         '--stamina_ceiling (inert without it). 0 = flat (no arc). notes/foot_fatigue_design.md "STAGE 3".')
+    p.add_argument('--harm_calib', type=float, default=0.0,
+                   help='[STEP-1 phrase calibrator] sparse-harm-in-quiet onset logit boost (gain·quiet_gate·harm) '
+                        'so the head allocates for a sparse melodic/harmonic event in a quiet phrase (the HSL '
+                        'piano-solo under-placement). Needs --features highres (perc/harm channels). ~10 to start; '
+                        '0 = off. notes/phrasing_coherence_findings.md.')
+    p.add_argument('--harm_quiet_q', type=float, default=40.0,
+                   help='energy percentile defining "quiet" for --harm_calib (frames below it get the boost).')
     p.add_argument('--motif', type=str, default=None,
                    help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
                         '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
@@ -457,6 +474,12 @@ def main():
             if phase_calib is not None:  # apply the SAME per-phase offset used inside generate() before tau
                 b8, b16 = phase_calib; ph = torch.arange(ol_onset.shape[0], device=device) % 4
                 ol_onset = ol_onset + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
+            harm_off_t = None
+            if args.harm_calib > 0:  # sparse-harm-in-quiet calibrator: tau MUST see the same offset generate() uses
+                if audio_dim != 42:
+                    raise SystemExit("--harm_calib needs --features highres (the 42-dim perc/harm channels).")
+                harm_off_t = torch.from_numpy(_sparse_harm_offset(audio_np, args.harm_calib, args.harm_quiet_q)).to(device)
+                ol_onset = ol_onset + harm_off_t
             p_onset = torch.sigmoid(ol_onset).cpu().numpy()
         real_density = float((orig_typed != 0).any(1).mean())
         # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
@@ -487,6 +510,7 @@ def main():
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
                           onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
+                          onset_logit_offset=harm_off_t,  # STEP-1 sparse-harm-in-quiet phrase calibrator (None=off)
                           style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen,
                           motif=motif_vec,  # H15 continuous motif knobs (global vector; None if --motif unset)
                           figure=(torch.full((1, T), figure_tok, dtype=torch.long, device=device)

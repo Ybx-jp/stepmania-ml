@@ -53,6 +53,15 @@ the posterior.** CAVEATS: (a) needed gain ~10 is large because the gate (quiet·
 effective boost — a learned version would carry larger/better weights; (b) POSTERIOR-only — the real gate is
 BY-EAR (Rule 8): does the generated HSL piano solo now get sensible, well-reading notes? = STEP 2.
 
+## STEP 2 (2026-06-28) — wired into generation; A/B installed, AWAITING EARS (the real gate, Rule 8)
+Added a per-frame `onset_logit_offset` (B,T) to `generate()` (applied to the onset logits before τ; caller's τ
+uses the same offset — same coupling as `onset_phase_calib`). Exporter exposes `--harm_calib <gain>`
+(+ `--harm_quiet_q`), computing the SAME sparse-harm offset as the probe (needs `--features highres`). A/B
+installed for HSL + japa1: `~/sm-generated/harmcalib_{OFF,ON}` (ON = gain 10). Generation sanity: global density
+HELD (HSL 0.388→0.383, kneeso 0.323→0.321 — redistribution not inflation), critic still Hard, holds shifted
+(HSL 22→27). 39/39 generation tests pass. **OPEN = by-ear gate:** does HSL's piano solo now get sensible,
+well-reading notes, or does it over-allocate? That decides Step 3 (LEARN the offset) vs retune gain/gate/feature.
+
 ## Bottom line / next
 The learned phrase calibrator has the most headroom on **(2) quiet-phrase harmonic allocation** (ADD — the HSL
 melodic under-placement, the sharpest + on the complaint song) and **(1) snappier boundaries** (sharpen). **(4)
