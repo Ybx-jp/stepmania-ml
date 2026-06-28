@@ -15,25 +15,43 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
-## 2026-06-27 — ⏳ SET UP (awaiting feedback): pattern_temperature × governor × conditioning
+## 2026-06-27 — ⏳ SET UP (awaiting feedback): pattern_temperature × conditioning (3×3, 9 sets)
 ### What was generated (NOT yet played)
-6 groups installed to `~/sm-generated/T{0.7,1.0,1.2}_cond{OFF,ON}`, each = 4 Hard songs the user named:
-**japa1** (突撃ガラスのニーソ姫), **Deja Loin**, **OH WORLD**, **High School Love**. Deployed model
-`gen_motif_full_fixed` (highres), seed 42. **Governor ON throughout** (`fatigue_penalty=2`). Matrix:
-`pattern_temperature ∈ {0.7 (shipped), 1.0, 1.2}` × conditioning {OFF = plain g=1.0 | ON = "cranked" =
-`--match_radar --guidance 2.0`}. Generator: `export_typed_samples.py` (new `--song_filter` +
-`--difficulty_select` flags). Each folder has the generated `Challenge` + the original chart for A/B.
+**9 groups** installed to `~/sm-generated/T{0.7,1.0,1.2}_cond{OFF,ON,CHAOS}`, each = the same 4 Hard songs
+the user named: **japa1** (突撃ガラスのニーソ姫), **Deja Loin**, **OH WORLD**, **High School Love**. Deployed
+model `gen_motif_full_fixed` (highres), seed 42, **governor ON throughout** (`fatigue_penalty=2`), each folder
+has the generated `Challenge` + the original chart for A/B. Generator: `export_typed_samples.py` (new
+`--song_filter` + standalone `--difficulty_select`).
 
-### The question (binding, BY-EAR — metrics can't settle it)
-Does `pattern_temperature` >0.85 read as **coherent or scrambly**, now that the fatigue governor bounds jacks?
-Probe 4 (`notes/jack_heaviness_findings.md`) showed metrics FAVOR higher temp (jacks ↓, jumps ↑ toward real,
-maxRun stays ~5 under the governor) — but transition-entropy climbs and can't tell structured variety from
-random scramble. So the H2 0.6–0.85 cap predates the governor and may be raisable; **only the ears decide.**
-Secondary: does cranked conditioning (cond ON) make higher temp MORE coherent (figures pull the pattern head)
-or worse? And the standing onset complaints — awkward over-noted / empty-where-active (Probe 3B, quantified).
+A clean **3×3 matrix** — rows = `pattern_temperature {0.7 shipped, 1.0, 1.2}`, cols = conditioning:
+
+| | OFF (plain) | ON (own radar, cranked) | CHAOS (manifold) |
+|---|---|---|---|
+| **knob** | g=1.0, no radar | `--match_radar --guidance 2.0` | `--style "chaos=q0.99" --guidance 3.0` |
+| **T0.7** | T0.7_condOFF | T0.7_condON | T0.7_condCHAOS |
+| **T1.0** | T1.0_condOFF | T1.0_condON | T1.0_condCHAOS |
+| **T1.2** | T1.2_condOFF | T1.2_condON | T1.2_condCHAOS |
+
+CHAOS = manifold conditional-fill (NOT mean-pin). Resolved Hard target: stream 0.61 / voltage 0.52 / air 0.54 /
+freeze 0.51 / **chaos 0.47** (q0.99 caps to the real spread), Mahal d=3.52 **(projected → in-distribution)**,
+density→0.400 (coupled up with chaos, like real charts). Song-fit-gated → japa1/HSL show the most 16ths.
+
+### The questions (binding, BY-EAR — metrics can't settle them)
+1. **Temperature (rows):** does `pattern_temperature` >0.85 read **coherent or scrambly** now that the fatigue
+   governor bounds jacks? Probe 4 (`notes/jack_heaviness_findings.md`): metrics FAVOR higher temp (jacks ↓,
+   jumps ↑ → real, maxRun ~5 under the governor) but transition-entropy climbs and can't tell structured variety
+   from random scramble. The H2 0.6–0.85 cap predates the governor and may be raisable — only the ears decide.
+2. **Conditioning (cols):** OFF vs ON vs CHAOS — does cranked/own-radar or chaos-manifold conditioning make
+   higher temp MORE coherent (figures pull the pattern head) or worse?
+3. **The interaction (the point of the full grid):** is there a temp×conditioning sweet spot — e.g. does CHAOS
+   conditioning need a LOWER temp to stay coherent, or does the manifold backbone survive even at T1.2? Does
+   q0.99/g3 chaos read as musical SYNCOPATION with the quarter backbone INTACT (crown-jewel claim,
+   conditioning-mechanics §2) vs the old mean-pin smear, and does g3 (edge before backbone dissolves) hold?
+Standing onset complaints to watch across all: awkward over-noted / empty-where-active (Probe 3B, quantified).
 
 ### Action / next
-- [ ] User plays the 6 groups; report per-temp coherence (esp. 1.0 vs 1.2 vs the 0.7 baseline), cond ON vs OFF.
+- [ ] Play the 3×3 grid; report the temp axis (0.7 vs 1.0 vs 1.2 coherence), the conditioning axis (OFF/ON/CHAOS),
+      and any interaction (does CHAOS want lower temp? does the backbone survive T1.2×CHAOS×g3?).
 - [ ] If higher temp reads coherent → raise the `pattern_temperature` default / H2 range (a no-retrain jack/jump
       fix). If scrambly → the cap survives the governor; jacks need the onset-head rebuild instead.
 - [ ] Either way the NEXT THREAD is the onset head (`HANDOFF.md` §3) — coherence/allocation, not jacks per se.
