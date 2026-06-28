@@ -59,6 +59,65 @@ The jack-heaviness is a COMBINATION:
    worst onset-rhythm blockiness (Probe 2: 8th +16pts, onset runs 2.1× real) — the opportunity is too dominant
    for temperature alone.
 
+## Probe 3 — section-level causality + misallocation (`probe_onset_sections.py`, 16 songs, win=32)
+Tests the user's "pattern head = best of a bad situation" causally, and quantifies the playtest
+"awkward sections over-noted / empty where active." Native deployed onset head, governor OFF, density
+matched. (Metric fix mid-probe: onset-run-length saturates in rich charts — gap≤4 opportunity is
+everywhere — so 3A is binned by LOCAL DENSITY, not run-length.)
+
+**3A — the pattern head is the PROXIMATE cause, not just the onset head (refines "best of a bad situation").**
+At MATCHED local density the model jacks far more than real, and the SHAPES differ qualitatively (Medium):
+
+| local density | model jackiness | real jackiness |
+|---------------|-----------------|----------------|
+| [0.2,0.35) | 1.42 | 1.07 |
+| [0.35,0.5) | 1.60 | 1.08 |
+| [0.5,1.0)  | 1.67 | 1.06 |
+| corr(density,jackiness) | **+0.23** | **−0.09** |
+
+REAL jackiness is DENSITY-INVARIANT (~1.07) — humans keep alternating however dense the section gets.
+The MODEL's jackiness RISES with density. So the onset head's denser/blockier sections (Probe 2) TRIGGER
+it, but the pattern head has a density-coupled jack response humans don't have — same defect as Probe 1
+(low pattern_temperature → greedy repeat → worst where there are most consecutive decisions = dense
+sections). Probe 1 and 3A are one mechanism. (Governor OFF isolates the head; the fatigue governor partly
+counters this in dense sections — the other lever.)
+
+**3B — misallocation confirmed + quantified (Med / Hard):** corr(model_dens, real_dens) 0.48 / 0.49
+(only ~half the section variance matches real); corr(model_dens, p_onset) 0.62 / 0.83 vs corr(real_dens,
+p_onset) 0.36 / 0.54 — the model tracks raw audio SALIENCE more than humans do → over-notes loud/awkward,
+under-notes musically-active-but-quiet (the §8d melodic under-placement). Over/under sections 6%/10% (Med),
+9%/11% (Hard) — skews toward UNDER-placement, matching "empty where it should be active."
+
+## Probe 4 — does the FATIGUE GOVERNOR let pattern_temperature rise? (`probe_temp_governor.py`)
+H2's "cap pattern_temperature at 0.85 for coherence" predates the governor. Swept pattern_temperature
+× governor {OFF, ON λ=2}, native, density matched, bpm passed (§8b). Both arms keep the mandatory
+max_jack_run=2 hard cap; the swept knob is the SOFT exponential fatigue_penalty.
+
+**Governor SUPPORTS higher temp on the JACK axis (hypothesis holds there).** Medium maxRun (jack tail):
+gov OFF 8/**22**/6/6/6 (erratic, spikes) vs gov ON 8/7/5/7/5 (bounded near real 5) across T=0.7→1.5. And
+under the governor, rising temp still improves the distribution: jackDist 0.34→0.22, jump% 19→34 (→ real
+41), mJumpStrm up — the governor does NOT kill the jump gain. So the governor catches the jacks the H2 cap
+indirectly guarded → you can raise temp for the jack/jump benefit without a jack blowup.
+
+**But it does NOT certify musical COHERENCE, and the metric is ambiguous.** Transition-entropy (scramble
+proxy) CLIMBS with temp in BOTH arms (Medium real 2.20; gov ON 2.40→2.81); the governor only slightly
+dampens it. KEY caveat (Rule 1): entropy can't separate STRUCTURED variety (good) from RANDOM scramble
+(bad) — reducing jacks (low-entropy repetition) NECESSARILY raises entropy. So a rising transEnt is partly
+the desired jack-fix, partly possible incoherence; the metric can't split them. The governor bounds
+FATIGUE/jacks, not musical structure.
+
+**Verdict:** metrics say "raise it" (governor bounds jacks; temp moves jacks+jumps → real); metrics CANNOT
+settle coherence → BY-EAR (Rule 8). Metric sweet spot: gov-ON T≈1.0–1.2 (Medium jackDist 0.26–0.28, maxRun
+5–7, jump% 29–31). Exports for the ear test: `outputs/probe_temp_governor/` (gov-ON, T=0.7/0.85/1.0/1.2).
+NEXT = playtest A/B those exports; the binding constraint is coherence, which only ears resolve.
+
+## Updated picture of the jack-heaviness (after 4 probes)
+- PROXIMATE cause = the PATTERN head's density-coupled over-jacking (low pattern_temperature). Levers:
+  pattern_temperature ↑ (coherence-capped) and the fatigue governor (both decode-time, available NOW).
+- CONTRIBUTING cause = the ONSET head's blocky/dense rhythm + salience-chasing misallocation (Probe 2/3B) —
+  a training/architecture thread (sequence-aware onset, bounded in sequence_aware_onset_plan.md; + the
+  melodic-under-placement audio-feature thread, §8d). Not cheaply fixable (06-22 bound).
+
 ## Next (each starts with Rule 0)
 - Quick decode win: A/B pattern_temperature 0.7 vs ~0.85 BY EAR (the coherence ceiling is the binding
   constraint, and metrics are blind to it). Don't ship >0.85 on metrics alone.

@@ -161,6 +161,9 @@ def parse_args():
                         "'none' = first-N by seed order (legacy).")
     p.add_argument('--difficulty_select', default=None, choices=['Beginner', 'Easy', 'Medium', 'Hard'],
                    help="Restrict groove-selected songs to this difficulty class (harder = more revealing).")
+    p.add_argument('--song_filter', default=None,
+                   help="Comma-separated case-insensitive substrings; keep only songs whose title/path matches "
+                        "one (e.g. 'japa1,deja loin,oh world,high school love'). Applied after groove_select.")
     return p.parse_args()
 
 
@@ -207,6 +210,12 @@ def main():
         print(f"figure conditioning: '{args.figure}' -> token {figure_tok} ({FIGURE_CLASSES[figure_tok]})")
     cf = glob.glob(f"{args.data_dir}/**/*.sm", recursive=True) + glob.glob(f"{args.data_dir}/**/*.ssc", recursive=True)
     _, val_files, _ = create_data_splits(cf, random_state=args.seed)
+    if args.song_filter:  # restrict to named songs UP FRONT (before the pool cap) so they're loaded at all
+        terms = [t.strip().lower() for t in args.song_filter.split(',') if t.strip()]
+        val_files = [f for f in val_files if any(t in f.lower() for t in terms)]
+        print(f"SONG-FILTER pre-restricted val_files to {len(val_files)} file(s) matching {terms}")
+        if not val_files:
+            raise SystemExit(f"--song_filter {terms!r} matched no val files under {args.data_dir}.")
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)['classifier']['max_sequence_length']
     # feature set: base (23-dim) vs stage1 (41-dim musical) vs highres (42-dim, + high-res onset)
@@ -306,6 +315,23 @@ def main():
         print(radar_table(ds, order))
     else:
         order = range(len(ds.valid_samples))
+
+    if args.song_filter:  # keep only named songs (match title or chart_file path), preserving order
+        terms = [t.strip().lower() for t in args.song_filter.split(',') if t.strip()]
+        def _match(i):
+            m = ds.valid_samples[i]
+            hay = f"{m.get('chart', None) and getattr(m['chart'], 'title', '') or ''} {m['chart_file']}".lower()
+            return any(t in hay for t in terms)
+        order = [i for i in order if _match(i)]
+        print(f"\nSONG-FILTERED to {terms}: {len(order)} matching sample(s).")
+        if not order:
+            raise SystemExit(f"--song_filter {terms!r} matched no songs. Check titles/paths in {args.data_dir}.")
+    # difficulty restriction works WITH or WITHOUT groove_select (else the per-song loop takes the first
+    # difficulty in dataset order, which can be Beginner -- wrong for a jack/coherence playtest).
+    if args.difficulty_select and args.groove_select == 'none':
+        dcls = ['Beginner', 'Easy', 'Medium', 'Hard'].index(args.difficulty_select)
+        order = [i for i in order if ds.valid_samples[i]['difficulty_class'] == dcls]
+        print(f"DIFFICULTY-FILTERED to {args.difficulty_select}: {len(order)} sample(s).")
 
     print(f"\n{'song':<34} {'diff':<8} {'gen_dens':>8} {'ref_dens':>8} {'holds':>6} {'critic':>9}")
     print("-" * 80)
