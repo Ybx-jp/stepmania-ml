@@ -137,6 +137,9 @@ re-deriving ruled-out work or repeating a known-invalid setup is to read the thr
 The seed: `experiment_lineage/onset-phrasing-calibrator-arc.md` is the worked example (it also catalogs how Rule 0,
 the density-dropped-metric Rule 1 cut, and Rule 8's artifact-smell each changed an attribution this arc).
 
+**The `refresh` skill runs this maintenance as part of its cycle** — invoke it at a thread/session checkpoint to
+update the lineage files + index alongside the memories, `notes/INDEX.md`, and the affected skills.
+
 ## The single highest-leverage habit
 Before you believe/commit ANY result, ask **"what would make this conclusion wrong?"** and run THAT first.
 Every overturned conclusion this session was caught by a cheap fair test we eventually ran — the only error
