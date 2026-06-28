@@ -15,6 +15,31 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-06-27 — ⏳ SET UP (awaiting feedback): pattern_temperature × governor × conditioning
+### What was generated (NOT yet played)
+6 groups installed to `~/sm-generated/T{0.7,1.0,1.2}_cond{OFF,ON}`, each = 4 Hard songs the user named:
+**japa1** (突撃ガラスのニーソ姫), **Deja Loin**, **OH WORLD**, **High School Love**. Deployed model
+`gen_motif_full_fixed` (highres), seed 42. **Governor ON throughout** (`fatigue_penalty=2`). Matrix:
+`pattern_temperature ∈ {0.7 (shipped), 1.0, 1.2}` × conditioning {OFF = plain g=1.0 | ON = "cranked" =
+`--match_radar --guidance 2.0`}. Generator: `export_typed_samples.py` (new `--song_filter` +
+`--difficulty_select` flags). Each folder has the generated `Challenge` + the original chart for A/B.
+
+### The question (binding, BY-EAR — metrics can't settle it)
+Does `pattern_temperature` >0.85 read as **coherent or scrambly**, now that the fatigue governor bounds jacks?
+Probe 4 (`notes/jack_heaviness_findings.md`) showed metrics FAVOR higher temp (jacks ↓, jumps ↑ toward real,
+maxRun stays ~5 under the governor) — but transition-entropy climbs and can't tell structured variety from
+random scramble. So the H2 0.6–0.85 cap predates the governor and may be raisable; **only the ears decide.**
+Secondary: does cranked conditioning (cond ON) make higher temp MORE coherent (figures pull the pattern head)
+or worse? And the standing onset complaints — awkward over-noted / empty-where-active (Probe 3B, quantified).
+
+### Action / next
+- [ ] User plays the 6 groups; report per-temp coherence (esp. 1.0 vs 1.2 vs the 0.7 baseline), cond ON vs OFF.
+- [ ] If higher temp reads coherent → raise the `pattern_temperature` default / H2 range (a no-retrain jack/jump
+      fix). If scrambly → the cap survives the governor; jacks need the onset-head rebuild instead.
+- [ ] Either way the NEXT THREAD is the onset head (`HANDOFF.md` §3) — coherence/allocation, not jacks per se.
+
+---
+
 ## 2026-06-26 — 🔬 PLAYED: STAGE-3 ARC (breathing) — works, but 3 findings to fix
 ### Raw feedback (japa1, High School Love, IN BETWEEN; breathe 1.2 vs 1.8 under the chaos crank)
 > "the 1.8 was mostly good, but had **abrupt early endings a few measures short**, and it seemed to **bias toward

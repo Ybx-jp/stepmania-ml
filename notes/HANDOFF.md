@@ -1,96 +1,93 @@
-# HANDOFF — taste-critic re-validation + interpretability arc (ACTIVE); fatigue governor SHIPPED
+# HANDOFF — foot-physics baseline + jack-heaviness DONE; NEXT THREAD = the onset head
 
-**Written 2026-06-27 for the next Claude.** Two arcs are current. The **fatigue/stamina governor is SHIPPED**
-(PR #41 MERGED to `main`). The **active thread** is the **taste-critic re-validation + interpretability** work,
-which lives on `release/v0.1.0-prep` and is staged for `main` via **PR #42 (OPEN)**. Read this, then the memory
-(`~/.claude/projects/.../memory/taste-critic-transfer.md` = active state; `fatigue-governor.md` = the shipped prior
-arc). Env: conda `stepmania-chart-gen` (interpreter `/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`).
+**Written 2026-06-27 for the next Claude.** This session built a learned-head-vs-physics comparison, then
+decomposed *why the generator is jack-heavy* across four probes. The **next move is the ONSET HEAD** (the user's
+call). Read this, then `notes/jack_heaviness_findings.md` + `notes/foot_physics_baseline.md`, then the memory
+files. Env: conda `stepmania-chart-gen` (`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`). The two
+load-bearing skills — **experiment-design** (attribution HARNESS→DATA→MODEL; now has **Rule 0 = check notes
+first**) and **conditioning-mechanics** (exact decode math) — were used throughout and updated this session.
 
 ---
 
-## 1. WHERE WE ARE (one paragraph)
-The generator (`checkpoints/gen_motif_full_fixed/best_val.pt`, 42-dim highres) ships with a complete decode-time
-**governor** (per-note foot model + per-region stamina + breathing arc; PR #41 merged, default `fatigue_penalty=2`,
-stamina/breathe opt-in). This session re-validated the **taste critic** against that current decode stack and then
-opened up *what it measures*: (a) the critic's REAL>BASE>CHAOS ranking **transfers** to the current decoder (an
-old-machinery control reproduced the historical numbers exactly), but it is a **near-binary separator, not a graded
-scorer**; (b) holding the model fixed, the **manifold chaos conditioning** scores far above the old **mean-pin**
-flood — so the chaos tastefulness gain is the *conditioning redesign, not the model upgrade*; (c) an
-**interpretability** probe (validation-gate-first) shows the critic's "fake" evidence is **off-grid FLOODING** —
-removing a bad chart's off-grid notes recovers ~half its score, the on-grid backbone is what "real" rests on, and
-sparse off-grid syncopation is *tasteful* (not penalized). Folded into README + marketing. All on
-`release/v0.1.0-prep`, staged for main via PR #42.
+## 1. WHERE WE ARE
+Deployed model unchanged: `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor
+(`fatigue_penalty=2` default). This session was **diagnostic, not a model change**. We asked "is the learned
+pattern head's footwork more human than a physics policy?" and "why is it jack-heavy?". Net answer: the
+jack-heaviness is **both heads** — the **pattern head** is the proximate cause (it over-jacks dense sections;
+`pattern_temperature=0.7` is too greedy) and the **onset head** is the contributing cause (audio-only, non-causal
+→ blocky 8th-heavy/16th-absent rhythm + salience-chasing misallocation). The pattern-head lever is cheap
+(`pattern_temperature` ↑, the governor permits it — Probe 4); the onset head is the deeper, bounded-hard thread =
+**the next move**.
 
-## 2. IMMEDIATE NEXT (open decisions — do NOT act without the user)
-1. **Merge PR #42?** (`release/v0.1.0-prep` → `main`, 18 commits = v0.1.0 release prep + taste-critic
-   re-validation + chaos isolation + interpretability arc). This is the live gate to ship everything to main. It is
-   a behavior-neutral docs/eval release (no generator default changes beyond what #41 already shipped).
-2. **best-of-N viability (the v2 region-map inner judge):** before the critic can rank generated candidates, two
-   gates remain — (a) **recalibrate its near-binary low end** (it's a strong separator, weak grader), and (b) a
-   **by-ear** check that high-P(real) generations actually play better than low-P(real) for the same setting
-   (experiment-design Rule 8). See `notes/taste_critic_transfer_findings.md` "Next gate".
-3. **Governor follow-up (still pending from the prior arc):** re-playtest the floored arc endings and pick the
-   breathe default (**1.2 vs 1.8**); sets at `~/sm-generated/chaos_stamina_g25_breathe{12,18}`. Pending entry at top
-   of `notes/playtest_log.md`.
+## 2. THE JACK-HEAVINESS RESULT (4 probes — `notes/jack_heaviness_findings.md`)
+All native-mode (own onset head, radar-conditioned, density matched to REAL, governor toggled), 16 rich songs.
+1. **Probe 1 (`probe_jack_temp.py`):** `pattern_temperature` IS a jack lever — Medium jackDist 0.31→0.17 as
+   0.7→1.5, jumps rise toward real too. Hard resisted (→ Probe 2).
+2. **Probe 2 (`probe_onset_rhythm.py`):** `onset_logit_scale` is a NO-OP under thresholding (0 frames differ —
+   monotonic ranking). The onset head's contribution is RHYTHM: zero 16th-adjacent onsets (real 4–11%),
+   8ths over-weighted, onset runs ~2× real → jack opportunity. Hard's blockiness is worst (explains Probe 1).
+3. **Probe 3 (`probe_onset_sections.py`):** at MATCHED local density the model jacks far MORE than real, and
+   real jackiness is density-INVARIANT (~1.07) while the model's RISES (corr +0.23) — the pattern head over-jacks
+   dense sections (= low-temp greedy collapse). Misallocation: corr(model_dens, real_dens) ~0.48; model tracks
+   audio salience (p_onset) MORE than real (0.62 vs 0.36) → over-notes loud/awkward, under-notes melodic-quiet
+   (the user's "awkward over-noted / empty where active", quantified).
+4. **Probe 4 (`probe_temp_governor.py`):** the fatigue governor lets `pattern_temperature` RISE without a jack
+   blowup (maxRun bounded ~5 vs gov-OFF spiking to 22) while jumps recover. BUT transition-entropy (scramble)
+   still climbs with temp regardless — the governor bounds FATIGUE, not musical structure, and that metric can't
+   separate good variety from scramble. So raising temp >0.85 is a **by-ear** call; metrics favor ~1.0–1.2.
 
-## 3. THE TASTE-CRITIC ARC (this session — the active work)
-Critic = `checkpoints/realism_critic/best_val.pt` (the v2 corrupted-real critic; `LateFusionClassifier`, mean_max
-pooling, fusion_dim 256). Always attribute on the **logit margin** `z_real−z_fake`, never the saturated P(real).
-- **Transfer** (`experiments/realism_critic/eval_taste_current.py`, mirrors `scripts/generate.py`): REAL 0.823 >
-  BASE 0.269 > CHAOS 0.228 (n=64); control = original `eval_taste.py` reproduced 0.823/0.290/0.003 exactly.
-  corr(P(real),density) = −0.09 (density-OOD worry cleared). Near-binary (only 14–30% of scores in the middle).
-- **Chaos isolation** (`eval_chaos_mechanism.py`, model held fixed): MANIFOLD 0.228 vs MEANPIN 0.028 (73%/song);
-  the old mean-pin request still scores ~0.028 on the new model ⇒ the conditioning redesign, not the model.
-- **Interpretability** (`critic_saliency.py` gate → `critic_saliency_phaseB.py` → `critic_interpretability.ipynb`):
-  - **Phase A gate PASSED + chose the method.** Whole-chart panels-scramble drops the margin +9.85 (cue = arrow
-    CONFIGURATION, GLOBAL — a 1/24th local scramble is invisible). **Perturbation/repair attribution localizes a
-    known defect (~251×); gradient-IG-from-EMPTY does NOT (1.4×)** — empty baseline measures note PRESENCE, not
-    configuration. So Phase B uses perturbation, not IG.
-  - **Phase B = H1 CONFIRMED.** Off-grid note frac: only MEANPIN (0.85) vs ~0; removing MEANPIN off-grid notes
-    RAISES margin +2.55, removing REAL on-grid backbone tanks it −5.05; corr(margin, off-grid frac) = −0.50. NOT
-    off-grid-phobic (REAL's sparse off-grid notes tasteful, removing hurts −0.73).
-  - **Phase C** = executed notebook (figures embedded; `outputs/critic_interp_fig{1..5}.png`). Confound caught:
-    raw corr(activation, off-grid INDICATOR) is confounded by metric-grid periodicity → use NOTE-conditioned
-    contrast (channel #121 fires +10.3 higher on off-grid notes). Phase C corroborative; H1 ablation is causal.
-- Findings: `notes/taste_critic_transfer_findings.md`, `notes/taste_critic_saliency_findings.md`. Plan:
-  `notes/taste_critic_interpretability_plan.md`. v2 prereq marked DONE in `notes/geometry_feasible_region.md`.
+**Two experiment-design RETRACTIONS this session (all caught by a fair re-test):** (a) the original
+`compare_foot_physics.py` fed the model REAL onsets via `onset_override` → pattern head OOD → maxRun-24 jacks; on
+its OWN onsets the governed model matches real (maxRun ~4). (b) The "physics beats the head" verdict was an
+`onset_override` + missing-radar artifact; the valid comparison is `compare_native.py`. Lesson burned in →
+experiment-design **Rule 0** (grep notes/skills before designing — the onset-rhythm work was already scoped in
+`sequence_aware_onset_plan.md`, and the long-jack fix in `foot_exertion_findings.md`).
 
-## 4. THE FATIGUE GOVERNOR (prior arc — SHIPPED, pointers only)
-PR #41 MERGED 2026-06-26 (`origin/main` head `37257d1`). Decode-time governor in
-`LayeredTypedChartGenerator.generate`: per-NOTE foot model (`fatigue_penalty`, default 2), per-REGION stamina
-(`stamina_ceiling`, opt-in), breathing arc (`stamina_breathe`, opt-in). The math is the **conditioning-mechanics
-skill §8**; spec + every failure in `notes/foot_fatigue_design.md`; vouched per-knob ranges in
-`notes/governor_release_region.md`. Diags: `experiments/generation_typed/diag_*.py`. RELEASE CENTER:
-`fatigue_penalty=2, jack_penalty=0`, stamina/breathe OFF by default. Mandatory playability is code-enforced via
-`enforce_playability`. The governor memory file has the full detail + the failure log.
+## 3. THE NEXT MOVE — THE ONSET HEAD (user's call; start with Rule 0)
+The onset head is audio-only + non-causal → it (a) places isolated 16ths not coherent runs ("awkward"), (b)
+chases audio salience so it over-/under-notes sections vs the human. **READ FIRST:** `sequence_aware_onset_plan.md`
+— this thread was ALREADY rigorously bounded (06-22): 16th placement is SEQUENCE-determined (note-context AUC
+0.935 vs audio-only 0.649), but every cheap lever failed — fully-AR onset EXPLODES (density 0.73 vs 0.18),
+scheduled sampling only dampens, frozen-context refinement can't bootstrap from the audio-only first pass
+(anti-correlated C0). **Verdict then: reaching the ceiling needs a paradigm change (learn placement from
+multiple human chartings, or a much stronger first pass), not a cheap decode lever.** Also `playtest_log.md` +
+`foot_fatigue_design.md §8d`: the melodic under-placement ("ignored piano solo") is the onset head, an
+audio-feature/retrain thread (the breathing-energy percussion-bias was REFUTED — p_onset reads melodic as +0.47).
+- **What's genuinely NEW after this session** (not re-derive): the section-level misallocation is now MEASURED
+  (Probe 3B — corr ~0.48, salience-chasing); and the pattern-head proximate cause is isolated (so an onset fix is
+  about COHERENCE/allocation, not jacks per se). Decide: accept the 06-22 bound, or commit to the onset rebuild
+  (sequence-aware / note-context head + scheduled sampling) or the audio-feature melodic angle. Cheapest fresh
+  probe if pushing: does better section-level density allocation (e.g. a learned-from-real allocation prior)
+  improve coherence without the AR explosion?
 
-## 5. BRANCH / PR / PROTECTION STATE
-- **PR #41** (`gen/foot-fatigue-stage2` → main) **MERGED** — governor on `origin/main` `37257d1`.
-- **PR #43** (`taste-critic-saliency` → `release/v0.1.0-prep`) **MERGED** — interp arc on the release branch.
-- **PR #42** (`release/v0.1.0-prep` → `main`) **OPEN** — 18 commits, the live gate to ship the v0.1.0 release +
-  taste-critic work to main. `origin/release/v0.1.0-prep` head `db164e8`.
-- **`main` protected** by branch ruleset **`protect-main`** (id 18199761): require-PR (0 approvals → solo self-merge
-  OK), require conversation resolution, block force-push (`non_fast_forward`), block deletion; **auto-merge OFF**
-  on the repo; no bypass actors. Edit: `gh api repos/Ybx-jp/stepmania-ml/rulesets/18199761`. (Solo-repo note:
-  do NOT set required approvals ≥1 while single-identity — you can't approve your own PR, it would lock merges.)
+## 4. AWAITING USER: the pattern_temperature playtest (this session)
+Installed to `~/sm-generated/T{0.7,1.0,1.2}_cond{OFF,ON}` (6 groups × 4 Hard songs: japa1=突撃ガラスのニーソ姫,
+Deja Loin, OH WORLD, High School Love). Governor ON throughout; cond ON = `--match_radar --guidance 2.0`
+(cranked), cond OFF = plain. **Binding question: does `pattern_temperature` >0.85 read as coherent or scrambly
+by ear, now that the governor bounds jacks?** When the user reports back, log it in `playtest_log.md` (a SETUP
+entry is already there) and — if higher temp is coherent — it's a shippable jack/jump fix with no retrain
+(consider raising the `pattern_temperature` default / the H2 0.6–0.85 range). New exporter flag this session:
+`--song_filter "a,b,c"` (+ `--difficulty_select` now works without `--groove_select`).
 
-## 6. OPEN THREADS (priority; none block PR #42)
-1. **best-of-N reranking** = the v2 region-map inner judge — gated on critic low-end recalibration + the by-ear
-   pass (§2.2). The interpretability result (critic keys on a coherent musical axis, off-grid flooding) supports
-   that reranking-by-P(real) is *principled*, not an artifact.
-2. **V2 — MAP THE REAL REGION OF GOOD SETTINGS** (`notes/geometry_feasible_region.md` §V2): joint, song-conditional
-   feasible set across ALL conditioning + governor knobs, by sweep × best-of-N × difficulty+taste critics. The
-   critic re-validation was its prerequisite (DONE).
-3. **H-onset-perc-bias** (onset head under-places on melodic-only sections) — a feature/retrain thread, not a knob.
-4. **Model UNDER-JUMPS** (6% vs real 31%) — separate density/air thread; don't tune the governor to it.
-5. **GDL/equivariance** (pad L↔R / Klein-four symmetry) — v2 redesign / paper angle, parked.
+## 5. BRANCH / PR STATE
+- **This session's work is on branch `claude/arrowvortex-linux-compat-75ri8n`** (started from `main` 9d3e7a8 +
+  the cloud foot-physics commits 9f8871f/0abbdea). Committed, **NOT pushed, NO PR yet** — open one when ready.
+  Commits: native comparison + jack probes + the skill Rule 0 + this handoff/memory/INDEX refresh.
+- **Prior arcs (unchanged this session):** governor SHIPPED (PR #41 merged to `main`). **PR #42**
+  (`release/v0.1.0-prep` → `main`, v0.1.0 + taste-critic interpretability) was **OPEN** at last handoff — status
+  not touched this session; check before assuming. `main` protected by ruleset `protect-main` (id 18199761).
 
-## 7. DISCIPLINE (hard-won; the two skills are load-bearing)
-- **conditioning-mechanics skill** = the exact decode math; replicate `scripts/generate.py` for any probe that
-  sets/measures a conditioning or governor knob. **experiment-design skill** = attribution HARNESS→DATA→MODEL;
-  validate the method on a known answer BEFORE trusting it (the saliency gate is the canonical example — it
-  rejected IG-from-empty and caught the periodic-indicator confound).
-- **Match the metric to the property's resolution** (stamina = redistribution, blind to the mean; saliency on a
-  saturated critic needs the logit, not P). **One change at a time; isolate with a toggle; validate on a number.**
-- **ml-gloss hook active** (gloss ML jargon on first use → `notes/ml_glossary.md`). Keep `playtest_log.md` =
-  subjective play-feel only; experiment results get their own `notes/*_findings.md`.
+## 6. OTHER OPEN THREADS (none block the onset work)
+- best-of-N reranking + V2 region-map (taste-critic prereq done) — `geometry_feasible_region.md`.
+- Model UNDER-JUMPS (a separate air/density thread; do NOT tune the governor to it — conditioning-mechanics §8d).
+- GDL/equivariance (pad symmetry) — v2/paper, parked.
+
+## 7. DISCIPLINE (load-bearing)
+- **experiment-design Rule 0 (new):** grep `notes/` + skills BEFORE designing a probe — this session re-derived/
+  mis-attributed 3× until the notes were checked. **HARNESS→DATA→MODEL**: a surprising model-blaming result gets
+  the fair re-test FIRST (every retraction above was caught that way).
+- **conditioning-mechanics:** replicate `scripts/generate.py` for any probe that sets/measures a knob; native
+  decode (tau from the SAME conditioned logits), governor needs `bpm`. §6 (onset_logit_scale no-op) and §7
+  (`pattern_temperature` × governor) were updated this session.
+- **Match metric to the property's resolution; one change at a time; coherence/play-feel is BY-EAR** (Rule 8).
+  `playtest_log.md` = subjective only; quantitative results → `notes/*_findings.md`.

@@ -19,6 +19,12 @@ the staged AR highres generator. **Now in v0.1.0 release prep** on branch `relea
 pyproject, README claims audit, bring-your-own-audio `scripts/generate.py`, CHANGELOG). Next-session pointer =
 `HANDOFF.md`.
 
+**UPDATE (2026-06-27):** foot-physics-baseline + jack-heaviness arc (this session). Built a native-mode
+learned-head-vs-physics comparison and decomposed the head's jack-heaviness across 4 probes →
+`foot_physics_baseline.md` + `jack_heaviness_findings.md`. Outcome: jacks = pattern head (proximate; raise
+`pattern_temperature`, governor permits it) + onset head's blocky audio-only rhythm (contributing). **NEXT
+THREAD = the onset head** (sequence-aware placement / audio-feature melodic under-placement) — see `HANDOFF.md`.
+
 ## Phase 1 — difficulty classifier (closed)
 - `ordinal_experiment_findings.md` — ordinal vs classification head; `standard_ordinal_multi` won. Phase 1 closed.
 
@@ -123,6 +129,19 @@ Read roughly in this order:
   per-region stamina, breathing difficulty arc). The governor's design bible.
 - `governor_release_region.md` — vouched-for per-knob RANGES + shipping defaults. ⚠️ a vouched table, NOT a
   "mapped region" (see [[claim-precision]]); the joint region is a v2 item.
+
+## Foot-physics baseline + jack-heaviness investigation (06-27)
+- `foot_physics_baseline.md` — a learned-model-FREE foot-physics generator (shares the governor's cost) +
+  the native-mode comparison vs the learned head. Holds the experiment-design RETRACTIONS (onset_override
+  puts the model OOD → inflated jacks; the head-to-head verdict invalid under override) and the native-mode
+  axis-split (jumpDist = known under-jump gap; jackDist = footwork style). New harnesses: `compare_foot_physics`
+  (override, flawed-for-model), `compare_native` (valid), `calib_foot_physics`.
+- `jack_heaviness_findings.md` — WHY the head is jack-heavy, in 4 probes: (1) pattern_temperature IS a jack
+  lever; (2) onset_logit_scale is a no-op under thresholding, the onset head's blocky rhythm is the contributing
+  cause; (3) at MATCHED density the pattern head over-jacks (real jackiness is density-INVARIANT, model rises) +
+  density misallocation (model chases audio salience > real); (4) the fatigue governor lets pattern_temperature
+  rise without a jack blowup (coherence still by-ear). Harnesses: `probe_jack_temp`, `probe_onset_rhythm`,
+  `probe_onset_sections`, `probe_temp_governor`. NEXT THREAD = the onset head (sequence-aware / audio-feature).
 
 ## Geometry / feasible region (parked → v2)
 - `difficulty_corner_findings.md` — offline release gate: the EASY difficulty corner is healthy.
