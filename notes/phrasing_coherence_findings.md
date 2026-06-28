@@ -41,6 +41,18 @@ measure-before-build step for a learned onset *phrase calibrator*: per axis, doe
   realized on these three. Caveat: the audio-end detector (energy>10%) may be conservative. Inconclusive — needs
   the songs where the user heard it.
 
+## STEP 1 (2026-06-28) — hand-crafted "sparse-harm-in-quiet" calibrator: MECHANISM VALIDATED (posterior-only)
+The cheapest one-change test toward the learned calibrator (experiment-design Rule 6): add a per-frame onset
+LOGIT offset `harm_gain · quiet_gate[t] · harm[t]` (un-bury a sparse harmonic onset in a quiet phrase — the
+mirror of the head's existing sparse-perc response; `probe_phrasing_coherence.py --harm_gain`). No retrain, no
+generation. Dynamic range confirmed (Rule 11) on HSL: corr_harm −0.16 → −0.06 (g5) → **+0.03 (g10)** → +0.19
+(g20), p_burst rising above p_calm. At **g10, ALL THREE songs improve with NO regression**, at HELD global
+density (it REDISTRIBUTES into quiet harmonic events, quiet-dens up): Deja −0.06→+0.26, HSL −0.16→+0.03,
+kneeso +0.31→+0.55. **→ the lever has authority; un-burying harm-in-quiet fixes the melodic under-placement on
+the posterior.** CAVEATS: (a) needed gain ~10 is large because the gate (quiet·harm, both <1) shrinks the
+effective boost — a learned version would carry larger/better weights; (b) POSTERIOR-only — the real gate is
+BY-EAR (Rule 8): does the generated HSL piano solo now get sensible, well-reading notes? = STEP 2.
+
 ## Bottom line / next
 The learned phrase calibrator has the most headroom on **(2) quiet-phrase harmonic allocation** (ADD — the HSL
 melodic under-placement, the sharpest + on the complaint song) and **(1) snappier boundaries** (sharpen). **(4)

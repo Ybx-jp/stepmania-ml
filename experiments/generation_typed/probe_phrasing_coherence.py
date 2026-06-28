@@ -69,13 +69,26 @@ def ncorr(a, b):
     return float(np.corrcoef(a, b)[0, 1])
 
 
-def calibrated_p_onset(model, audio, diff, device):
-    """Deployed native p_onset: difficulty-only onset logits + the onset_phase_calib offset, sigmoid."""
+def calibrated_p_onset(model, audio, diff, device, extra=None):
+    """Deployed native p_onset: difficulty-only onset logits + the onset_phase_calib offset (+ an optional
+    per-frame EXTRA logit offset, e.g. the hand-crafted sparse-harm-in-quiet calibrator), sigmoid."""
     with torch.no_grad():
         ol = model.onset_logits(model.encode_audio(audio), diff, radar=None, style=None)[0]
         b8, b16 = CALIB; ph = torch.arange(ol.shape[0], device=device) % 4
         ol = ol + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
+        if extra is not None:
+            ol = ol + torch.from_numpy(extra.astype(np.float32)).to(device)
         return torch.sigmoid(ol).cpu().numpy()
+
+
+def sparse_harm_offset(feat, harm_gain, quiet_q):
+    """STEP-1 hand-crafted calibrator: un-bury a sparse HARMONIC onset in a QUIET phrase (the mirror of the
+    head's existing sparse-perc response). offset[t] = harm_gain · quiet_gate[t] · harm[t], a LOGIT boost that
+    fires only where it's quiet AND a harmonic onset is present (loud frames + quiet-but-empty frames untouched)."""
+    energy01 = norm01(boxsmooth(feat[:, I_ENERGY], 16))
+    q = np.percentile(energy01, quiet_q)
+    quiet_gate = np.clip((q - energy01) / (q + 1e-6), 0.0, 1.0)   # 0 above the quiet quantile, →1 as energy→0
+    return harm_gain * quiet_gate * feat[:, I_HARM]               # harm (dim36) already 0–1
 
 
 # ---- the four axes -------------------------------------------------------------------------------
@@ -170,6 +183,10 @@ def main():
     ap.add_argument("--ckpt", default="checkpoints/gen_motif_full_fixed/best_val.pt")
     ap.add_argument("--match", default="high school love,kneeso,deja loin")
     ap.add_argument("--max_len", type=int, default=1440)
+    ap.add_argument("--harm_gain", type=float, default=0.0,
+                    help="STEP-1 sparse-harm-in-quiet calibrator: logit boost ∝ quiet_gate·harm. 0 = off (pure "
+                         "diagnostic). >0 prints a base-vs-calibrated A/B on axis-2 + density. ~2.0 to start.")
+    ap.add_argument("--quiet_q", type=float, default=40.0, help="energy percentile defining 'quiet' for the calibrator")
     args = ap.parse_args()
     set_seed(42); device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -218,6 +235,18 @@ def main():
         if a4:
             print(f"  4 PERC<->HARM     range(corr_perc-corr_harm)={a4['rng']:.2f}  std={a4['std']:.2f}  "
                   f"mean={a4['mean']:+.2f}  ({'fluid' if a4['rng'] > 0.5 else 'locked-ish'})")
+        if args.harm_gain > 0:                            # STEP-1 A/B: the hand-crafted sparse-harm-in-quiet offset
+            off = sparse_harm_offset(feat, args.harm_gain, args.quiet_q)
+            p_adj = calibrated_p_onset(model, audio, diff, device, extra=off)
+            tau_adj = float(np.quantile(p_adj, 1 - real_d)) if real_d > 0 else 0.5
+            a2c = axis2_burst_in_quiet(p_adj, perc, harm, energy01)
+            # density: realized note-rate inside quiet frames (did the calibrator actually allocate there?)
+            qn = energy01 < np.percentile(energy01, args.quiet_q)
+            dq_b = float((p[qn] > tau).mean()); dq_a = float((p_adj[qn] > tau_adj).mean())
+            d_b = float((p > tau).mean()); d_a = float((p_adj > tau_adj).mean())
+            print(f"  ── CALIB(harm_gain={args.harm_gain}) axis-2  corr_harm {a2['corr_harm']:+.2f}→{a2c['corr_harm']:+.2f}"
+                  f"  p_calm→burst {a2['p_calm']:.2f}/{a2['p_burst']:.2f} → {a2c['p_calm']:.2f}/{a2c['p_burst']:.2f}"
+                  f"  | quiet-dens {dq_b:.3f}→{dq_a:.3f}  global-dens {d_b:.3f}→{d_a:.3f}")
         print()
 
         ax = row[0]; t = np.arange(T)
