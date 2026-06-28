@@ -34,6 +34,17 @@ moment a probe touches a generator knob, so "match deployment" means "match the 
 
 ## PRE-FLIGHT — before running a probe / sweep / retrain
 
+0. **Has this already been done? Check the NOTES + skills FIRST.** Before designing ANY probe, search
+   `notes/` (especially `*_findings.md`, `INDEX.md`, the briefs) and the `conditioning-mechanics` skill for the
+   phenomenon you're about to investigate — the answer, the mechanism, or a prior characterization is often
+   already written down. This is the cheapest decisive step of all (it precedes even Rule 6). Concretely:
+   `grep -ri` the key terms (the behavior, the knob, the metric) across `notes/` and read any hit before
+   writing code. Two failure modes this prevents: (a) **re-deriving solved work** (e.g. the long-jack tail was
+   already traced to an onset-head/density condition and SHIPPED a governor fix — a probe that "discovers" it
+   wastes a cycle); (b) **mis-attributing to the model a behavior the notes already explain as a harness/decode
+   regime** (e.g. `onset_override` forces the pattern head OOD → inflated jacks; the notes say the model on its
+   OWN onsets matches real). If a note already answers it, CITE it and stop; if a note contradicts your planned
+   setup, fix the setup. Treat "I'm confident I know this" as the trigger to check, not to skip.
 1. **What property am I actually testing, and does my metric see it?** A summary statistic can move the
    "right" direction while the thing you care about breaks. Name the property in plain terms; confirm the
    metric is sensitive to *it*, not a correlate. Decompose aggregates (a share can shift because the
