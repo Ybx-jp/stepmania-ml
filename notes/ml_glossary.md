@@ -70,3 +70,7 @@ Format per entry: **term** — plain meaning *(how it shows up here)*.
 - **geometric deep learning (GDL)** — the subfield about building networks that respect a domain's symmetries/structure (graphs, groups, manifolds) via equivariance; distinct from merely *having* a latent [[manifold hypothesis|manifold]].
 - **equivariance / equivariant** — a network property where transforming the input produces the correspondingly-transformed output (e.g. mirror the pad L↔R → the chart mirrors too), so the symmetry is baked into the architecture instead of patched in afterward.
 - **symmetry group (dihedral / Klein-four)** — the set of transforms that leave a structure's "rules" unchanged; the dance pad's L↔R (and U↔D) mirrors form such a group, giving the 4 panels a small dihedral-like symmetry.
+
+## Added 2026-06-27
+
+- **ablation** — a controlled "remove (or swap out) one component and measure the drop" experiment, to attribute how much that component actually contributes; here, comparing the learned pattern head against a foot-physics-only generator on identical onsets isolates what the learned head adds.

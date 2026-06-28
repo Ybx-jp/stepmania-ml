@@ -23,6 +23,7 @@ import torch.nn.functional as F
 
 from src.models.components.encoders import AudioEncoder, ChartEncoder
 from .transformer import PositionalEncoding, _causal_mask
+from .foot_model import PANEL_POS  # shared pad geometry (single source of truth; see foot_model.py)
 from .factorized import _project, _attend, _LayerCache
 from .typed import NUM_SYMBOLS, NUM_PANELS, NUM_PATTERNS, NUM_TYPES  # 5 symbols, 4 panels, 15 patterns, 4 types
 
@@ -565,7 +566,7 @@ class LayeredTypedChartGenerator(nn.Module):
         # a foot that STAYS & re-hits costs jack_weight*rate, one that MOVES costs travel_weight*dist*rate.
         fatigue_on = bool(fatigue_penalty) and frame_hz is not None
         tau_frames = max(float(fatigue_tau) * 4.0, 1e-3)                      # tau beats -> 16th frames
-        _pos = torch.tensor([[-1., 0.], [0., -1.], [0., 1.], [1., 0.]], device=device)  # L,D,U,R on the cross
+        _pos = torch.tensor(PANEL_POS, dtype=torch.float32, device=device)  # L,D,U,R cross coords (shared foot_model)
         PAD_DIST = torch.cdist(_pos, _pos)                                   # (4,4) Euclidean foot-travel
         foot_panel = torch.full((B, 2), -1, dtype=torch.long, device=device)  # (left,right) current panel or -1
         foot_E = torch.zeros(B, 2, device=device)                            # per-foot exertion at last-hit time

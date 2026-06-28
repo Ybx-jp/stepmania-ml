@@ -111,6 +111,11 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   (r +0.63), which the manifold density coupling reproduces — so let density float with the manifold.
   NOTE: `tau` sets the BASE density, but the per-frame onset decision is made IN the AR loop and can be raised by
   the STAMINA governor (§8c) — so realized density ≤ the tau target wherever sustained workload is high.
+  NOTE (06-27): `onset_logit_scale` is a NO-OP under quantile thresholding — `p=sigmoid(scale·ol)` is monotonic,
+  so it preserves the frame RANKING → the top-`density` frames are identical for any scale (confirmed: 0 frames
+  differ at scale 0.5/2.0). There is NO "onset temperature" that changes WHICH onsets fire in deployment; it
+  only bites under `onset_sample=True` (Bernoulli). The onset head's contribution to rhythm is WHERE it
+  deterministically places (audio-only, non-causal → blocky/isolated-16th; see notes/jack_heaviness_findings.md).
 - **Phase grid** (frame index `t`, 16th resolution): `t%4` → **0 = quarter, 2 = 8th, 1&3 = 16th-offbeat**.
   Backbone = quarter (+8th). "Chaos / syncopation" = 16th-offbeat share. Real Hard ~ quarter 0.7 / 8th 0.25 /
   16th 0.04; "real-like chaos" sits ~0.25 chaos-radar.
@@ -125,6 +130,16 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
 the FINAL playable symbols, NOT the pre-automaton pattern (a fix written against the pattern leaks because
 `hold_aware` remaps it). Any new export/probe the user PLAYS must call `enforce_playability(gen_kwargs)`. The
 graded escalation across spacings is the soft FOOT GOVERNORS (§8).
+**`pattern_temperature` revisited (06-27, notes/jack_heaviness_findings.md):** the H2 0.6–0.85 cap (above which
+arrows "over-randomize") PREDATES the fatigue governor. At the shipped 0.7 the pattern head is jack-HEAVY (len3
+~2× real, len≥4 ~3–4×) because it's greedy → repeats the previous panel; raising temp REDUCES jacks AND raises
+jumps toward real (both improve, no trade-off). With the fatigue governor ON, the jack tail stays bounded near
+real (maxRun ~5) as temp rises to 1.0–1.5, while governor-OFF spikes (maxRun→22) — so the governor catches the
+jacks the cap indirectly guarded. BUT transition-entropy (scramble) still climbs with temp regardless of the
+governor (it bounds FATIGUE, not musical structure), and that metric can't separate good structured variety
+from random scramble. So whether to raise `pattern_temperature` above 0.85 is a BY-EAR call (Rule 8); metrics
+favor ~1.0–1.2 with the governor on. Root cause of the jacks = the pattern head (proximate) + the onset head's
+blocky audio-only rhythm (contributing); see notes/jack_heaviness_findings.md.
 
 ## 8. Decode-time GOVERNORS — per-note FOOT model (placement) + per-region STAMINA/ARC (density)
 TWO scopes, both decode-time in `LayeredTypedChartGenerator.generate`, both BPM-coupled (`bpm=`; `frame_hz =
