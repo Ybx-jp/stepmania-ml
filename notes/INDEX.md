@@ -25,6 +25,28 @@ learned-head-vs-physics comparison and decomposed the head's jack-heaviness acro
 `pattern_temperature`, governor permits it) + onset head's blocky audio-only rhythm (contributing). **NEXT
 THREAD = the onset head** (sequence-aware placement / audio-feature melodic under-placement) — see `HANDOFF.md`.
 
+**UPDATE (2026-06-28):** the ONSET-PHRASING arc (this session). Canonical-defaults consolidation (`generation-defaults`
+skill; exporter bare run = the deployed config) → `arc_lag_findings.md` (HSL cold-start = AR pattern head; breathe
+arc zero-phase/exonerated) → `h11_rerun_findings.md` (the governor's transition gain is ONSET-SIDE phrasing, not
+the pattern head — attribution twice-corrected via the governor-off + density-dropped cuts) → **phrasing is the
+ONSET head's job** (cond-mech §0/§8) → `phrasing_coherence_findings.md` (4-axis diagnostic; sharpest gap = quiet-
+phrase harmonic under-placement) → **sparse-harm-in-quiet phrase calibrator** validated (Step 1) + wired into
+`generate()`/exporter `--harm_calib` + A/B installed (Step 2, awaiting ears). Mid-arc: the index-keyed sample-cache
+footgun found + FIXED (`cache_index_bug.md`). Full arc map =
+`.claude/skills/experiment-design/experiment_lineage/onset-phrasing-calibrator-arc.md`. NEXT = by-ear gate → Step 3
+(learn the offset) or retune.
+
+## Onset placement / phrasing (2026-06-28 arc — see the lineage file)
+- `arc_lag_findings.md` — WHERE the HSL cold-start lives: breathe arc is zero-phase (exonerated); by elimination
+  the AR pattern head. Decisive no-gen timing+direction cut on the complaint song.
+- `h11_rerun_findings.md` — transition responsiveness on the canonical model; governor-off + density-dropped
+  ablations show the gain is onset-side phrasing (breathe), NOT pattern-head choreography. Attribution corrected.
+- `phrasing_coherence_findings.md` — the onset head's OWN phrasing vs musical events (boundary-snap / burst-in-quiet
+  / clean-tail / perc↔harm fluidity); + Step-1 sparse-harm calibrator A/B (mechanism validated on the posterior).
+- `onset_alloc_findings.md` — 16th-unlock is a READOUT problem (p_onset ranks 16ths AUC 0.73, global tau buries);
+  the local-un-burial lead that seeded the calibrator.
+- `cache_index_bug.md` — the index-keyed sample-cache footgun (subset probes read stale features); found + fixed.
+
 ## Phase 1 — difficulty classifier (closed)
 - `ordinal_experiment_findings.md` — ordinal vs classification head; `standard_ordinal_multi` won. Phase 1 closed.
 
