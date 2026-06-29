@@ -273,3 +273,15 @@ density) · 4. inverse critic real-vs-C0 **0.468** (audio can't prefer real over
 ceiling is **0.87** (teacher-forced). ⇒ fine 16th-placement lives in the NOTE SEQUENCE prior, unreachable from audio
 by forward / refiner / inverse-likelihood means. **Only remaining path = a chart sequence model (causal-AR head,
 with serious drift-taming) — or bank the bound and stay ship-state.**
+
+### M1a (2026-06-29) — the chart sequence model ALREADY EXISTS: the FROZEN decoder (`onset_frozenh_findings.md`)
+The "causal-AR head" framing implied a from-scratch sequence model. M1a (`probe_seqcontext_frozenh.py`) shows it's
+far cheaper: the deployed DECODER (the pattern head's causal stack) ALREADY encodes the placement prior in its
+per-frame hidden state `h` (`typed_model.py:635`). A capacity-matched causal-conv readout on FROZEN `h`
+(teacher-forced) hits **0.892 ≡ the 0.87 note-context ceiling (100% of the gap)**; audio floor 0.624, a 1×1 readout
+only 0.763 (a readout-capacity confound, NOT lost signal — caught by the matched-capacity arm, exp-design Rule 11).
+⇒ M1b = a CHEAP onset-head ADD on a frozen decoder (read onset off `h` in the loop), not a from-scratch retrain.
+**BUT this settles REPRESENTATION, not DRIFT** — `h` is teacher-forced on REAL notes (the upper bound a readout
+could see). The binding gate stays the AR-stability rollout (the §"Sequencing" de-risk above: free-run density 0.73
+vs real 0.18). EXECUTING M1b: wire the conv onset head into `generate()`, decoder frozen, own-output scheduled
+sampling, then `diag_ar_stability` + by-ear.

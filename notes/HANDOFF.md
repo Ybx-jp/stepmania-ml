@@ -1,28 +1,32 @@
-# HANDOFF — seq-aware-onset CLOSED NEGATIVE (wall airtight 4 ways); open strategic fork: AR-retrain vs bank
+# HANDOFF — seq-onset wall CLOSED NEGATIVE, but the BUILD RE-OPENED CHEAP (M1a); EXECUTING M1b drift gate
 
-**Written 2026-06-29 for the next Claude.** This session SCOPED the sequence-aware onset retrain, then **bounded it
-dead** with two cheap gates (no model change): (1) the M0 own-output **matched refiner** gate (train a note-context
-net ON deployed-C0 context) and (2) the user's **analysis-by-synthesis** critic (a likelihood `P(audio|chart)`).
-Both NEGATIVE with positive controls FIRED → the 0.87 placement signal is a chart-structural PRIOR, NOT in the audio
-in any direction. The retrain question now reduces to ONE strategic fork (below). Env: conda `stepmania-chart-gen`
-(`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`).
+**Written 2026-06-29 for the next Claude.** Prior sessions bounded the seq-aware-onset wall DEAD 4 ways (placement =
+a chart-PRIOR, not in audio). THIS work asked the build-sizing question and got a favorable answer: **M1a
+(`probe_seqcontext_frozenh.py`) shows the FROZEN deployed decoder's hidden state `h` ALREADY encodes the full
+placement signal** — a capacity-matched conv readout on `h` hits **0.892 ≡ the note-context ceiling (100%)** (audio
+floor 0.624; 1×1 readout 0.763 = a capacity confound caught by Rule 11). So fork (A) is NOT a from-scratch retrain —
+it's a CHEAP onset-head ADD on a frozen decoder. M1a settles REPRESENTATION; **DRIFT is the lone binding gate, now
+being built as M1b.** Env: conda `stepmania-chart-gen` — call the interpreter DIRECTLY
+(`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`); **NOT `conda run`** (it buffers all child stdout until
+exit → empty logs if the process is killed/polled).
 
-**READ-FIRST (in order):** `notes/sequence_aware_onset_plan.md` (the SCOPING + M0 RESULT + ANALYSIS-BY-SYNTHESIS +
-4-WAY CONVERGENCE sections — the whole story) → lineage `.claude/skills/experiment-design/experiment_lineage/seq-onset-arc.md`
-(hypothesis chain + the methodology wins) → `onset-phrasing-calibrator-arc.md` (the parent active arc, with the
-nearest-shippable pending items). Load-bearing skills: **experiment-design** (Rule 11 positive-control — it's the
+**READ-FIRST (in order):** `notes/onset_frozenh_findings.md` (M1a — the freshest result: frozen `h` ≡ ceiling, the
+cheap-build greenlight + the DRIFT boundary) → `notes/sequence_aware_onset_plan.md` (the M1a addendum + the SCOPING +
+M0 + ANALYSIS-BY-SYNTHESIS + 4-WAY CONVERGENCE — the whole story) → lineage
+`.claude/skills/experiment-design/experiment_lineage/seq-onset-arc.md` (hypothesis chain incl. M1a + the methodology
+wins) → `onset-phrasing-calibrator-arc.md` (the parent active arc, with the nearest-shippable pending items). Load-bearing skills: **experiment-design** (Rule 11 positive-control — it's the
 hero of this session), **conditioning-mechanics** §8 (the WHEN↔WHERE isolation note, now "CLOSED NEGATIVE 4 ways"),
 **generation-defaults** (the canonical decode/export config).
 
 ---
 
 ## 1. WHERE WE ARE
-Deployed model UNCHANGED: `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor.
-This session was DIAGNOSTIC + cheap-gate only — no `generate()`/export default changed (canonical block below intact).
-New tooling (committed): `experiments/generation_typed/gen_train_c0.py` (deployed-C0 generator: fresh-extract → 4 GPU
-shards → merge), `probe_seqcontext_matched.py` (M0 matched gate), `probe_recon_audio.py` (v1 regression, VOID),
-`probe_recon_critic.py` (the analysis-by-synthesis contrastive critic). New caches (gitignored): `cache/trainfresh_cache.npz`
-(800 fresh train charts), `cache/seqctx_trainc0_cache.npz` (800 audio+real+deployed-C0), `cache/seqctx_c0_cache.npz` (28 eval).
+Deployed model UNCHANGED: `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor
+(canonical block below intact). M1a was a DIAGNOSTIC probe (no model change); M1b (in progress) WILL add an onset
+head + a `generate()` branch — once it proves out by ear, not before. New tooling: `probe_seqcontext_frozenh.py`
+(M1a — the frozen-`h` representation probe, the audio/both_real controls + the frozen_h/frozen_h_conv arms). New
+findings: `notes/onset_frozenh_findings.md`. New caches (gitignored): `cache/seqctx_frozenh_{train,val}.npz` (800
+train all-diff + 98 Hard val, typed states; both present → the probe skips the 4452-file dataset re-parse).
 
 ## 2. THE ACTIVE THREAD — seq-aware onset, CLOSED NEGATIVE (lineage `seq-onset-arc.md`)
 The 0.87 teacher-forced note-context placement signal is a chart PRIOR, NOT recoverable from audio — confirmed FOUR
@@ -38,18 +42,47 @@ independent ways, every positive control FIRED:
 ANALYSIS-BY-SYNTHESIS likelihood is DEAD for fine placement (audio is coarse/density-compatible only). In
 `P(chart|audio) ∝ P(audio|chart)·P(chart)` all placement is the PRIOR → only a chart sequence model can author it.
 
-## 3. AWAITING USER — the strategic fork (binding) + nearest-shippable
-- **(STRATEGIC FORK, binding):** **(A) causal-AR head retrain** — the ONLY remaining path to 0.87 (a real Phase-2.6
-  build; AR drift is the risk, scheduled-sampling + audio-anchor dampened but did not tame it in the 06-22 de-risk;
-  run `/autotune` before any retrain) vs **(B) BANK the bound** (a thesis-grade negative: placement is a chart-prior
-  unreachable from audio) and redirect to the nearest-shippable below. The user has NOT chosen yet.
-- **(Nearest-shippable, from the parent onset-phrasing arc — unchanged this session):** (1) **perc-gate harm_calib
-  re-A/B** — wire `--quiet_feat perc` into `export_typed_samples.py`'s `_sparse_harm_offset` (mirror the probe;
-  still dim-0 energy), regen `~/sm-generated/harmcalib_ON` for HSL, user plays: do the 1/16s land IN the piano solo?
-  (2) **1/16-jack OOD** — measure japa1 1/16-jack run-length vs real (`calib_foot_fatigue.py`) BEFORE a `fatigue_penalty`
-  2→3 A/B (by ear). Log play-feel → `notes/playtest_log.md`; quantitative → a `notes/*_findings.md`.
+**M1a (06-29) — that chart sequence model ALREADY EXISTS: the FROZEN decoder** (`probe_seqcontext_frozenh.py` →
+`notes/onset_frozenh_findings.md`). 16th-AUC, 800 train / 98 Hard val:
+
+| arm | 16th-AUC | read |
+|---|---|---|
+| audio | 0.624 | floor |
+| both_real (raw-note CNN) | 0.892 | ceiling — POSITIVE CONTROL FIRED |
+| frozen_h (1×1 readout) | 0.763 | 52% (a readout-capacity confound) |
+| **frozen_h (conv readout)** | **0.892** | **100% — ≡ ceiling** |
+
+The deployed decoder's `h` (`typed_model.py:635`) ALREADY encodes the full placement signal; a small causal-conv
+onset head on the FROZEN decoder reaches the ceiling — no unfreeze, no dedicated note branch. **Attribution save
+(Rule 11):** the 1×1's 0.763 looked like "decoder lost half the signal"; the capacity-matched conv arm overturned it
+to 100%. **BOUNDARY: settles REPRESENTATION, NOT DRIFT** (`h` teacher-forced on REAL notes = the upper bound; gen-time
+the head reads its OWN notes → snowball risk). DRIFT is the lone binding gate.
+
+## 3. EXECUTING M1b (the binding DRIFT gate) — fork resolved toward (A)
+M1a greenlit the cheap frozen-head build on REPRESENTATION → the strategic fork resolved toward **(A)**, now being
+built as **M1b**. Plan (onset-head-only, decoder FROZEN):
+- Add a causal-conv onset head reading the decoder's per-frame `h`; WIRE it INTO `generate()`'s loop — decide
+  onset[t] from `h[t]` instead of the precomputed audio-only onset (today: `typed_model.py:481` precompute → the
+  loop reads `h` at :635 for pattern/type only). Train the head (BCE on real onsets) with **own-output scheduled
+  sampling** (the named fix for AR drift); decoder/pattern/type FROZEN, warm-start the audio onset branch.
+- **DRIFT GATE = `diag_ar_stability.py`** (free-run density + run-length-distribution vs real — 06-22 free-run hit
+  density 0.73 vs real 0.18; scheduled sampling only dampened to 0.66). Drift-taming stack: audio anchor +
+  scheduled sampling + the STAMINA ceiling as a hard density backstop (cond-mech §8c). **KILL if it explodes.**
+- `/autotune` BEFORE the retrain (batch/AMP/length-bucketing/Optuna). Deployed model stays `gen_motif_full_fixed`
+  until M1b proves out **by ear** (Rule 8). If M1b's drift gate FAILS → fall back to (B) BANK + the nearest-shippable.
+- **(Nearest-shippable FALLBACK, from the parent onset-phrasing arc):** (1) **perc-gate harm_calib re-A/B** — wire
+  `--quiet_feat perc` into `export_typed_samples.py`'s `_sparse_harm_offset`, regen `~/sm-generated/harmcalib_ON`
+  for HSL, user plays: do the 1/16s land IN the piano solo? (2) **1/16-jack OOD** — measure japa1 1/16-jack
+  run-length vs real (`calib_foot_fatigue.py`) BEFORE a `fatigue_penalty` 2→3 A/B (by ear). Play-feel →
+  `notes/playtest_log.md`; quantitative → a `notes/*_findings.md`.
 
 ## 4. RESOLVED THIS SESSION (don't re-derive)
+- **M1a — the frozen decoder's `h` already encodes the FULL placement signal** (conv readout 0.892 ≡ ceiling). So
+  fork (A) is a CHEAP onset-head ADD on a frozen decoder, NOT a from-scratch retrain. The 1×1 readout's 0.763 (52%)
+  is a READOUT-CAPACITY confound, NOT "decoder lost the signal" — the capacity-matched conv arm overturned it to
+  100% (Rule 11). Don't re-run the 1×1-only test and conclude the decoder is lossy.
+- **`conda run` BUFFERS child stdout until exit** → empty logs when a run is killed/polled (cost two confusing
+  cycles this session). Use the env interpreter directly: `/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`.
 - **Own-output iterative refiner = the 06-22 transfer gate in disguise** — looked re-openable (deployed C0 is
   neutral 0.667 vs v4's anti-correlated 0.456), but the MATCHED train-on-C0 test (M0) lands at 0.672 → the wall is
   C0-INDEPENDENT (any audio-only-placed C0 lacks the signal). This CLOSED 06-28's last residual confound.
@@ -87,11 +120,11 @@ guidance = 1.0
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
 ## 5. BRANCH / PR STATE
-- This refresh's docs are on branch **`docs/seq-onset-closed-negative`** (off `main`). Prior: **PR #47**
-  (`gen/full-governor-cond-grid` → `main`) and **PR #48** (`release/v0.1.0-prep` → `main`). **Do NOT trust any
-  merge/open state written here — verify live: `gh pr view <n>` / `git log origin/main`** (CLAUDE.md "Documentation
-  Discipline"). `main` is protected by `protect-main`.
-- New cached artifacts are gitignored (not committed): `cache/trainfresh_cache.npz`, `cache/seqctx_trainc0_cache.npz`.
+- This refresh's docs are on branch **`docs/seq-onset-frozenh-m1a`** (off `main`), with PR **(this refresh)**.
+  Prior refresh: **PR #49** (`docs/seq-onset-closed-negative` → `main`); earlier **PR #47**, **#48**. **Do NOT trust
+  any merge/open state written here — verify live: `gh pr view <n>` / `git log origin/main`** (CLAUDE.md
+  "Documentation Discipline"). `main` is protected by `protect-main`.
+- New cached artifacts are gitignored (not committed): `cache/seqctx_frozenh_{train,val}.npz`.
 
 ## 6. INFRA / PERF NOTES (cost real time — know these)
 - **Deployed-C0 generation throughput:** ~10 s/chart, ~98 frames/s (B=1 AR) on the RTX 3060. 4 PROCESS shards ≈

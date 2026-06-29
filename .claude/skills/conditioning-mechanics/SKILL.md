@@ -176,6 +176,16 @@ placement signal is a chart-structural PRIOR, NOT in the audio in EITHER directi
 audio-likelihood critic can reach it; the audio is placement-blind beyond density. Only path = a chart sequence
 model (causal-AR head). A probe MUST NOT treat the onset head as if it could see "where" — and MUST NOT expect an
 audio-grounded critic to score fine placement (it scores density/coarse-energy only).
+**M1a refinement (06-29, `probe_seqcontext_frozenh.py` / `onset_frozenh_findings.md`): the chart sequence model the
+wall demands ALREADY EXISTS — it's the deployed DECODER.** The pattern head's per-frame hidden state `h`
+(`typed_model.py:635`, causal self-attn over notes[<t] + cross-attn to audio) ENCODES the full placement signal: a
+capacity-matched causal-conv readout on FROZEN `h` (teacher-forced) hits **0.892 ≡ the note-context ceiling (100%)**;
+audio floor 0.624, a 1×1 readout only 0.763 (a readout-capacity confound, not lost signal — Rule 11). So the
+"retrain" is a CHEAP onset-head ADD on a FROZEN decoder (read onset off `h` in the loop instead of precomputing it
+audio-only), not a from-scratch model. CAVEAT: this is REPRESENTATION only — `h` was teacher-forced on REAL notes;
+at gen time the head reads its OWN notes and DRIFT (onset→note→`h`→onset snowball; 06-22 free-run density 0.73 vs
+real 0.18) is the lone binding gate (`diag_ar_stability`). A probe replicating the future seq-onset head MUST test
+it free-running, not just teacher-forced.
 
 ### 8a. Soft JACK governor (`jack_penalty`, OLD — exporter default now 0; SUPERSEDED by 8b) — single-foot
 Accumulate `jack_exertion` over a same-panel single-run: on a repeat at gap `g` frames (≤ `jack_max_gap`=4),
