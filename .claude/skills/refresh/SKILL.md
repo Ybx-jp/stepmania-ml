@@ -52,13 +52,25 @@ went stale, link what's now related.
 - Add **reciprocal cross-arc links** (corroborates / depends-on) — when arc A cites arc B, back-link in B.
 - Update `experiment_lineage/INDEX.md`: flip statuses (✅/🟡/⬜), add rows for new threads.
 
-## 5. Integrity pass
+## 5. `notes/HANDOFF.md` — the next-Claude pointer (REWRITE to current state)
+This is the first thing the next cold session reads — it MUST describe where we are NOW, not a past session.
+Rewrite (don't append-only) so it stands alone:
+- **WHERE WE ARE** — deployed model/state, what this work changed (or "diagnostic, no model change").
+- **THE ACTIVE THREAD + its lineage file** — the current line of inquiry, its state, and the **open fork /
+  binding question** (what decision is pending, e.g. a by-ear gate).
+- **AWAITING USER** — any installed playtest set / pending verdict, with the exact question + where to log it.
+- **BRANCH / PR STATE** — current branch (verify the name), pushed?, open PRs.
+- **READ-FIRST pointers** — the 2–3 notes + the skills + the lineage file the next Claude should open, in order.
+- **DISCIPLINE reminders** — the load-bearing rules (Rule 0, by-ear gate, one-change).
+Keep it tight and current; stale handoffs mislead worse than no handoff. Date it.
+
+## 6. Integrity pass
 - Referenced filenames resolve (grep the new refs); reciprocal links present; no dangling pointer to a renamed
   branch/file; the active-thread pointer is singular.
 
-## 6. Commit
-- Stage the docs/notes/skills (NOT bulky `outputs/` artifacts); one coherent `docs(...)` commit with a message
-  that lists what was refreshed. Memories live OUTSIDE the repo (persisted, not committed) — note that.
+## 7. Commit
+- Stage the docs/notes/skills (incl. `HANDOFF.md`; NOT bulky `outputs/` artifacts); one coherent `docs(...)`
+  commit with a message that lists what was refreshed. Memories live OUTSIDE the repo (persisted, not committed).
 - Report: what was refreshed, what was committed, and any lineage **stubs** left to backfill.
 
 ## Guardrails
