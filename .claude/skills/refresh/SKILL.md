@@ -77,9 +77,22 @@ Keep it tight and current; stale handoffs mislead worse than no handoff. Date it
   defaults" description silently mis-guides the next export/probe.
 
 ## 7. Commit
-- Stage the docs/notes/skills (incl. `HANDOFF.md`; NOT bulky `outputs/` artifacts); one coherent `docs(...)`
+- **Branch first if on the default branch** (`main`) — refresh docs land on a `docs/<thread>-<state>` branch, never
+  directly on `main` (it's protected). Create it before committing.
+- Stage the docs/notes/skills (incl. `HANDOFF.md`; NOT bulky `outputs/` artifacts; DO include the session's
+  work-product probe/tooling scripts the lineage references, so the names resolve); one coherent `docs(...)`
   commit with a message that lists what was refreshed. Memories live OUTSIDE the repo (persisted, not committed).
-- Report: what was refreshed, what was committed, and any lineage **stubs** left to backfill.
+
+## 8. Open the PR (final step)
+- `git push -u origin <branch>` then `gh pr create --base main` — open a PR for the refresh branch so the durable
+  layer is reviewable and lands via the protected-main flow.
+- **PR body = the refresh report, not a code-change story:** the thread + its NEW STATE (what was learned / what
+  pivoted), the headline numbers/verdict, the list of refreshed layers (notes/lineage/skills/HANDOFF), and the
+  **open fork left to the user** (a refresh rarely "finishes" work — name the pending decision). End with the
+  `🤖 Generated with [Claude Code]` line per the repo PR convention. For a diagnostic/no-model-change session, SAY
+  SO (it tells the reviewer nothing deployed moved).
+- Report back: what was refreshed, the **PR number/URL**, any lineage **stubs** left to backfill, and the open fork.
+  Do NOT assert merge state — reference the PR by number for the reader to verify (CLAUDE.md Documentation Discipline).
 
 ## Guardrails
 - Don't blanket-rewrite — refresh the delta; leave correct content alone (churn hides real changes).
