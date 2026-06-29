@@ -128,6 +128,11 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   sparse melodic event in a lull). SAME tau-coupling rule as calib (the caller's tau MUST include it; the exporter's
   `--harm_calib` does). Phrasing (WHEN notes fire) is the ONSET head's job, not the pattern head's — see
   `notes/phrasing_coherence_findings.md` + the experiment-design lineage `onset-phrasing-calibrator-arc.md`.
+  GATE-FEATURE caveat (06-28, by-ear): the `--harm_calib` quiet gate keys on **dim-0 total energy**, which MISSES
+  an energy-LOUD melodic solo (a piano solo is perc-ABSENT not quiet) → it dumped boost onto a loud drum section
+  ("1/16s after the piano solo"). Gate on **`perc_onset` dim-35 absence** to fire IN the solo (`probe_phrasing_
+  coherence.py --quiet_feat perc`). Also: on weak-harm-channel songs the hand-gate is blunt; the GLOBAL
+  `onset_phase_calib` reaches a melodic solo without locating it (head's own ranking).
 
 ## 7. Decode / playability (mandatory — see the `playtest` skill)
 `hold_aware` automaton + `no_jump_during_hold` + `no_cross_during_hold` + `max_jack_run=2` (was 1; user-approved
@@ -157,6 +162,14 @@ BPM·4/60` = 16th-frames/sec; no bpm → silent):
   (it's REDISTRIBUTION). Needs the foot model on (it supplies the cost signal).
 RELEASE CENTER (`notes/governor_release_region.md`): per-note = `fatigue_penalty=2` (jack_penalty 0); stamina + arc
 OFF by default. Full derivation + the failures in `notes/foot_fatigue_design.md`.
+**WHEN↔WHERE ISOLATION (06-29, code-confirmed, `seq-onset-arc.md`):** the decode is STRICTLY one-way. `p_onset` is
+PRECOMPUTED (audio-only, non-causal) → STAMINA thins it (8c, CEILING-only) → pattern head decides "where" → FATIGUE
+adjusts "where" (8b). The onset HEAD sees neither governor; the onset DECISION is coupled ONLY to stamina (suppress-
+only, reads realized foot-cost) and NEVER to fatigue. **The pattern head's "where" NEVER feeds the onset "when"** —
+stamina is the lone where→when bridge, and it carries biomechanics, not musical structure. So the note-context
+placement signal (16th-AUC 0.87 teacher-forced vs 0.66 audio-only) is structurally UNREACHABLE by any decode lever
+from our own first pass (its onsets are audio-only-placed → "where" echoes audio); closing it needs a RETRAIN
+(sequence-aware onset head). Re-confirmed 06-29 (`probe_seqcontext_c0.py`: deployed-C0 context 0.667 ≈ audio).
 
 ### 8a. Soft JACK governor (`jack_penalty`, OLD — exporter default now 0; SUPERSEDED by 8b) — single-foot
 Accumulate `jack_exertion` over a same-panel single-run: on a repeat at gap `g` frames (≤ `jack_max_gap`=4),

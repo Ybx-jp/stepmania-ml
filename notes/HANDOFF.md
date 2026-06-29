@@ -1,62 +1,59 @@
-# HANDOFF — onset-phrasing arc; sparse-harm calibrator WIRED, awaiting the by-ear gate
+# HANDOFF — onset-phrasing arc: by-ear gate SPLIT (fix the gate); seq-aware-onset re-open RESOLVED (wall stands)
 
-**Written 2026-06-28 for the next Claude.** This session re-homed the "chart lags / under-places at musical events"
-problem from a mis-attributed PATTERN-head story onto its true ONSET-head home, built the phrasing-coherence
-diagnostic, and validated + wired a **sparse-harm-in-quiet phrase calibrator** (a decode-time onset offset). It
-also hardened the infra: a canonical-defaults skill, a dataset cache-bug fix, and an experiment-lineage system +
-a `refresh` skill. Env: conda `stepmania-chart-gen` (`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`).
+**Written 2026-06-29 for the next Claude.** This session was DIAGNOSTIC + decode-probe only — **no model change**.
+It (1) got the **by-ear verdict** on the sparse-harm calibrator (SPLIT: japa1 ✓, HSL ✗ = a gate-targeting bug),
+(2) let the user reprioritize onto **boundary-snap/structure** and REFRAMED it with two cheap probes (not a clean
+gap), and (3) re-opened + **RESOLVED the sequence-aware-onset question** (the wall stands — the latent placement
+signal needs a retrain, not a decode lever). Env: conda `stepmania-chart-gen`
+(`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`).
 
-**READ-FIRST (in order):** the arc map
-`.claude/skills/experiment-design/experiment_lineage/onset-phrasing-calibrator-arc.md` → then
-`notes/phrasing_coherence_findings.md`, `notes/h11_rerun_findings.md`, `notes/arc_lag_findings.md` → the memory
-files. Load-bearing skills: **generation-defaults** (the ONE canonical decode/export config), **conditioning-
-mechanics** §0/§6/§8 (onset vs pattern responsibilities + the new `onset_logit_offset`), **experiment-design**
-(Rule 0 + the lineage directive), **refresh** (run it at the next checkpoint to update all this).
+**READ-FIRST (in order):** `.claude/skills/experiment-design/experiment_lineage/onset-phrasing-calibrator-arc.md`
+(the active arc) + `seq-onset-arc.md` (the resolved re-open) → then `notes/phrasing_coherence_findings.md`
+(by-ear split + boundary reframe), `notes/sequence_aware_onset_plan.md` (the re-open RESULT). Load-bearing skills:
+**generation-defaults** (the ONE canonical decode/export config), **conditioning-mechanics** §6 (`onset_logit_offset`
++ the new gate-feature caveat) / §8 (the new WHEN↔WHERE ISOLATION note), **experiment-design** (Rule 0/11 + lineage).
 
 ---
 
 ## 1. WHERE WE ARE
 Deployed model unchanged: `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor.
-This session's model-facing change is **decode-time only**: `generate()` gained a per-frame `onset_logit_offset`
-(B,T) — the hook the phrase calibrator rides on. The headline conceptual correction (user): **phrasing = WHEN
-notes fire = the ONSET head's job; the PATTERN head only decides WHICH panels, never count** (conditioning-
-mechanics §0/§8). So the felt "under-placement / lag at musical events" is an onset-head matter.
+This session added DIAGNOSTICS only: `probe_phrasing_coherence.py` gained `--quiet_feat {energy,perc}`; new
+probes `probe_boundary_snap.py`, `probe_figure_snap.py`, `probe_seqcontext_c0.py`. No `generate()`/export default
+changed (the canonical block below is intact). Headline architectural fact (now in cond-mech §8): the decode is
+strictly one-way — onset `p_onset` precomputed (audio-only) → stamina thins (ceiling-only) → pattern "where" →
+fatigue. **The pattern's "where" never feeds the onset "when"; stamina is the only bridge (suppress-only).**
 
-## 2. THE ACTIVE THREAD — onset phrase calibrator (lineage file has the full chain)
-Arc: canonical-defaults consolidation → `arc_lag` (HSL cold-start = AR pattern head; breathe arc zero-phase,
-exonerated) → `h11_rerun` (the governor's transition responsiveness is ONSET-SIDE phrasing, not pattern-head
-choreography — **attribution twice-corrected** via the governor-off + density-dropped ablations) → phrasing-
-coherence diagnostic (4 axes vs MUSICAL EVENTS, objective = the model's OWN coherence, NOT real-chart fidelity) →
-the sharpest gap = **quiet-phrase HARMONIC under-placement** (HSL piano solo) → **sparse-harm-in-quiet calibrator**
-validated (Step 1, posterior: gain~10 flips corr_harm positive on all 3 songs, held global density = redistribution)
-→ **wired into `generate()`/exporter `--harm_calib` + A/B installed (Step 2)**.
+## 2. THE ACTIVE THREAD — onset phrase calibrator (lineage `onset-phrasing-calibrator-arc.md`)
+**Step-2 by-ear gate came back SPLIT.** japa1 PASS ("fun, expressive, not a smear job, well choreographed" → the
+sparse-harm mechanism is sound). HSL MEH + the tell: **"the 1/16s came AFTER the piano solo concluded"** = the
+pre-registered gate-targeting failure. Cause (code): the `--harm_calib` quiet gate keys on **dim-0 total energy**,
+but a piano solo is energy-LOUD + perc-ABSENT → the gate ≈0 during the solo and dumps 35% of its boost on a LOUD
+drum section. **FIX = gate on `perc_onset` (dim 35) absence** — already in the probe (`--quiet_feat perc`), NOT yet
+in the exporter (`_sparse_harm_offset` still uses dim-0).
 
-## 3. AWAITING USER — the by-ear gate (THE binding question)
-A/B installed at **`~/sm-generated/harmcalib_{OFF,ON}`** (HSL + japa1, Hard; ON = `--harm_calib 10`). Global
-density held between arms (redistribution, not inflation); critic still Hard. **Question: does HSL's piano solo /
-quiet passages now get SENSIBLE, well-reading notes, or does it OVER-allocate (busy/cluttered quiet sections)?**
-Log the verdict in `playtest_log.md`. It decides the fork:
-- **reads well** → STEP 3: *learn* the per-frame offset from audio (the actual calibrator), and generalize to the
-  other diagnostic axes (boundary-snap, clean-tail).
-- **over-allocates / wrong feel** → retune first (lower gain; or fix the GATE — the melodic sections that matter on
-  HSL may not be the *quietest* frames, so the energy-quiet gate may target the wrong window). Cheap to iterate on
-  `probe_phrasing_coherence.py --harm_gain` before any learning.
+## 3. AWAITING USER / OPEN FORKS (none blocked)
+- **(A) perc-gate re-A/B (the binding by-ear gate).** TODO: wire `--quiet_feat` into `export_typed_samples.py`'s
+  `_sparse_harm_offset` (mirror the probe), regenerate `~/sm-generated/harmcalib_ON` for HSL, user plays: do the
+  1/16s now land IN the piano solo? → reads well → STEP 3 (LEARN the per-frame offset); still wrong → retune.
+  (Caveat: HSL's harm channel is weak/flat, so the hand-gate is blunt there regardless; the GLOBAL
+  `onset_phase_calib` already nails the solo by ear — a different lever.)
+- **(B) 1/16-jack OOD (user: "penalize harder, it's definitely OOD").** It's the FATIGUE system. MEASURE japa1's
+  1/16-jack run-length vs real (`calib_foot_fatigue.py`) BEFORE tuning, then a `fatigue_penalty` 2→3 A/B (by ear).
 
-## 4. INFRA SHIPPED THIS SESSION (know these before the next probe)
-- **`generation-defaults` skill** = the ONE canonical config; `export_typed_samples.py`'s BARE defaults now ARE the
-  deployed stack (checkpoint→gen_motif_full_fixed, features→highres, onset_phase_calib→"0,1.0", full governor,
-  pattern_temp 1.0). `generate()` bare defaults are unplayable/governor-off — never call bare.
-- **Dataset cache footgun FIXED** (`notes/cache_index_bug.md`, commit d6bde49): the sample cache was index-keyed
-  (no identity check) → subset/`--match` probes read STALE features. Now identity-stamped + verified; safe again.
-  (H11 was verified uncontaminated; arc_lag's kneeso-secondary was the only casualty, already discarded.)
-- **Experiment-lineage system** (`.claude/skills/experiment-design/experiment_lineage/`) + the **`refresh` skill**
-  (runs the whole memory/INDEX/skills/lineage/HANDOFF refresh cycle — invoke at the next checkpoint).
+## 4. RESOLVED THIS SESSION (don't re-derive)
+- **Boundary-snap is NOT a clean targetable gap** (`phrasing_coherence_findings.md` reframe): the REALIZED density
+  step tracks real (`probe_boundary_snap.py`; the old "2× wide" was a posterior-envelope + 3-song artifact), and
+  real charts barely snap figure-character at Foote boundaries either (`probe_figure_snap.py`, median +0.10, 3/8 neg).
+- **Sequence-aware onset re-open — WALL STANDS** (`seq-onset-arc.md`, `probe_seqcontext_c0.py`): controls FIRED
+  (audio 0.656≈floor, both_real 0.871≈ceiling); **deployed-C0 context = 0.667 ≈ audio** → the deployed chart
+  carries no placement signal beyond audio (its onsets are audio-only-placed). Converges with 06-22's
+  train-on-v4-C0 (0.666). The 0.87 signal needs a RETRAIN (sequence-aware head), not a decode lever.
 
 ## CANONICAL EXPORT DEFAULTS (the deployed config — VALIDATED by `/refresh`)
 The bare `export_typed_samples.py` run reproduces what the user plays. These values MUST equal the script's
 argparse defaults — `tools/check_export_defaults.py` parses the block below and FAILS the refresh if they drift.
 This is the durable mirror of the `generation-defaults` skill §1; update both (and re-run the validator) on any
-deliberate change. **This section is permanent — keep it in every HANDOFF rewrite.**
+deliberate change. **This section is permanent — keep it in every HANDOFF rewrite.** (Unchanged this session.)
 
 <!-- CANONICAL-EXPORT-DEFAULTS:START (do NOT hand-edit values; re-run tools/check_export_defaults.py after a change) -->
 ```
@@ -81,27 +78,27 @@ guidance = 1.0
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
 ## 5. BRANCH / PR STATE
-- This session's work is on **`gen/full-governor-cond-grid`** (renamed from claude/full-governor-cond-grid).
-  Committed, **NOT pushed, NO PR yet**. Commits: `26200f2` (canonical-defaults + H11 + diagnostic), `d6bde49`
-  (cache fix), `fca697f` (Step 1), `9580b1b` (Step 2), `6258b48` (lineage system + cond-mech refresh), `2617c21`
-  (refresh skill), + this handoff.
-- Prior arcs: governor SHIPPED (PR #41 merged to `main`). **PR #42** (`release/v0.1.0-prep` → `main`) status not
-  touched — CHECK before assuming. `main` protected by ruleset `protect-main`. The 06-27 `pattern_temperature`
-  playtest RESOLVED (temp ~1.0 reads coherent → now the deployed default).
+- Branch **`gen/full-governor-cond-grid`**. This session's docs/probes are committed (the `/refresh` commit);
+  **NOT pushed, NO PR yet.** Prior arcs: governor SHIPPED (PR #41 merged to `main`); **PR #42**
+  (`release/v0.1.0-prep` → `main`) status not touched — CHECK before assuming. `main` protected by `protect-main`.
+- New cached artifacts (gitignored, not committed): `cache/seqctx_c0_cache.npz` (28 deployed-C0 charts),
+  `cache/seqctx_train_cache.npz` (800 real train songs) — so `probe_seqcontext_c0.py` re-runs are instant.
 
-## 6. OTHER OPEN THREADS (none block the calibrator)
-- **6 experiment-lineage STUBS to backfill** (governor / jack-heaviness / chaos / taste-critic / motif / seq-onset)
-  — `experiment_lineage/INDEX.md`; the directive says fill them as those threads next get touched.
-- Model UNDER-JUMPS (separate air/density thread; do NOT tune the governor to it — cond-mech §8d).
-- best-of-N reranking + V2 region-map; GDL/equivariance — parked (v2/paper).
+## 6. INFRA / PERF NOTES (cost the session real time — know these)
+- **`probe_seqcontext_c0.py` parallelism:** the first cut extracted train features SERIALLY through the stale
+  index-cache → a 1-hour 1-core hang. FIXED: parallel `DataLoader(num_workers=4)` + own npz cache + `cache_dir=None`
+  (footgun-safe). Use this pattern for any new many-song probe.
+- **Batched generation is NOT cleanly supported:** `generate()` treats `onset_threshold` AND `bpm` as batch-scalars
+  but each song needs its own (the governor is BPM-coupled). Correct cross-song batching needs `generate()` to
+  vectorize those per-song — a deferred, must-be-tested change to the deployed decode path.
+- **autotune skill** (user has never run it): the right tool for a future generator TRAINING run (batch/AMP/length-
+  bucketing/Optuna), NOT for diagnostics; won't touch a running job. Run it before any retrain (e.g. the seq-aware head).
 
 ## 7. DISCIPLINE (load-bearing)
-- **experiment-design Rule 0** (now also at the ARC level via the lineage files): grep `notes/` + the lineage
-  file + skills BEFORE designing a probe. It saved a cycle TWICE this session (the `onset_override` pattern-head
-  isolation was a KNOWN-INVALID setup; the calibrator was already an open lead in `onset_alloc_findings.md`).
-  **HARNESS→DATA→MODEL**; run the fair re-test FIRST.
-- **conditioning-mechanics:** replicate the canonical config (generation-defaults) for any probe; tau from the SAME
-  conditioned+offset logits; governor needs `bpm`. The new `onset_logit_offset` follows the same tau-coupling rule.
-- **One change at a time; coherence/play-feel is BY-EAR (Rule 8).** `playtest_log.md` = subjective only;
-  quantitative → `notes/*_findings.md`; the arc narrative → the lineage file.
-- **Run `/refresh`** at the next thread/session checkpoint to keep all of the above current.
+- **experiment-design Rule 11 (confirm the metric can MOVE):** the seq-onset probe's FIRST run trained on 20 songs
+  → both_real collapsed to 0.497 (positive control DEAD) → caught + re-run at 800 before reporting. Always check the
+  positive control fired before believing a null.
+- **Rule 0** (grep notes + lineage + skills BEFORE a probe); **HARNESS→DATA→MODEL**; **by-ear is the binding gate**
+  (Rule 8) — the boundary-snap metrics kept coming back ambiguous; ground structure claims in ears.
+- **One change at a time;** `playtest_log.md` = subjective only; quantitative → `notes/*_findings.md`; arc → lineage.
+- **Run `/refresh`** at the next thread/session checkpoint.

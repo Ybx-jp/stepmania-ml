@@ -81,14 +81,23 @@ def calibrated_p_onset(model, audio, diff, device, extra=None):
         return torch.sigmoid(ol).cpu().numpy()
 
 
-def sparse_harm_offset(feat, harm_gain, quiet_q):
+def gate01(feat, quiet_feat):
+    """The smoothed, 0-1-normed 'is this frame in the gated band' source signal. quiet_feat:
+      'energy' = dim-0 total loudness (the ORIGINAL gate; MISSES a piano solo — energy-loud, perc-absent).
+      'perc'   = dim-35 percussive onset (the FIX; a piano solo is perc-ABSENT → its band fires IN the solo)."""
+    src = feat[:, I_PERC] if quiet_feat == 'perc' else feat[:, I_ENERGY]
+    return norm01(boxsmooth(src, 16))
+
+
+def sparse_harm_offset(feat, harm_gain, quiet_q, quiet_feat='energy'):
     """STEP-1 hand-crafted calibrator: un-bury a sparse HARMONIC onset in a QUIET phrase (the mirror of the
     head's existing sparse-perc response). offset[t] = harm_gain · quiet_gate[t] · harm[t], a LOGIT boost that
-    fires only where it's quiet AND a harmonic onset is present (loud frames + quiet-but-empty frames untouched)."""
-    energy01 = norm01(boxsmooth(feat[:, I_ENERGY], 16))
-    q = np.percentile(energy01, quiet_q)
-    quiet_gate = np.clip((q - energy01) / (q + 1e-6), 0.0, 1.0)   # 0 above the quiet quantile, →1 as energy→0
-    return harm_gain * quiet_gate * feat[:, I_HARM]               # harm (dim36) already 0–1
+    fires only where the GATE band is low AND a harmonic onset is present. quiet_feat picks the gate band
+    (energy=original loudness gate; perc=percussion-absence gate, the piano-solo fix)."""
+    g = gate01(feat, quiet_feat)
+    q = np.percentile(g, quiet_q)
+    quiet_gate = np.clip((q - g) / (q + 1e-6), 0.0, 1.0)          # 0 above the quiet quantile, →1 as gate→0
+    return harm_gain * quiet_gate * feat[:, I_HARM]              # harm (dim36) already 0–1
 
 
 # ---- the four axes -------------------------------------------------------------------------------
@@ -186,7 +195,10 @@ def main():
     ap.add_argument("--harm_gain", type=float, default=0.0,
                     help="STEP-1 sparse-harm-in-quiet calibrator: logit boost ∝ quiet_gate·harm. 0 = off (pure "
                          "diagnostic). >0 prints a base-vs-calibrated A/B on axis-2 + density. ~2.0 to start.")
-    ap.add_argument("--quiet_q", type=float, default=40.0, help="energy percentile defining 'quiet' for the calibrator")
+    ap.add_argument("--quiet_q", type=float, default=40.0, help="gate percentile defining 'quiet' for the calibrator")
+    ap.add_argument("--quiet_feat", choices=["energy", "perc"], default="energy",
+                    help="gate band: 'energy' (dim0, ORIGINAL — misses an energy-loud piano solo) or 'perc' "
+                         "(dim35 percussion-absence, the FIX — fires IN a perc-absent melodic solo).")
     args = ap.parse_args()
     set_seed(42); device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -236,17 +248,26 @@ def main():
             print(f"  4 PERC<->HARM     range(corr_perc-corr_harm)={a4['rng']:.2f}  std={a4['std']:.2f}  "
                   f"mean={a4['mean']:+.2f}  ({'fluid' if a4['rng'] > 0.5 else 'locked-ish'})")
         if args.harm_gain > 0:                            # STEP-1 A/B: the hand-crafted sparse-harm-in-quiet offset
-            off = sparse_harm_offset(feat, args.harm_gain, args.quiet_q)
+            off = sparse_harm_offset(feat, args.harm_gain, args.quiet_q, args.quiet_feat)
             p_adj = calibrated_p_onset(model, audio, diff, device, extra=off)
             tau_adj = float(np.quantile(p_adj, 1 - real_d)) if real_d > 0 else 0.5
             a2c = axis2_burst_in_quiet(p_adj, perc, harm, energy01)
-            # density: realized note-rate inside quiet frames (did the calibrator actually allocate there?)
-            qn = energy01 < np.percentile(energy01, args.quiet_q)
+            # density: realized note-rate inside the GATED frames (did the calibrator actually allocate there?)
+            g = gate01(feat, args.quiet_feat)
+            qn = g < np.percentile(g, args.quiet_q)
             dq_b = float((p[qn] > tau).mean()); dq_a = float((p_adj[qn] > tau_adj).mean())
             d_b = float((p > tau).mean()); d_a = float((p_adj > tau_adj).mean())
-            print(f"  ── CALIB(harm_gain={args.harm_gain}) axis-2  corr_harm {a2['corr_harm']:+.2f}→{a2c['corr_harm']:+.2f}"
+            # DECISIVE: fraction of the offset MASS that lands on MELODIC-DOMINANT frames (high harm, low perc —
+            # the piano-solo signature). High = the gate targets the solo; low (energy gate) = it leaks elsewhere.
+            mel = (harm > np.percentile(harm, 75)) & (perc < np.percentile(perc, 50))
+            frac_mel = float(off[mel].sum() / (off.sum() + 1e-9))
+            # where the boost mass is centered in the song (frame), to read 'in the solo' vs 'after it'
+            centroid = float((np.arange(T) * off).sum() / (off.sum() + 1e-9)) if off.sum() > 0 else np.nan
+            print(f"  ── CALIB(gain={args.harm_gain}, gate={args.quiet_feat}) axis-2  corr_harm "
+                  f"{a2['corr_harm']:+.2f}→{a2c['corr_harm']:+.2f}"
                   f"  p_calm→burst {a2['p_calm']:.2f}/{a2['p_burst']:.2f} → {a2c['p_calm']:.2f}/{a2c['p_burst']:.2f}"
-                  f"  | quiet-dens {dq_b:.3f}→{dq_a:.3f}  global-dens {d_b:.3f}→{d_a:.3f}")
+                  f"  | gated-dens {dq_b:.3f}→{dq_a:.3f}  global-dens {d_b:.3f}→{d_a:.3f}"
+                  f"  | offset→melodic {frac_mel:.2f}  centroid@{centroid:.0f}/{T}")
         print()
 
         ax = row[0]; t = np.arange(T)

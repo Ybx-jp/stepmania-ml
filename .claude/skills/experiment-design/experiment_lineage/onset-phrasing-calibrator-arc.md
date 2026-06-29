@@ -4,8 +4,10 @@
 its true ONSET-head home, built the measure-before-build diagnostic, and validated + wired a sparse-harm-in-quiet
 phrase calibrator (awaiting ears).
 
-**Status:** ACTIVE. Step 2 done (calibrator wired into `generate()`, A/B installed); the by-ear gate is the open
-fork. Branch `gen/full-governor-cond-grid` (commits `26200f2`, `d6bde49`, `fca697f`, `9580b1b`).
+**Status:** ACTIVE. Step 2 by-ear gate RETURNED (06-28) **SPLIT**: japa1 ✓, HSL ✗ (gate-targeting) → fix the GATE
+(perc dim-35, not energy dim-0) then re-A/B; STEP-3 "learn the offset" gated behind that. Two spin-offs this
+session: the **boundary-snap REFRAME** (the metric dissolved the gap, no build) and the **seq-aware-onset re-open
+→ RESOLVED wall stands** (`seq-onset-arc.md`). Branch `gen/full-governor-cond-grid`.
 
 **Memory:** [[onset-phrase-calibrator]] (active), roots in [[jack-heaviness]]; corroborates [[fatigue-governor]];
 methodology footgun [[dataset-cache-footgun]].
@@ -44,6 +46,17 @@ methodology footgun [[dataset-cache-footgun]].
 9. **Step 2 — wired + A/B installed (awaiting ears, Rule 8):** `generate()` got a per-frame `onset_logit_offset`;
    exporter `--harm_calib`; `~/sm-generated/harmcalib_{OFF,ON}`. Fork: reads well → Step 3 (LEARN the offset);
    over-allocates → retune gain/gate/feature.
+10. **Step 2 BY-EAR VERDICT (06-28) — SPLIT → fix the GATE.** japa1 ✓ ("not a smear job"); HSL ✗ ("1/16s AFTER the
+    piano solo") = the pre-registered gate-targeting failure. `probe_phrasing_coherence.py --quiet_feat perc` +
+    binned dump: the energy gate (dim-0) MISSES the energy-loud/perc-absent solo and dumps 35% of its mass on a
+    LOUD drum section; gate on **perc dim-35 absence** instead. (Honest catch: my `offset→melodic` scalar was a bad
+    proxy on HSL's flat harm channel — Rule 1 on my own probe; the binned mass was the truthful read.) STEP-3
+    "learn the offset" gated behind the perc-gate re-A/B. 2nd open thread: 1/16-jack OOD → `fatigue_penalty` 2→3.
+11. **Boundary-snap spin-off (06-28) — the metric REFRAMED the gap, NO build.** User prioritized axis-1 as the
+    structural skeleton. `probe_boundary_snap.py`: the REALIZED density step tracks real (width 12<19f, lag −40≈−30)
+    — the original "2× wide/laggy" was a posterior-ENVELOPE + 3-song artifact (Rules 2/11). `probe_figure_snap.py`:
+    real charts barely snap figure-FAMILY character at Foote boundaries (median +0.10, 3/8 neg). → Foote-snap not a
+    clean targetable gap; reframed structure toward by-ear / pattern-character. This SPAWNED the seq-onset re-open.
 
 ## Methodology wins to reuse (this arc is a case study for the SKILL.md rules)
 - **Rule 0 saved a cycle TWICE:** the planned pattern-head isolation via `onset_override` was a KNOWN-INVALID setup
@@ -62,9 +75,11 @@ methodology footgun [[dataset-cache-footgun]].
   H11 re-run is the corroborating measurement that the breathe arc "does double duty (playability + phrasing)".
 - **[[jack-heaviness]] (`notes/jack_heaviness_findings.md`):** the onset head's blocky audio-only rhythm is the
   upstream cause of the phrasing gap this arc targets; both arcs implicate the onset head's placement.
-- **`notes/sequence_aware_onset_plan.md`:** the heavier note-context onset-head program (06-22 verdict: sequence
-  signal real but AR explodes / refinement can't bootstrap from audio-only context). The phrase calibrator is the
-  cheaper decode-time lever that side-steps that stall.
+- **[[onset-phrase-calibrator]] → `seq-onset-arc.md` (DEPENDS-ON / spawned 06-28):** the boundary-snap reframe here
+  led to the user's "the heads can't articulate it" hypothesis → the seq-aware-onset re-open. Its verdict (wall
+  stands: deployed-C0 context 0.667 ≈ audio; the 0.87 placement signal needs a RETRAIN, not a decode lever)
+  BOUNDS this arc: the phrase calibrator is the only decode-time `when`-shaping lever; the full fix is a retrain.
+  (`notes/sequence_aware_onset_plan.md` holds the 06-22 program + the 06-28/29 re-open result.)
 
 ## Skills in play
 `generation-defaults` (the canonical config the probes replicate) · `conditioning-mechanics` §0/§6/§8 (onset vs

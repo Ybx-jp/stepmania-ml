@@ -62,6 +62,82 @@ HELD (HSL 0.388→0.383, kneeso 0.323→0.321 — redistribution not inflation),
 (HSL 22→27). 39/39 generation tests pass. **OPEN = by-ear gate:** does HSL's piano solo now get sensible,
 well-reading notes, or does it over-allocate? That decides Step 3 (LEARN the offset) vs retune gain/gate/feature.
 
+## STEP 2 VERDICT (2026-06-28) — by-ear gate came back SPLIT; the GATE-FEATURE is the bug (not the gain)
+By-ear (playtest_log 06-28): **japa1 PASS** ("fun, expressive, not a smear job, well choreographed" → mechanism
+sound). **HSL MEH + the tell:** the 1/16s "came noticeably AFTER the piano solo concluded." HANDOFF §3 pre-
+registered this as the "fix the GATE" branch. Probe (`--quiet_feat energy|perc`, `gain=10`, HSL) + a binned
+energy/perc/harm + offset-mass dump CONFIRM the mechanism and complicate the naive fix:
+
+- **HSL has NO energy-quiet section until the outro.** Smoothed dim-0 energy sits 0.90–0.96 from frame ~120 to
+  ~1320 (then the outro drops to 0.34→0). So the energy gate's "quietest 40%" is just the shallowest energy
+  DIPS — and the deepest non-outro dip (bin 1020–1080, energy 0.85) is **percussively LOUD (perc 0.88)**. The
+  energy gate dumps **35% of its offset mass there** — a drum-heavy spot, NOT the melodic solo. *That* is the
+  "1/16s after the piano solo": the boost piled onto a loud busy section the energy dip happened to mark.
+- **The perc gate (dim35-absence) relocates the mass to the lowest-percussion region** (frames ~120–540, ~66% of
+  its mass; ~0% at the loud 1020–1080 spot). Directionally the fix — it stops the loud-section mis-fire and
+  targets where drums thin out (the plausible solo). **By-ear A/B not yet run** (Rule 8 decides).
+- **HONEST metric caveat (experiment-design Rule 1):** the `offset→melodic` scalar I added (harm>p75 & perc<p50)
+  said perc was WORSE (0.05 vs 0.11) — but it's a BAD proxy here because HSL's **harm channel (dim36) is weak and
+  FLAT (0.22–0.34, never dominant)**, so "harm>p75" is noise, not a solo. The BINNED perc-mass distribution is the
+  truthful read; don't cite the scalar. The flat harm channel also means the hand-crafted harm-gate is a BLUNT
+  instrument on HSL regardless of gate-feature — there's no sharp melodic spike to chase.
+- **WHY the global 16th-unlock (`onset_phase_calib`) DID nail HSL's solo by ear** (unlock16 06-28) while this
+  hand-gate struggles: the global lever doesn't LOCATE the solo — it lowers tau on 16th-phase frames everywhere
+  and lets the **head's own learned ranking** (AUC 0.73, onset_alloc_findings) place them where afforded. The
+  hand-gate instead depends on the weak dim36 feature to FIND the solo. This is **H-onset-perc-bias at the FEATURE
+  level**: the melodic content is under-represented in the 42-dim features, so a feature-driven gate is limited;
+  a head-ranking-driven lever isn't. → favors LEARNING the offset from the encoder (Step 3) over hand-tuning the
+  gate, OR leaning on the global 16th-unlock for the melodic-solo win and scoping harm_calib to songs with a
+  genuine low-energy harm-rich phrase.
+
+## AXIS-1 BOUNDARY-SNAP REFRAME (2026-06-28) — the gap was a metric artifact; re-measured on the REALIZED chart it ~matches real
+User pivot to attack boundary-snap as the most critical axis (structure = the skeleton the other 3 decorate).
+Rule-0 grounding + a readout-vs-representation decomposition (`probe_boundary_snap.py`, 8 Hard songs, no-gen)
+**reframed the gap before any build** (experiment-design Rules 2/7/9/11 — the cheap fair test overturned the
+motivating number):
+
+| signal (box16 unless noted) | median width | median lag vs Foote |
+|---|---|---|
+| `p_onset` raw (box4) | 20f | **−1f** (steps AT the boundary) |
+| `p_onset` envelope (box16) | 23f | +1f |
+| **realized** (p>τ, what's PLAYED) | **12f** | **−40f** |
+| **REAL** chart | **19f** | **−30f** |
+
+- **The realized density step is NOT wider than real (12f < 19f) and its timing tracks real (−40 vs −30f).** Both
+  model and real LEAD the Foote audio boundary by ~2–3 beats (choreography anticipates the section change — normal,
+  and per-song they co-move: Deja −47/−39, HSL −43/−42, japa −39/−33, Dancing −35/−46). So on the DENSITY side the
+  onset head's boundary behavior is ~on par with real.
+- **The original axis-1 "model 2× wider / Deja lags +46f" was an ARTIFACT:** measured on the smoothed POSTERIOR
+  ENVELOPE (`p_alloc`/`p_breathe` box16), NOT the realized chart (Rule 2 deployment mismatch), on 3 songs (Rule 11).
+  The raw posterior's biggest gradient sits at Foote (lag ~0); tau-thresholding shifts the realized step to where
+  real sits. → don't cite the posterior-envelope width/lag as a model gap.
+- **What is STILL untested (where a structure gap could really live):** (a) the PATTERN/FIGURE *character* snap —
+  does panel-pattern IDENTITY / figure family change crisply at a boundary? That's the PATTERN head's job, and H11
+  hinted the bare AR pattern head UNDER-authors structure (its realized shifts were mostly onset-cascade). This probe
+  measured only density. (b) BY-EAR — boundary-snap has never been playtested; all reads are diagnostic numbers.
+- **Caveat / not-fully-clean:** a couple songs diverge (Pound the Alarm realized −38 vs real +3) — the model leads
+  more than real on some. Minor, not a clean defect. Widen + by-ear before any magnitude claim.
+
+### FIGURE-CHARACTER snap (the pattern-side test) — REAL reference is WEAK/NOISY (`probe_figure_snap.py`, 8 songs, no-gen)
+Followed the density reframe by testing the OTHER half — does the FIGURE-FAMILY character (jack/sweep/trill/
+candle/jump/step mix, density-ISOLATED fractions over named W=3 windows) change crisply at Foote boundaries?
+Cheapest-first = REAL reference only (Rule 5): if real doesn't snap figure-character, the premise is moot.
+**Result: real snaps only WEAKLY/inconsistently** — `resp = |Δchar|@boundary − @random` median **+0.10**,
+3/8 songs NEGATIVE (Dancing −0.28, IN BETWEEN −0.12, japa −0.05; vs Deja +0.44, Taylor +0.26, HSL +0.18). The
+@random baseline is high (0.44–0.80) → figure character varies a LOT everywhere, only a slight boundary bump.
+- **Reading:** real Hard charts don't strongly BLOCK-organize figure character at audio-timbre sections — they're
+  more continuously varied. So there's no sharp real target the model is missing. Combined with the density
+  reframe above, **two cheap probes both say "Foote-boundary-snap" is not a clean, targetable gap.**
+- **Power caveat (don't over-conclude — Rule 1/11):** ~4 boundaries/song (Foote TOPK cap), short 64f windows →
+  noisy; Foote AUDIO boundaries may not be where the CHARTER's sections fall. "Weak/noisy," NOT "proven absent."
+  A better-powered version = within/between-section variance "blockiness" over all frames, or the chart's own
+  segmentation — IF we stay quantitative.
+- **Recommendation logged:** boundary-snap has NEVER been grounded by ear (all reads are diagnostic numbers, and
+  the numbers keep coming back ambiguous). Before more metric work, GROUND IT BY EAR (Rule 8) — generate a set,
+  user listens specifically for whether section structure feels crisp/robust. If the ear hears a real gap, THAT
+  defines the right operationalization; if not, the structure concern likely lives elsewhere (long-range motif
+  recurrence/repetition, not boundary snap).
+
 ## Bottom line / next
 The learned phrase calibrator has the most headroom on **(2) quiet-phrase harmonic allocation** (ADD — the HSL
 melodic under-placement, the sharpest + on the complaint song) and **(1) snappier boundaries** (sharpen). **(4)
