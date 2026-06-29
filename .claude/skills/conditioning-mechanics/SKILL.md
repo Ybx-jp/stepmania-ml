@@ -169,7 +169,13 @@ only, reads realized foot-cost) and NEVER to fatigue. **The pattern head's "wher
 stamina is the lone where→when bridge, and it carries biomechanics, not musical structure. So the note-context
 placement signal (16th-AUC 0.87 teacher-forced vs 0.66 audio-only) is structurally UNREACHABLE by any decode lever
 from our own first pass (its onsets are audio-only-placed → "where" echoes audio); closing it needs a RETRAIN
-(sequence-aware onset head). Re-confirmed 06-29 (`probe_seqcontext_c0.py`: deployed-C0 context 0.667 ≈ audio).
+(sequence-aware onset head). **CLOSED NEGATIVE 06-29 — wall AIRTIGHT 4 ways (`seq-onset-arc.md`):** forward
+audio→16th 0.65 · M0 matched-refiner train-on-deployed-C0 0.672 (`probe_seqcontext_matched.py`) · analysis-by-
+synthesis critic real-vs-corrupted 0.570 & real-vs-C0 0.468 (`probe_recon_critic.py`, all controls fired). The 0.87
+placement signal is a chart-structural PRIOR, NOT in the audio in EITHER direction — so no decode lever AND no
+audio-likelihood critic can reach it; the audio is placement-blind beyond density. Only path = a chart sequence
+model (causal-AR head). A probe MUST NOT treat the onset head as if it could see "where" — and MUST NOT expect an
+audio-grounded critic to score fine placement (it scores density/coarse-energy only).
 
 ### 8a. Soft JACK governor (`jack_penalty`, OLD — exporter default now 0; SUPERSEDED by 8b) — single-foot
 Accumulate `jack_exertion` over a same-panel single-run: on a repeat at gap `g` frames (≤ `jack_max_gap`=4),

@@ -16,7 +16,7 @@ Status legend: ✅ written · 🟡 stub (notes exist, lineage file pending) · �
 | Chaos / conditioning (manifold vs mean-pin) | _chaos-conditioning-arc.md_ | 🟡 | the attribution-error gold mine: harness OOD, not model defect (manifold conditional-fill) | the failure_modes_postmortem.md examples · conditioning-mechanics §2 |
 | Taste-critic transfer / interpretability | _taste-critic-arc.md_ | 🟡 | ranking transfers (REAL>BASE>CHAOS) but near-binary not graded; interp Phase A/B/C | taste_critic_interpretability_plan · [[taste-critic-transfer]] |
 | H15 motif / figure steering | _motif-arc.md_ | 🟡 | section-level candle/trill levers; jack↔sweep the lone dead axis (soft-realize ceiling) | h15_*; conditioning-mechanics §4–§5 |
-| Sequence-aware onset head | [seq-onset-arc.md](seq-onset-arc.md) | ✅ | "when" isolated from "where"; signal real (0.87 TF) but unreachable — **06-28 re-open RESOLVED: wall STANDS** (deployed C0 ≈ audio 0.667; needs RETRAIN not a decode lever) | sequence_aware_onset_plan · [[onset-phrase-calibrator]] |
+| Sequence-aware onset head | [seq-onset-arc.md](seq-onset-arc.md) | ✅ | "when" isolated from "where"; signal real (0.87 TF) but unreachable — **CLOSED NEGATIVE, wall AIRTIGHT 4 ways (06-29)**: M0 matched-refiner train-on-C0 0.672 + analysis-by-synthesis critic real-vs-C0 0.468 (controls fired); placement is a chart-PRIOR not in audio → only path = AR-head retrain OR bank | sequence_aware_onset_plan · [[onset-phrase-calibrator]] |
 
 When you add a lineage file: flip the row to ✅, link it, and add reciprocal `corroborates`/`depends-on` links in
 the related files (e.g. the governor arc and the onset-phrasing arc reference each other on the breathe-arc =
