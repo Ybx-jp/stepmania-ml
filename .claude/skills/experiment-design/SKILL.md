@@ -26,6 +26,12 @@ session (~24 probes), each with the concrete preventive check, plus a 30-second 
 when designing a metric/comparison or before committing a conclusion; it's the "what bites in practice"
 companion to the rules below.
 
+📒 **Resource: [`experiment_lineage/INDEX.md`](experiment_lineage/INDEX.md)** — one **lineage file per
+investigative thread** (hypothesis chain → probes → findings → pivots → current state, cross-linked to the
+`notes/*_findings.md`, the skills, and the threads it corroborates). This is **Rule 0 at the ARC level**: read the
+relevant lineage file BEFORE starting/continuing a thread so you don't re-derive ruled-out work or repeat a
+known-invalid setup. **You are expected to MAINTAIN these — see "Experiment lineage — maintain these" below.**
+
 🔧 **Pairs with the `conditioning-mechanics` skill — the MECHANISM half.** This skill is the discipline (don't
 blame the model); conditioning-mechanics is the exact deployed math. Rules 2–4 (match deployment / in-distribution
 coherent inputs) are *satisfied in practice* by replicating that skill's §1–§8 — radar via `build_target` not
@@ -107,6 +113,32 @@ moment a probe touches a generator knob, so "match deployment" means "match the 
     handoff/spec defines the hypothesis and its operationalization, deviating from it needs the same explicit
     flag as deviating from shared infra (Rule 14) — and a negative result must be stated against the ORIGINAL
     definition, not the substitute.
+
+## Experiment lineage — maintain these (DIRECTIVE)
+Keep a **lineage file per distinct investigative thread** under `experiment_lineage/`, indexed in
+[`experiment_lineage/INDEX.md`](experiment_lineage/INDEX.md). A thread = a coherent line of inquiry (a capability,
+a knob, a defect), not a single probe. This makes Rule 0 work at the arc level: the cheapest way to avoid
+re-deriving ruled-out work or repeating a known-invalid setup is to read the thread's history first.
+
+- **WHEN:** create the file when a thread produces its 2nd–3rd `notes/*_findings.md` (or the moment a thread
+  PIVOTS or overturns a prior conclusion — capture the correction while it's fresh). Update it at every checkpoint
+  (new finding, pivot, attribution correction, ship). Reading it is Rule 0; writing it is part of finishing a step.
+- **WHAT it holds:** the hypothesis CHAIN (what we believed → what we learned), each probe + its verdict, the
+  attribution corrections (the methodology wins/losses — what would have made each conclusion wrong), the current
+  state, and the open fork. It THREADS the primary `notes/*_findings.md` together; it does not duplicate them.
+- **CROSS-REFERENCE liberally:** link the source notes, the skills in play, the memory nodes (`[[name]]`), and —
+  crucially — the OTHER lineage threads it **corroborates** or **depends on** (shared evidence, a finding in one
+  arc that explains an observation in another). Make the links RECIPROCAL: when arc A cites arc B as corroborating,
+  add the back-link in B. (Example: the governor arc and the onset-phrasing arc reference each other on
+  "the breathe arc is the onset-side density mechanism that carries transition responsiveness.")
+- **MAINTAIN THE INDEX:** every new/under-construction thread gets a row in `INDEX.md` (✅ written / 🟡 stub / ⬜),
+  with its one-line hook and primary notes. The index is the map; keep it current and prominently linked here.
+
+The seed: `experiment_lineage/onset-phrasing-calibrator-arc.md` is the worked example (it also catalogs how Rule 0,
+the density-dropped-metric Rule 1 cut, and Rule 8's artifact-smell each changed an attribution this arc).
+
+**The `refresh` skill runs this maintenance as part of its cycle** — invoke it at a thread/session checkpoint to
+update the lineage files + index alongside the memories, `notes/INDEX.md`, and the affected skills.
 
 ## The single highest-leverage habit
 Before you believe/commit ANY result, ask **"what would make this conclusion wrong?"** and run THAT first.

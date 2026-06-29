@@ -123,10 +123,21 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   BEFORE tau (the caller's tau MUST use the same offset) → 16th COUNT floats with audio per-song (the validated
   win). `onset_phase_alloc=(q,8,16)` forces fixed per-band SHARES (a quota — SMEARS; avoid). `onset_phase_penalty`
   subtracts from off-beat logits (a gate; doesn't rescue chaos because chaos MOVES notes off-beat).
+  `onset_logit_offset=(B,T)` (added 06-28) = a per-FRAME content-driven onset logit offset — the hook for the
+  ONSET PHRASE CALIBRATOR (e.g. the validated sparse-harm-in-quiet offset `gain·quiet_gate·harm` that un-buries a
+  sparse melodic event in a lull). SAME tau-coupling rule as calib (the caller's tau MUST include it; the exporter's
+  `--harm_calib` does). Phrasing (WHEN notes fire) is the ONSET head's job, not the pattern head's — see
+  `notes/phrasing_coherence_findings.md` + the experiment-design lineage `onset-phrasing-calibrator-arc.md`.
+  GATE-FEATURE caveat (06-28, by-ear): the `--harm_calib` quiet gate keys on **dim-0 total energy**, which MISSES
+  an energy-LOUD melodic solo (a piano solo is perc-ABSENT not quiet) → it dumped boost onto a loud drum section
+  ("1/16s after the piano solo"). Gate on **`perc_onset` dim-35 absence** to fire IN the solo (`probe_phrasing_
+  coherence.py --quiet_feat perc`). Also: on weak-harm-channel songs the hand-gate is blunt; the GLOBAL
+  `onset_phase_calib` reaches a melodic solo without locating it (head's own ranking).
 
 ## 7. Decode / playability (mandatory — see the `playtest` skill)
 `hold_aware` automaton + `no_jump_during_hold` + `no_cross_during_hold` + `max_jack_run=2` (was 1; user-approved
-2026-06-25 — allow a justified 2-note 16th jack, hard-forbid 3+) + `pattern_temperature ~0.7`. Constraints act on
+2026-06-25 — allow a justified 2-note 16th jack, hard-forbid 3+) + `pattern_temperature ~1.0` (the DEPLOYED default per the `generation-defaults` skill; the old
+~0.7 cap predates the governor — see the revisit below). Constraints act on
 the FINAL playable symbols, NOT the pre-automaton pattern (a fix written against the pattern leaks because
 `hold_aware` remaps it). Any new export/probe the user PLAYS must call `enforce_playability(gen_kwargs)`. The
 graded escalation across spacings is the soft FOOT GOVERNORS (§8).
@@ -151,6 +162,14 @@ BPM·4/60` = 16th-frames/sec; no bpm → silent):
   (it's REDISTRIBUTION). Needs the foot model on (it supplies the cost signal).
 RELEASE CENTER (`notes/governor_release_region.md`): per-note = `fatigue_penalty=2` (jack_penalty 0); stamina + arc
 OFF by default. Full derivation + the failures in `notes/foot_fatigue_design.md`.
+**WHEN↔WHERE ISOLATION (06-29, code-confirmed, `seq-onset-arc.md`):** the decode is STRICTLY one-way. `p_onset` is
+PRECOMPUTED (audio-only, non-causal) → STAMINA thins it (8c, CEILING-only) → pattern head decides "where" → FATIGUE
+adjusts "where" (8b). The onset HEAD sees neither governor; the onset DECISION is coupled ONLY to stamina (suppress-
+only, reads realized foot-cost) and NEVER to fatigue. **The pattern head's "where" NEVER feeds the onset "when"** —
+stamina is the lone where→when bridge, and it carries biomechanics, not musical structure. So the note-context
+placement signal (16th-AUC 0.87 teacher-forced vs 0.66 audio-only) is structurally UNREACHABLE by any decode lever
+from our own first pass (its onsets are audio-only-placed → "where" echoes audio); closing it needs a RETRAIN
+(sequence-aware onset head). Re-confirmed 06-29 (`probe_seqcontext_c0.py`: deployed-C0 context 0.667 ≈ audio).
 
 ### 8a. Soft JACK governor (`jack_penalty`, OLD — exporter default now 0; SUPERSEDED by 8b) — single-foot
 Accumulate `jack_exertion` over a same-panel single-run: on a repeat at gap `g` frames (≤ `jack_max_gap`=4),
@@ -218,10 +237,12 @@ design Rule 13 (global-quota anti-pattern): it's a per-frame emergent THRESHOLD,
 contrast `onset_phase_alloc` (§6, a flat quota that SMEARS). VALIDATED + playtest-confirmed ("a tasteful edit").
 
 ### 8d. KNOWN GAPS — a probe must NOT assume these are modeled
-- **HOLDS-BLINDNESS (per-NOTE only):** the PATTERN penalty (8b) still does NOT pin the held foot (pinning it there
+- **HOLDS-BLINDNESS (per-NOTE only) — ⚠️ DISPUTED (user does not trust this claim; UNVERIFIED, re-test before
+  relying on it):** the PATTERN penalty (8b) still does NOT pin the held foot (pinning it there
   REGRESSED — jacks explode non-monotonically; placement can't fix a COUNT problem). FIXED on the DENSITY side: the
   stamina cost (8c) IS hold-aware (free-foot grind). But on these charts holds aren't actually grinds (pinned frames
-  ~0.14 dense, maxJackRun-in-holds 3 = human) so the effect is near-vacuous in practice.
+  ~0.14 dense, maxJackRun-in-holds 3 = human) so the effect is near-vacuous in practice. *(The "near-vacuous in
+  practice" + the pinned-frame stats are the part flagged as untrusted — treat as a hypothesis, not a result.)*
 - **ONSET-HEAD melodic under-placement (H-onset-perc-bias):** the onset head under-places on melodic-only sections
   (a piano solo reads sparse); NOT a governor knob — a feature/retrain thread. (The breathing energy itself is NOT
   percussion-biased on the tested songs — diag_breathe_energy refuted that; the gap is the onset head.)

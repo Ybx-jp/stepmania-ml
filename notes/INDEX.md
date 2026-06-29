@@ -25,6 +25,36 @@ learned-head-vs-physics comparison and decomposed the head's jack-heaviness acro
 `pattern_temperature`, governor permits it) + onset head's blocky audio-only rhythm (contributing). **NEXT
 THREAD = the onset head** (sequence-aware placement / audio-feature melodic under-placement) — see `HANDOFF.md`.
 
+**UPDATE (2026-06-28):** the ONSET-PHRASING arc (this session). Canonical-defaults consolidation (`generation-defaults`
+skill; exporter bare run = the deployed config) → `arc_lag_findings.md` (HSL cold-start = AR pattern head; breathe
+arc zero-phase/exonerated) → `h11_rerun_findings.md` (the governor's transition gain is ONSET-SIDE phrasing, not
+the pattern head — attribution twice-corrected via the governor-off + density-dropped cuts) → **phrasing is the
+ONSET head's job** (cond-mech §0/§8) → `phrasing_coherence_findings.md` (4-axis diagnostic; sharpest gap = quiet-
+phrase harmonic under-placement) → **sparse-harm-in-quiet phrase calibrator** validated (Step 1) + wired into
+`generate()`/exporter `--harm_calib` + A/B installed (Step 2, awaiting ears). Mid-arc: the index-keyed sample-cache
+footgun found + FIXED (`cache_index_bug.md`). Full arc map =
+`.claude/skills/experiment-design/experiment_lineage/onset-phrasing-calibrator-arc.md`. NEXT = by-ear gate → Step 3
+(learn the offset) or retune.
+
+## Onset placement / phrasing (2026-06-28/29 arc — see the lineage file)
+**UPDATE (2026-06-28/29):** Step-2 **by-ear gate came back SPLIT** — japa1 ✓ ("not a smear job"), HSL ✗ ("1/16s
+came AFTER the piano solo") = the pre-registered gate-targeting failure → FIX THE GATE (perc dim-35 absence, not
+energy dim-0). Then user prioritized **boundary-snap** as the structural skeleton: two cheap probes REFRAMED it —
+realized density step tracks real (`probe_boundary_snap.py`), figure-character barely snaps even in real
+(`probe_figure_snap.py`) → Foote-boundary-snap is not a clean targetable gap. Then the **seq-aware-onset re-open**
+(`probe_seqcontext_c0.py`, `sequence_aware_onset_plan.md`): wall STANDS — deployed-C0 context ≈ audio (0.667), the
+0.87 placement signal needs a RETRAIN not a decode lever. 2nd open thread: 1/16-jack OOD → `fatigue_penalty` 2→3.
+- `arc_lag_findings.md` — WHERE the HSL cold-start lives: breathe arc is zero-phase (exonerated); by elimination
+  the AR pattern head. Decisive no-gen timing+direction cut on the complaint song.
+- `h11_rerun_findings.md` — transition responsiveness on the canonical model; governor-off + density-dropped
+  ablations show the gain is onset-side phrasing (breathe), NOT pattern-head choreography. Attribution corrected.
+- `phrasing_coherence_findings.md` — the onset head's OWN phrasing vs musical events (boundary-snap / burst-in-quiet
+  / clean-tail / perc↔harm fluidity); Step-1/2 sparse-harm calibrator; **Step-2 by-ear SPLIT + the GATE-feature fix
+  (perc not energy); the boundary-snap REFRAME (`probe_boundary_snap.py` + `probe_figure_snap.py`).**
+- `onset_alloc_findings.md` — 16th-unlock is a READOUT problem (p_onset ranks 16ths AUC 0.73, global tau buries);
+  the local-un-burial lead that seeded the calibrator.
+- `cache_index_bug.md` — the index-keyed sample-cache footgun (subset probes read stale features); found + fixed.
+
 ## Phase 1 — difficulty classifier (closed)
 - `ordinal_experiment_findings.md` — ordinal vs classification head; `standard_ordinal_multi` won. Phase 1 closed.
 
@@ -91,8 +121,10 @@ Read roughly in this order:
 - `v7_additive_loss_design.md` — v6 failed (additive trade); v7 reweighted-BCE additive design + result.
 - `chaos_placement_ceiling_SUPERSEDED.md` — ⚠️ **SUPERSEDED** (its "audio-ambiguity ceiling" was refuted by
   the corrected sequence probe; kept as record).
-- `sequence_aware_onset_plan.md` — placement is SEQUENCE-determined (AUC 0.935); AR explodes. Critic-guided
-  refinement idea recorded.
+- `sequence_aware_onset_plan.md` — placement is SEQUENCE-determined (AUC 0.935); AR explodes. **RE-OPENED + RESOLVED
+  06-28/29 (`probe_seqcontext_c0.py`, lineage `seq-onset-arc.md`): wall STANDS** — the DEPLOYED pipeline's C0 context
+  ≈ audio (0.667; controls fired both_real 0.871), converges with 06-22's train-on-v4-C0 (0.666). The 0.87 signal
+  needs a RETRAIN, not a decode lever (onset "when" can't see pattern "where"; stamina = the only bridge, suppress-only).
 
 ## Phase 3 — joint generative paradigm (de-risked, parked)
 - `phase3_generative_design.md` — the forward plan: joint generative model (diffusion/mask-predict, structured

@@ -15,7 +15,109 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
-## 2026-06-27 — ⏳ SET UP (awaiting feedback): pattern_temperature × conditioning (3×3, 9 sets)
+## 2026-06-28 — BY-EAR GATE verdict: harm_calib (sparse-harm-in-quiet) A/B — SPLIT (japa1 ✅, HSL ❌ gate-targeting)
+
+The binding by-ear gate from HANDOFF §3: `~/sm-generated/harmcalib_{OFF,ON}`, ON = `--harm_calib 10`,
+HSL + japa1 Hard, full governor, global density held between arms (redistribution, not inflation).
+
+**Feel (user):**
+- **harmcalib_ON / japa1 (突撃ガラスのニーソ姫): PASS.** "Really fun and expressive — definitely working and
+  not a smear job." Well choreographed. Needs tuning, but the mechanism reads as music, not a smear.
+- **harmcalib_ON / High School Love: MEH + the diagnostic tell.** The 1/16s came noticeably **AFTER the piano
+  solo concluded** — "very strange, maybe a fitting issue?"
+- **Cross-cutting: a 1/16-JACK bias** the user wants heavily penalized (not outlawed) — "definitely OOD",
+  "tuning is definitely within the fatigue system." japa1 jackiness was noticeable.
+
+**Commentary / hypotheses:**
+- **The HSL tell is the predicted GATE-TARGETING failure, not a gain problem.** HANDOFF §3 pre-registered it:
+  "the melodic sections that matter on HSL may not be the *quietest* frames, so the energy-quiet gate may
+  target the wrong window." Mechanism confirmed in code: the quiet gate keys on **dim 0 = total onset energy**
+  (`export_typed_samples.py:48`), fires in the quietest ~40% of frames. A piano solo is melodically *dense*
+  (high harmonic onset) → not low-energy → gate ≈0 *during* the solo, then fires in the post-solo lull. So the
+  notes land after the solo. The right gate feature is **percussion-absent-but-harmonic** (low PERCUSSIVE
+  energy with harm present), not "quiet total energy." → This resolves the §3 fork to the **"fix the GATE,
+  not Step 3"** branch. Cheap to iterate on `probe_phrasing_coherence.py` (no generation) before re-A/B.
+- **japa1 PASS validates the Step-1 posterior by ear** (gain~10 flips corr_harm positive; held density =
+  redistribution). The mechanism is sound; HSL is a gate-window mis-spec, not a mechanism failure.
+- **The 1/16-jack bias is a SEPARATE thread** — the per-foot FATIGUE governor (cond-mech §8b), not harm_calib.
+  Currently `fatigue_penalty=2`; 2-note jacks are ~free by design and `max_jack_run=2` hard-caps 3+. The
+  fatigue cost is rate-coupled (`frame_hz/gap`), so 1/16 jacks (gap=1) already cost the most → raising
+  `fatigue_penalty` (2→3, in the vouched 1.5–3 range) bites the *fastest* jacks hardest; lowering `fatigue_free`
+  makes it bite sooner. **Discipline first (exp-design Rule 0/1/8):** jack-heaviness is heavily characterized
+  (`jack_heaviness_findings.md`) — MEASURE the actual 1/16-jack run-length on the played japa1 vs real
+  (`calib_foot_fatigue.py`) to confirm it's OOD (not a few salient instances) before touching a knob.
+
+**Connections:**
+- onset_alloc / unlock16 (06-28, below): there "playing the piano during the piano solo" worked — but that was
+  `onset_phase_calib` (the GLOBAL 16th un-burial), a DIFFERENT lever than harm_calib (sparse-harm-in-quiet).
+  The two address the same HSL piano-solo gap from different angles; the global 16th-calib lands *in* the solo,
+  the harm_calib's energy-gate currently misses it. Worth comparing which the user prefers in the solo.
+- H-onset-perc-bias (`governor_release_region.md` L60): the onset head under-places on melodic-only sections.
+  harm_calib is the decode-side patch for it; the gate-window fix is what makes that patch hit the right window.
+
+**Action / fork (for next session):**
+- [ ] **Fix the harm_calib GATE** — redefine "quiet" by PERCUSSIVE energy (or harm-dominance), not dim-0 total
+      energy, so the piano solo gates ON. Iterate on `probe_phrasing_coherence.py --harm_gain/--quiet_q` (cheap,
+      no generation), then re-A/B HSL. (Resolves HANDOFF §3 to the "retune the gate" branch.)
+- [ ] **1/16-jack thread** — measure 1/16-jack run-length on played japa1 vs real BEFORE tuning; then a
+      `fatigue_penalty` 2→3 (and/or a gap==1-specific surcharge) A/B, judged by ear.
+
+---
+
+## 2026-06-28 — ❌ CONFOUNDED (not worth playing): FULL governor × conditioning — wrong `stamina_ceiling`
+### ⚠️ CORRECTION (the loop-closing finding)
+This grid used **`stamina_ceiling=25`** (the table's "when on" default). That value gives "relief toward
+NATURAL density" — it pulls density DOWN toward baseline. CHAOS conditioning's whole job is to push density
+ABOVE baseline, so **stamina@25 was actively undoing the chaos crank = "stamina fighting the chaos"** (the
+user's diagnosis). The right pairing for a CONDITIONED (cranked) density is **`stamina_ceiling=50`** — the
+"gentlest tasteful edit that stays Hard" (`governor_release_region.md` L18/L46). So the 2×2 below is a
+confounded read of the interaction; **don't play it for that question.** Generalizable lesson (NOT a waste):
+**the right stamina_ceiling co-varies with the conditioning's density target** — a concrete instance of the
+user's "weights that slide with conditioning" hypothesis. Fixed the UI default (`tools/chart_ui.py` Full
+preset → 50) so it can't bite again. NOT regenerated (moving on); trivial to redo via the UI if wanted.
+**Salvage from the whole arc: `pattern_temperature` is a confirmed, useful jack↔jump knob (06-27).**
+
+### What was generated (NOT played — confound above)
+**4 cells** installed to `~/sm-generated/gov{1,FULL}_cond{OFF,CHAOS}` — same 4 Hard songs (Deja loin, OH
+WORLD, High School Love, japa1/突撃ガラスのニーソ姫), deployed model `gen_motif_full_fixed`, seed 42,
+**`pattern_temperature=1.0`** (the temp the 06-27 grid validated as coherent). A clean **2×2**:
+
+| | governor STAGE-1 (fatigue only) | governor FULL (fatigue + stamina 25 + breathe 1.2) |
+|---|---|---|
+| **cond OFF** (plain) | `gov1_condOFF` | `govFULL_condOFF` |
+| **cond CHAOS** (`chaos=q0.99` g3) | `gov1_condCHAOS` | `govFULL_condCHAOS` |
+
+This exists because the 06-27 grid ran **Stage-1 fatigue ONLY** (stamina/breathe were off by exporter
+default — the "felt disengaged" finding, `tempcond_grid_findings.md`). So it could not test the user's
+hypothesis: a *poor interaction between conditioning and the stamina/fatigue systems*. This grid turns the
+full governor ON and varies conditioning so the interaction is actually present. The breathing-ceiling
+floor (`stamina_breathe_floor=0.4`, H-arc-end fix) is **already in code** → breathing won't empty the outro.
+
+**Density already shows the interaction** (notes/song; `gov1`→`govFULL`): cond OFF thins gently (japa1
+375→354), cond CHAOS thins HARD (Deja **550→443**, OH WORLD 463→404) — because CHAOS over-densifies
+(esp. the calm songs) so the stamina valve has more excess to relieve. The governor *responds* to the
+conditioning-shifted distribution rather than ignoring it. Whether that reads as rescue or as two systems
+fighting is the by-ear call.
+
+### The questions (binding, BY-EAR)
+1. **Does the full governor (stamina relief + breathing arc) restore the dynamics that felt "disengaged"
+   /"linear" in the 06-27 grid?** Compare `gov1_*` vs `govFULL_*` within each conditioning.
+2. **Does that benefit SURVIVE under cranked CHAOS, or do conditioning and the governor fight?** (the
+   user's calibration hypothesis — does fixed `fatigue/stamina` mis-bite when g3 chaos shifts the logits?)
+   Compare `govFULL_condOFF` vs `govFULL_condCHAOS`.
+3. The "ended early" truncation is the **onset head**, NOT the governor — expect it to PERSIST here
+   (japa1/HSL still ~68%/82% coverage). If `govFULL` changes the ending, that's new information.
+
+### Action / next
+- [ ] Play the 2×2; report the governor axis (does Full restore dynamics?), and the interaction (does Full
+      survive CHAOS, or does cranked conditioning break the calibration?).
+- [ ] If the governor mis-bites under CHAOS → a conditioning-aware governor recalibration (the user's
+      hypothesis) becomes a real thread. If it holds → the 06-27 flatness was just governor-absence, closed.
+- [ ] Independent of this: the onset-head thread (`HANDOFF.md` §3) still owns the early-ending truncation.
+
+---
+
+## 2026-06-27 — ✅ PLAYED: pattern_temperature × conditioning (3×3 grid) — temp axis CONFIRMED; governor Stages 2–3 were OFF
 ### What was generated (NOT yet played)
 **9 groups** installed to `~/sm-generated/T{0.7,1.0,1.2}_cond{OFF,ON,CHAOS}`, each = the same 4 Hard songs
 the user named: **japa1** (突撃ガラスのニーソ姫), **Deja Loin**, **OH WORLD**, **High School Love**. Deployed
@@ -49,12 +151,77 @@ density→0.400 (coupled up with chaos, like real charts). Song-fit-gated → ja
    conditioning-mechanics §2) vs the old mean-pin smear, and does g3 (edge before backbone dissolves) hold?
 Standing onset complaints to watch across all: awkward over-noted / empty-where-active (Probe 3B, quantified).
 
+### Raw feedback (user, verbatim highlights)
+> **chaos cond 1.2:** "japa1 ended really early! wow… pretty bland and bad chart overall. but hey, the jacks
+> were pretty realistic. oh world was better than japa1, had a few spicy 1/16s… but pretty linear for the most
+> part. high school love ended early too! had a little spice… felt linear compared to how the stamina system has
+> been influencing songs."
+> **chaos cond 1.0:** "high school love a little better than 1.2… still ended early, calm long hold during much
+> of the piano solo. deja loin was just awkward and bad. i felt the model trying to meet the chaotic expectation
+> and it just couldn't… its a very regular/linear song. japa1 pretty rough again. what is quite clear though is
+> that 'turn up pattern temp to reduce jacks and add jumps' through all of 1.2 and 1.0 supports that position…
+> it's good that we have uncovered this axis."
+> **cond ON t 1.0:** "japa1 didn't spaz out in the thunderwitch intro… ended early. reasonable, but didn't have
+> much character. high school love ended early again, nice streamy chart with a little voltage through jumps… it
+> seemed to trigger jumps in the same measure that big percussion events occurred, but not really in-time with the
+> event, kind of like pooling raised the intensity of the measure — prompting the model — but the model then
+> couldn't see what was meant to be emphasized."
+> **cond OFF t 1.0:** "high school love better cond off than cond on. the interaction of cond and increased t
+> ruined the model's expressiveness. japa1 was better too. both ended early, same time as the others."
+> **cond OFF t 1.2:** "japa1 pretty good actually, not much 1/16s but nice rhythm and symmetry. neither this nor
+> cond off t 1.0 had any response at all to thunderwitch laugh. best high school love of the batch."
+> **cond OFF t 0.7:** "japa1 barely any jumps… but good sequences and rhythm. there is definitely a poor
+> interaction between the conditioning and the stamina/fatigue systems — needs calibration to fit weights to some
+> of the maths in it that slide with different conditioning settings. the difference vs cond chaos t 0.7 is
+> dramatic — the chaos variant introduced more jumps than cond off."
+
+### Findings (quantitative backing → `notes/tempcond_grid_findings.md`)
+- **H2 (pattern-temperature axis) — CONFIRMED BY EAR (binding question of the grid).** "turn up pattern temp to
+  reduce jacks and add jumps" held across 1.0 and 1.2; T0.7 japa1 had "barely any jumps", higher temp added
+  them. So temp >0.85 reads as the jack→jump lever Probe 1/4 predicted, **not as scramble**, now that the
+  fatigue governor bounds runs. The note-count data confirms temp is a *shape* lever, not density (it barely
+  moves note count). **→ shippable: raise the `pattern_temperature` default / H2 range; no retrain.** BUT the
+  ceiling is the *conditioning*, not temp: high temp was only clean **cond OFF** (best HSL = cond OFF T1.2).
+- **H-gov-stages (NEW) — the "felt disengaged" was REAL: Stages 2–3 were OFF.** The exporter default is
+  `fatigue_penalty=2` (Stage 1) only; `stamina_ceiling`/`stamina_breathe` default OFF and the grid passed
+  neither. So the per-region **stamina relief valve and the breathing arc never ran** — the flatness vs prior
+  governor playtests ("felt linear compared to how the stamina system has been influencing songs") is governor
+  *absence*, not a broken interaction. The user's ears caught a config fact. `[[fatigue-governor]]`: stamina/
+  breathe are opt-in.
+- **H5 (structural fade) — "ended early" QUANTIFIED, song-specific, knob-invariant.** japa1 = 68% coverage (37s
+  of music with no chart!), HSL = 82%, OH WORLD/Deja = ~100% — matching exactly which songs the user flagged.
+  Last-note time is identical (±1s) across **all** temps and cond modes → upstream, not governor/conditioning.
+  It tracks quiet/held outros → the **onset head** going silent (breathing was OFF, so this is base behavior,
+  not the H-arc-end collapse). Same melodic-under-placement as Probe 3B / H-arc-energy.
+- **H3 (CFG trades musicality) — REINFORCED.** "the interaction of cond and increased t ruined the model's
+  expressiveness"; cond OFF beat cond ON/CHAOS repeatedly. cranked g2 (ON) / g3 (CHAOS) over-forces, and high
+  temp compounds it into noise. CHAOS is also OOD on linear songs: it cranks density most on the *calmest* songs
+  (Deja +46%, OH WORLD +30% notes) → "trying to meet the chaotic expectation and it just couldn't."
+- **H-pool-timing (NEW) — conditioning has measure-level temporal resolution.** "jumps in the same measure as
+  big percussion events but not in-time… pooling raised the intensity of the measure but the model couldn't see
+  what was meant to be emphasized." The radar/conditioning is pooled to ~measure granularity → it elevates a
+  measure's intensity but loses *which beat* deserves the accent. Ties to conditioning-mechanics (mean-pool
+  smear) AND the onset head's salience-chasing (Probe 3B). A real limit on event-locked accenting via the radar.
+
+### The user's calibration hypothesis — reframed
+The user proposed a "poor interaction between conditioning and the stamina/fatigue systems… weights that slide
+with conditioning settings." **Partly an artifact, partly real:** the *flatness* in this grid was Stages 2–3
+being OFF (no interaction existed to be poor). BUT the underlying concern is legitimate and **untested**: the
+fatigue penalty (fixed λ=2) is tuned against the *unconditioned* logit distribution, and cranked cond (g2/g3)
+shifts that distribution — so a fixed λ may mis-bite under conditioning. That deserves a clean **Stage-2/3-ON ×
+conditioning** probe before any calibration work (one change at a time).
+
 ### Action / next
-- [ ] Play the 3×3 grid; report the temp axis (0.7 vs 1.0 vs 1.2 coherence), the conditioning axis (OFF/ON/CHAOS),
-      and any interaction (does CHAOS want lower temp? does the backbone survive T1.2×CHAOS×g3?).
-- [ ] If higher temp reads coherent → raise the `pattern_temperature` default / H2 range (a no-retrain jack/jump
-      fix). If scrambly → the cap survives the governor; jacks need the onset-head rebuild instead.
-- [ ] Either way the NEXT THREAD is the onset head (`HANDOFF.md` §3) — coherence/allocation, not jacks per se.
+- [ ] **Re-run the grid with the FULL governor** (`--stamina_ceiling 25 --stamina_breathe 1.2`) so the
+      conditioning×governor interaction the user actually wants to judge is present — current grid couldn't test
+      it. Hold temp at the now-validated ~1.0, vary cond {OFF, CHAOS}. (Watch H-arc-end: floor the breathing
+      ceiling or japa1/HSL empty-tail gets worse.)
+- [ ] **Ship the temp bump:** raise `pattern_temperature` default toward ~1.0 (cond-OFF path validated). Confirm
+      the H2 0.6–0.85 cap text + exporter default; note CHAOS still wants lower temp.
+- [ ] **Onset head (NEXT THREAD, `HANDOFF.md` §3):** the "ended early" tail truncation is now a concrete,
+      measured symptom (onset silence in quiet outros) to target alongside coherence/allocation.
+- [ ] Don't tune the governor to "add jumps" — under-jumping is a separate air/density thread
+      (conditioning-mechanics §8d).
 
 ---
 
@@ -1503,3 +1670,47 @@ musicality-aware feature set) before adding capacity.**
 - [ ] Temperature sweep judged by feel (H2).
 - [ ] Try radar at gentler guidance (g≈1.3) to test H3.
 - [ ] Prototype chroma + HPSS features + retrain to test H1 (the choreography-musicality lever).
+
+---
+
+## 2026-06-28 — the 16th-unlock (`onset_phase_calib`) dose sweep + FULL governor
+
+**Sets:** `~/sm-generated/unlock16_b{0,05,10,20}` = `onset_phase_calib 0,b16` with b16 ∈ {0,0.5,1.0,2.0},
+on the FULL governor (fatigue 2 + stamina@50 + breathe 1.2 + 0.4 floor) + match_radar g2.0 + temp 1.0,
+4 Hard songs. These were the first played charts with the full governor actually engaged. Quant backing:
+`notes/onset_alloc_findings.md`.
+
+**Feel (user):**
+- **Song-dependent, strongly.** japa1 (突撃ガラスのニーソ姫) went basically ALL 1/16 at b20 — "super fun and
+  quirky"; at b10 it was the sweet spot. High School Love at the unlock was "soo chaotic and expressive —
+  I felt like I was playing the piano during the piano solo."
+- **"I rediscovered where I thought this project already was."**
+- **The early-ending problem is NOT fixed** (RETRACTED 2026-06-28: an initial impression that calib fixed it
+  was overturned when the user hit a b10 chart that still ended early). Tail-truncation persists under calib +
+  full governor → neither calib nor the breathe-floor fixes it; stays an OPEN onset-head defect (melodic-outro
+  onset silence, the H-onset-perc-bias allocation gap). NOT the README's context-length truncation (these songs
+  fit the context).
+
+**Connections (this is not new ground — it's a dormant capability switched back on):**
+- **H17 song↔style fit / "a KNEE, not a node" (`h16_harmonic_findings.md`):** the right b16 is song-dependent
+  (japa1 b10 vs b20) exactly as the chaos/16th sweet spot always was — the curve shifts with the song's own
+  rhythm. conditioning-mechanics §2: "to hear chaos the SONG must afford it." This is H17, re-felt.
+- **THE BIG ONE — H-onset-perc-bias / "ignored piano solo" (`governor_release_region.md` L60,
+  `foot_fatigue_design.md` L288):** the onset head under-placing on melodic-only sections (the HSL piano solo)
+  was PARKED as a "feature/retrain thread, not a decode knob." The user's "playing the piano during the piano
+  solo" says the **16th-unlock (a pure decode lever) substantially addresses it** — the melodic 16ths weren't
+  un-learnable, they were BURIED by the global tau (onset_alloc_findings: head ranks them at AUC 0.73). This
+  directly supports the log's standing hypothesis: *the base model is under-served by decode; squeeze decode
+  before adding capacity.* A retrain thread may have been a tau-burial thread.
+- **The "validated 16th lever":** `onset_phase_calib` was already characterized in the H15/chaos work
+  (`h15_set_characterization.md` chaos2_calib = "STRONG syncopation, the validated 16th lever";
+  `phase_aware_threshold_findings.md`) then fell out of the workflow — hence "rediscovered."
+
+**Attribution caveat (experiment-design):** the early-ending fix is CONFOUNDED — this sweep turned on BOTH
+calib AND the full governor (breathe floor 0.4, which also protects outros) vs the old truncation grid that
+had stamina fully OFF. b0 (calib off, same full governor) is the in-hand control: if b0 still ends early it's
+calib; if b0 also covers, it's the breathe-floor. Cheap to check from `outputs/unlock16_b*` coverage — not yet done.
+
+**Shipped from this (no retrain):** `onset_phase_calib` added to `tools/chart_ui.py` ("16th unlock" slider);
+`export_typed_samples.py` bare default is now the FULL governor (fatigue 2 + stamina@50 + breathe 1.2) — breathe
+was silently defaulting 0.0 (arc off), now 1.2. `fatigue_free` 6-vs-12 was NOT a bug (both in the vouched 6-12 range).

@@ -107,3 +107,61 @@ loop COULD iteratively improve context but starts from anti-correlated C0 (steep
 - The teacher-forced 0.935 includes "continue-the-run" autocorrelation — real and exploitable, but gen-time
   AUC will be lower; the AR-stability + eventual playtest are the honest tests.
 - Current best playable model stays **gen_highres_v4** until the new head proves out.
+
+## RE-OPEN (2026-06-28) — architectural framing + a NEW C0 the 06-22 wall never tested
+Re-entered from the structure/boundary-snap thread (`phrasing_coherence_findings.md`): after two cheap probes
+showed "boundary-snap vs Foote" is not a clean targetable gap (density tracks real; figure-character barely snaps
+even in real), the user reframed: **maybe the structure signal IS there, but because "WHEN" (onset head) and
+"WHERE" (pattern head) are isolated heads, the model can't ARTICULATE it.** This thread is the quantitative form
+of that reframing.
+
+**Architectural framing (confirmed in code, `typed_model.py`):** the decode is STRICTLY one-directional —
+`p_onset` is precomputed (audio-only, non-causal, `onset_logits(memory,diff,radar,style)` — no note history, no
+fatigue, no stamina, no "where") BEFORE the loop → stamina thins it (CEILING-only, sheds lowest-`p_onset`) →
+pattern head decides "where" → fatigue adjusts "where". **The pattern head's "where" NEVER flows back to the onset
+"when".** The ONLY where→when coupling that exists is **STAMINA** (8c): it reads the realized FOOT-COST and raises
+the onset threshold — i.e. a tiny, hand-crafted, SUPPRESS-ONLY, biomechanics-only slice of the coupling. It proves
+the principle (footwork can gate placement at decode time) but carries fatigue, not musical structure; the head
+itself stays blind. So the 0.649→0.935 gap (audio-only vs note-context 16th-AUC) is exactly "latent capability the
+factored decode discards."
+
+**The NEW angle (why 06-22's "circular" verdict is re-openable):** the wall was *"refinement can't bootstrap from a
+bad C0, and audio-only is our only C0."* But the C0 that scored **0.456 (anti-correlated)** was **gen_highres_v4**
+— the OLD audio-only generator. The CURRENT deployed pipeline (`gen_motif_full_fixed` + pattern_temp 1.0 + full
+governor) is a DIFFERENT, much-improved C0 whose realized charts carry real run-coherence from the pattern head +
+governors. **06-22 could not test it because that pipeline didn't exist yet.**
+
+**The decisive no-(generator-)retrain probe (`probe_seqcontext_c0.py`):** reuse `diag_seqcontext_probe`'s
+tiny CNN, TARGET = REAL onset, but swap the note CONTEXT source: `audio` vs `both_real` (real context = ceiling)
+vs **`both_C0`** (context = the DEPLOYED generator's chart). Train the note-context branch on the full real train
+split (PARALLEL extraction via DataLoader workers + own npz cache — the serial path through the stale index-cache
+was a 1-hour 1-core hang), eval the deployed-C0 val songs with the context source swapped at TEST time.
+
+### RESULT (2026-06-28) — POSITIVE CONTROL FIRED; the WALL STANDS (a clean, well-controlled negative)
+800 real train songs / 28 deployed-C0 eval songs, 16th-localization AUC:
+| predictor | 16th-AUC | vs reference |
+|---|---|---|
+| audio | **0.656** | ≈ 06-22 floor 0.649 ✓ |
+| both/real | **0.871** | ≈ 06-22 ceiling 0.935 ✓ **CONTROL PASSES** (signal real + reproduces) |
+| both/c0 | **0.667** | ≈ audio → recovers only **5%** of the (real−audio) gap |
+
+- **The deployed C0 carries NO placement signal beyond audio.** both/c0 (0.667) ≈ audio (0.656); the real-context-
+  trained seq-branch, fed the deployed chart's notes, responds as if it saw nothing but audio.
+- **WHY (root cause):** the C0's onsets were placed by the **audio-only onset head**, so the C0's "where" is a
+  downstream ECHO of the audio the audio-branch already has — it contains no INDEPENDENT run-coherence (the thing
+  real human charts have, worth +0.22 AUC). The pattern-head + governor improvements don't help because the limit
+  is UPSTREAM in onset placement. The improved pipeline did NOT move the number.
+- **STRIKING CORROBORATION:** 06-22's refiner *trained on* the old v4 C0 = **0.666**; this eval on the *deployed*
+  C0 = **0.667**. Near-identical → the convergence argues the result is NOT an artifact of the train-real/eval-C0
+  domain mismatch (the one residual confound). The wall is robust across two very different setups + two pipelines.
+- **Residual confound (stated honestly):** fully airtight closure = TRAIN on deployed-C0 context (needs generating
+  C0 for hundreds of train songs — a big AR run). NOT pursued: 0.666≈0.667 + the root-cause argument make it very
+  unlikely to change the verdict (you can't learn real placement from a context that doesn't contain it — the
+  06-22 "can't bootstrap from a bad C0" finding, re-confirmed).
+
+### VERDICT (2026-06-28): the cheap decode-time re-open is CLOSED (negative). Reaching the 0.87 signal needs a
+RETRAIN (sequence-aware onset head / learn placement from multiple human chartings), NOT a decode lever — the
+deployed C0 is not a good-enough bootstrap context because its onsets are audio-only. The shippable side-step
+stays the decode-time phrase calibrator ([[onset-phrase-calibrator]]: harm_calib / onset_phase_calib). This also
+ANSWERS the structure question that spawned the re-open: the structure/placement signal IS latent (0.87 TF) but
+the factored audio-only-onset decode cannot articulate it — and now we know decode tricks can't reach it either.

@@ -384,7 +384,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
-                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, max_jack_run=None,
+                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, max_jack_run=None,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
                  footswitch_pen=4.0, fatigue_cap=30.0,
@@ -499,6 +499,12 @@ class LayeredTypedChartGenerator(nn.Module):
                 ph = torch.arange(T, device=device) % 4
                 off = torch.where(ph == 2, float(b8), torch.where((ph == 1) | (ph == 3), float(b16), 0.0))
                 ol = ol + off.unsqueeze(0)
+            if onset_logit_offset is not None:
+                # per-FRAME onset logit offset (B,T) or (T,) — content-driven calibration (e.g. the
+                # sparse-harm-in-quiet phrase calibrator), ADDED to the onset logits before the threshold.
+                # The caller MUST compute its per-song threshold from the SAME offset logits (like phase_calib).
+                lo = torch.as_tensor(onset_logit_offset, device=device, dtype=ol.dtype)
+                ol = ol + (lo if lo.dim() == 2 else lo.unsqueeze(0))
             p = torch.sigmoid(onset_logit_scale * ol + onset_logit_bias)
             p_onset = p                                       # (B,T) onset probs kept for the in-loop stamina gate
             if onset_phase_alloc is not None:

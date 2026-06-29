@@ -97,3 +97,23 @@ def test_dataloader_batch():
     assert batch['audio'].shape == (1, 1200, 23), f"Audio batch shape: expected (1, 1200, 23), got {batch['audio'].shape}"
     assert batch['mask'].shape == (1, 1200), f"Mask batch shape: expected (1, 1200), got {batch['mask'].shape}"
     assert batch['difficulty'].shape == (1,), f"Difficulty batch shape: expected (1,), got {batch['difficulty'].shape}"
+
+
+def test_cache_identity_rejects_stale_index():
+    """Regression for the INDEX-KEYED cache footgun (notes/cache_index_bug.md): a cache entry written for one
+    song must NOT be served when the same index later maps to a DIFFERENT song (subset/--match probes)."""
+    import tempfile, shutil
+    chart_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'test_chart.sm')
+    audio_dir = os.path.join(os.path.dirname(__file__), 'fixtures')
+    cache_dir = tempfile.mkdtemp()
+    try:
+        ds = StepManiaDataset(chart_files=[chart_path], audio_dir=audio_dir, parser=_fixture_parser(),
+                              max_sequence_length=1200, cache_dir=cache_dir)
+        _ = ds[0]                                        # writes sample_000000.pt stamped with song-0 identity
+        assert ds._load_from_cache(0) is not None, "freshly-cached sample must round-trip"
+        # Simulate index 0 now mapping to a DIFFERENT song (a different file set at the same index):
+        ds.valid_samples[0] = {**ds.valid_samples[0], 'chart_file': '/some/other/song.sm'}
+        assert ds._load_from_cache(0) is None, "a stale index (different song identity) must be REJECTED"
+        assert ds._is_cached(0) is False, "warm_cache must re-warm a stale index, not skip it"
+    finally:
+        shutil.rmtree(cache_dir, ignore_errors=True)

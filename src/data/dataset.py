@@ -437,27 +437,41 @@ class StepManiaDataset(Dataset):
             return ""
         return os.path.join(self.cache_dir, f"sample_{idx:06d}.pt")
 
+    def _sample_identity(self, idx: int) -> str:
+        """Stable per-song cache identity. The cache path is keyed by INTEGER INDEX, which is NOT a stable
+        song id: a dataset built over a different file set/order maps index `idx` to a different song. So we
+        stamp this identity into the cached blob and verify it on load (see _load_from_cache) — otherwise a
+        subset/--match dataset silently reads another run's features for the same index. See
+        notes/cache_index_bug.md."""
+        m = self.valid_samples[idx]
+        return f"{m.get('chart_file', '')}::{m.get('difficulty_name', '')}::{m.get('difficulty_value', '')}"
+
     def _load_from_cache(self, idx: int) -> Optional[Dict[str, torch.Tensor]]:
-        """Load cached sample if available."""
+        """Load cached sample IF it exists AND its stamped identity matches this index's song."""
         cache_path = self._get_cache_path(idx)
         if cache_path and os.path.exists(cache_path):
             try:
-                return torch.load(cache_path, weights_only=False)
+                blob = torch.load(cache_path, weights_only=False)
             except Exception as e:
                 # Cache file corrupted, will regenerate
                 print(f"Warning: Failed to load cache {cache_path}: {e}")
                 return None
+            # identity-checked format = {'key': <identity>, 'sample': <dict>}. A bare dict (old format) or a
+            # key mismatch (stale index from a different file set) is a MISS -> recompute + overwrite.
+            if isinstance(blob, dict) and blob.get('key') == self._sample_identity(idx):
+                return blob['sample']
+            return None
         return None
 
     def _save_to_cache(self, idx: int, sample: Dict[str, torch.Tensor]):
-        """Save sample to cache for faster loading next time."""
+        """Save sample to cache (wrapped with its song identity) for faster, COLLISION-SAFE loading."""
         if self.cache_dir is None:
             return
 
         try:
             os.makedirs(self.cache_dir, exist_ok=True)
             cache_path = self._get_cache_path(idx)
-            torch.save(sample, cache_path)
+            torch.save({'key': self._sample_identity(idx), 'sample': sample}, cache_path)
         except Exception as e:
             # Non-fatal: just skip caching this sample
             print(f"Warning: Failed to cache sample {idx}: {e}")
@@ -502,9 +516,9 @@ class StepManiaDataset(Dataset):
         print(f"Cache warming complete: {cached} new, {skipped} existing")
 
     def _is_cached(self, idx: int) -> bool:
-        """Check if sample is already cached."""
-        cache_path = self._get_cache_path(idx)
-        return cache_path is not None and os.path.exists(cache_path)
+        """Cached AND identity-valid (not a stale index from a different file set). Routes through the same
+        identity check as _load_from_cache so warm_cache re-warms stale entries instead of skipping them."""
+        return self._load_from_cache(idx) is not None
 
     def get_cache_stats(self) -> Dict[str, float]:
         """
