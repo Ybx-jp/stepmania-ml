@@ -53,14 +53,23 @@ models/diffusion/*
 !models/diffusion/.gitkeep
 checkpoints/*
 
-# Outputs
+# Outputs: ignore all generated artifacts by default; force-keep only the committed
+# result figures. New experiment runs need no new ignore line.
+outputs/*
+!outputs/critic_interp_fig*.png
+!outputs/charts/
 outputs/charts/*
-outputs/figures/*
-outputs/logs/*
-outputs/**/*.log
 !outputs/charts/.gitkeep
+!outputs/figures/
+outputs/figures/*
 !outputs/figures/.gitkeep
+!outputs/logs/
+outputs/logs/*
 !outputs/logs/.gitkeep
+!outputs/ordinal_experiment/
+outputs/ordinal_experiment/*
+!outputs/ordinal_experiment/*.png
+outputs/**/*.log
 
 # Optuna database
 optuna_study.db
@@ -98,42 +107,8 @@ cache/*
 !cache/radar_manifold.npz
 mlflow.db
 
-# Generated sample song folders (contain copied audio)
-outputs/reranked_samples/
-outputs/reranked_hard/
-outputs/chaos_gate/
-outputs/groove_decode/
-outputs/holdfix*/
-outputs/match_test/
-outputs/stage1_samples/
-outputs/style_samples/
-outputs/radar_samples/
+# (Generated sample/song folders under outputs/ are covered by the outputs/* whitelist above.)
 /tests/fixtures/test_audio.wav
-outputs/**/run.log
-
-# Generated sample song folders (contain copied audio)
-outputs/samples/
-
-# Generated typed sample folders (copied audio)
-outputs/typed_samples/
-outputs/sectional/
-outputs/chaos_groove/
-outputs/v4_chaos/
-outputs/v4_baseline/
-outputs/phase16_alloc/
-outputs/phase16_single/
-outputs/chaos_calib/
-outputs/chaos_global/
-outputs/chaos_mod/
-outputs/chaos_tame/
-outputs/chaos_fair/
-outputs/chaos_coherent/
-outputs/v7_chaos/
-outputs/v7_baseline/
-outputs/phase3_staged/
-outputs/phase3_staged_v4/
-outputs/phase3_quotafree/
-outputs/phase3_quotafree_v4/
 
 # Generated decode samples (collapsed from ~5.4k per-file entries)
 cache/samples/
