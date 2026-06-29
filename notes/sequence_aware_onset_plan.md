@@ -165,3 +165,111 @@ deployed C0 is not a good-enough bootstrap context because its onsets are audio-
 stays the decode-time phrase calibrator ([[onset-phrase-calibrator]]: harm_calib / onset_phase_calib). This also
 ANSWERS the structure question that spawned the re-open: the structure/placement signal IS latent (0.87 TF) but
 the factored audio-only-onset decode cannot articulate it — and now we know decode tricks can't reach it either.
+
+## SCOPING (2026-06-29) — the retrain program: own-output iterative refiner, onset-head-only
+The 06-28 re-open closed the cheap decode path → a RETRAIN is required. This section scopes it. **User decisions
+(2026-06-29):** (1) decode formulation = **own-output ITERATIVE REFINER** (not the causal-AR head); (2) scope =
+**onset-head-only, minimal** (freeze pattern/type/decoder, warm-start; objective=taste-critic and local-chaos
+representation deferred to follow-on). Rationale: of the de-risked options only frozen-context refinement never
+EXPLODED (AR did, even with scheduled sampling); its one failure — "can't bootstrap from an audio-only C0" — is
+exactly what a proper retrain (train the refiner on its OWN outputs) attacks.
+
+### The Rule-0 collision that gates the program (READ THIS before building anything)
+The chosen path is, structurally, the 06-22 **TRANSFER gate** (`diag_refine_probe.py --real_c0`): train a refiner
+on `(audio + the generator's own audio-only C0) → real onset`. That returned **refine-1 = 0.666 ≈ the audio floor**
+and the lineage recorded "refinement CANNOT bootstrap from a bad C0." Information-theoretically: if C0's onsets are
+a deterministic echo of audio, `(audio, C0)` carries no more placement signal than `audio` alone → a single refiner
+pass is bounded near audio-only no matter how well trained. So the program MUST open with the fair test that 06-22
+did NOT run, distinguishing "genuinely re-openable" from "re-deriving the wall." Two things make it re-openable:
+1. **C0 identity.** 06-22 used **v4's** C0 (0.456, *anti-correlated* = actively misleading). The **deployed** C0
+   (`gen_motif_full_fixed` + pattern_temp 1.0 + governor) is **neutral** (0.667). A refiner reading a neutral
+   context may behave differently than one fighting an anti-correlated one. Untested.
+2. **Matched training.** The 06-28 probe is MISMATCHED — trains the note-context net on REAL context, evals on C0
+   (→ 0.667). The own-output refiner is MATCHED — train on C0, eval on C0, so it learns to read *this C0's specific
+   (incoherent) patterns*. The matched arm is the genuinely-untested thing; it needs train-C0.
+
+### M0 — the go/no-go GATE (cheap; NO generator retrain)
+Matched-context probe, 3 arms (extends `probe_seqcontext_c0.py`):
+- **audio** — floor (~0.65) · **both_real** — train+eval on REAL context = **POSITIVE CONTROL** (must fire ~0.87,
+  else underpowered — 20-song run collapsed it to 0.497, so use the full 800-charts power) · **both_c0_matched** —
+  **train on C0, eval on C0** ← THE MEASUREMENT.
+- **PASS:** matched climbs meaningfully past 0.667 toward 0.87 → C0 has exploitable structure → own-output refiner
+  is alive → build M1. **FAIL:** matched sits at ~0.667 → wall is C0-independent → refiner is dead → pivot
+  (causal-AR head, or learn placement from multiple human chartings) BEFORE spending a retrain.
+- **Train-C0 generation** (the residual confound 06-28 flagged, now sized): measured ~10 s/chart, ~98 frames/s on
+  the RTX 3060. Full 800-chart split ≈ 2.3 h serial → run as **4 process shards** (B=1 AR decode underutilizes the
+  GPU; near-linear on 4 cores) ≈ ~35–45 min. **Batched `generate()` is forbidden here** — `onset_threshold`/`bpm`
+  are batch-scalars (HANDOFF), batching mis-applies one song's tau/bpm to all → a confounded C0. Tooling:
+  `experiments/generation_typed/gen_train_c0.py` (`--extract` fresh-from-current-split → `--shard k --nshards 4`
+  unmodified `gen_c0` per song → `--merge` → `cache/seqctx_trainc0_cache.npz`). **Footgun caught 06-29:** the old
+  `seqctx_train_cache.npz` (800 rows) is STALE vs the current split (786 songs / 3820 charts) — row j ≠
+  valid_samples[j]; the runner re-extracts FRESH ([[dataset-cache-footgun]]) rather than trust it.
+
+### M1 — build (ONLY if M0 passes); onset-head-only, everything else frozen
+- A note-context refiner head = the probe's non-causal `both` model (audio memory + causal/windowed note-context
+  branch → onset logits), **warm-started** from the deployed audio onset branch; pattern/type/decoder FROZEN.
+- **Own-output scheduled sampling** in training (train on its own pass-k charts) = the named fix for the 06-22
+  pass-2 OOD degradation; iteration-stable by construction (frozen-context passes never exploded).
+- Decode: frozen audio-only first pass → C0 → refiner reads `(audio + frozen C0 notes)` → refined onsets → 1 pass
+  (maybe 2 if M0 shows climbing). No KV-cache (non-causal, not AR).
+- **Run `/autotune` before this retrain** (batch/AMP/length-bucketing/Optuna) per HANDOFF; M0 needs no autotune.
+
+### M2 — eval on the PROPERTY (not per-song L1, which v7 matched yet played awkward)
+16th-AUC at gen time + run-length-distribution match vs real + the taste critic as selection signal + **by-ear
+playtest = the binding gate** (experiment-design Rule 8). Deployed model stays `gen_motif_full_fixed` until the new
+head proves out by ear.
+
+### M0 RESULT (2026-06-29) — GATE FAILED; own-output refiner DEAD (clean controlled negative)
+`probe_seqcontext_matched.py`, 800 train charts / 28 eval Hard songs, 16th-AUC:
+| arm | 16th-AUC | read |
+|---|---|---|
+| audio | **0.656** | floor ✓ |
+| both_real | **0.871** | ceiling — POSITIVE CONTROL FIRED ✓ (0.871 ≫ 0.656, run is powered) |
+| both_c0_mismatched | **0.667** | reproduces 06-28 exactly ✓ (harness correct) |
+| **both_c0_MATCHED** | **0.672** | **THE MEASUREMENT — 8% of the gap, on top of the floor** |
+
+Training the refiner specifically to read deployed-C0 context did NOT climb (0.672 vs mismatched 0.667 vs audio
+0.656; ceiling 0.871). This was the pre-registered FAIL condition. The neutral-C0 hypothesis is REFUTED: the wall
+is **C0-INDEPENDENT** — across v4 anti-correlated C0 (0.666), deployed mismatched (0.667), and deployed MATCHED
+(0.672), all ≈ floor. **Why airtight:** positive control fired (null is real, not underpowered); same arch+budget
+reaches 0.871 on real context (so it's "no signal in C0," not "net too weak"). This also CLOSES 06-28's last
+residual confound ("train on deployed-C0 — not pursued") — now pursued, confirms the wall.
+
+**⇒ Both cheap paths are now closed:** AR head EXPLODES (06-22), iterative refiner CANNOT BOOTSTRAP (06-29,
+airtight). Reaching 0.87 needs a paradigm that produces good context WITHOUT a good first pass: (a) a real
+**causal-AR head retrain** taming the drift properly (SS + audio anchor at scale — accept residual risk), or (b)
+**learn the placement DISTRIBUTION** from a stronger first-pass / multiple human chartings, or (c) STAY ship-state
+(the 06-22 fallback) and invest in the decode-time phrase calibrator ([[onset-phrase-calibrator]]). FORK is open.
+
+### ANALYSIS-BY-SYNTHESIS probe (2026-06-29) — user idea: a critic D(chart, audio) as the P(audio|chart) likelihood
+Tested whether the AUDIO can score placement (the inverse of the forward onset head), to drive a synthesis loop
+`P(chart|audio) ∝ P(audio|chart)·P(chart)` (taste critic = the prior). Three iterations, each fixing the prior's
+flaw (the methodology is the lesson):
+- **v1 regression `g: chart→audio` (`probe_recon_audio.py`) — VOID.** Positive control failed: g (recon-all 0.0238)
+  was WORSE than the predict-mean floor (0.0197) and song-insensitive (mismatch−real +0.0004). A binary chart has
+  no AMPLITUDE info → regressing absolute audio energy is ill-posed (+ a BatchNorm-over-padding bug). Not a finding.
+- **v2 contrastive critic, trained on corrupted+mismatch negs (`probe_recon_critic.py`) — CONFOUNDED.** AUC(real vs
+  corrupted)=0.764 looked viable BUT AUC(real vs mismatch-song)=0.517 (control at CHANCE) exposed it: D took a
+  CHART-ONLY shortcut (scores "does this chart look coherent" = the existing taste critic / P(chart) prior) and
+  IGNORED the audio. The 0.764 was the prior, not the audio likelihood.
+- **v3/v4 contrastive critic, trained on MISMATCH-song negs ONLY (force the audio path) — CLEAN, CONTROL FIRED.**
+  | arm | AUC | read |
+  |---|---|---|
+  | real vs MISMATCH-song | **0.815** | POSITIVE CONTROL FIRED — D uses audio for COARSE (density/energy) match |
+  | real vs DEPLOYED-C0 | **0.468** | deployment: critic CANNOT prefer real over our generator's placement (≤chance; mean D c0 0.740 > real 0.732) |
+  | real vs CORRUPTED-plc | **0.570** | fine placement, density held: ~chance (N=28, ~1.3σ — not significant) |
+
+**VERDICT: analysis-by-synthesis via the onset/energy audio likelihood is DEAD for FINE placement** (controlled
+negative — control fired). The audio carries STRONG coarse/density compatibility (0.815) but NO fine-16th-placement
+signal beyond density (0.57 / 0.47). So in `P(chart|audio) ∝ P(audio|chart)·P(chart)`, the likelihood is
+placement-blind → ALL placement must come from the PRIOR P(chart) (a chart sequence model) — which is the AR head
+(explodes). The audio cannot substitute for the chart prior. The user's "revisit the inverse GENERATOR if this
+fails" is bounded by the SAME finding (inverting chart→audio for placement needs placement IN the audio — it isn't).
+
+### THE CONVERGENCE (4 independent confirmations the placement signal is a chart-PRIOR, not audio)
+1. forward audio→16th onset AUC **0.65** (audio weakly informative) · 2. seq refiner MATCHED train-on-C0 **0.672**
+(C0 carries no placement beyond audio) · 3. inverse critic real-vs-corrupted **0.570** (audio placement-blind beyond
+density) · 4. inverse critic real-vs-C0 **0.468** (audio can't prefer real over our generator). The note-context
+ceiling is **0.87** (teacher-forced). ⇒ fine 16th-placement lives in the NOTE SEQUENCE prior, unreachable from audio
+by forward / refiner / inverse-likelihood means. **Only remaining path = a chart sequence model (causal-AR head,
+with serious drift-taming) — or bank the bound and stay ship-state.**
