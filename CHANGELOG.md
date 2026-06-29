@@ -4,13 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Versioning is semantic; `0.x` is pre-1.0,
 so interfaces may still change.
 
-## [0.1.0] — 2026-06-26
+## [0.1.0] — 2026-06-29
 
 First tagged release. An audio-conditioned, autoregressive StepMania chart generator with a
 factorized onset/panel/type head, trained controllability (groove-radar conditioning, CFG,
 reference-chart style transfer), a decode-time biomechanical governor, and a learned taste critic.
-See the README for the results table and the honest-limitations section, and `readme-0.1.0-audit.md`
-for the claim-to-evidence trace.
+See the README for the results table and the honest-limitations section; every headline number
+traces to a write-up under `notes/`.
 
 ### Added
 - **Bring-your-own-audio generation** — `scripts/generate.py --audio song.ogg --difficulty Hard`
@@ -19,7 +19,7 @@ for the claim-to-evidence trace.
   manifold density target, governor default `fatigue_penalty=2`, mandatory playability).
 - The fitted groove manifold (`cache/radar_manifold.npz`, 256 KB derived stats) now ships, so
   dataset-free generation works out of the box.
-- `LICENSE` (MIT), `RELEASE_CRITERIA.md`, `readme-0.1.0-audit.md`, this changelog.
+- `LICENSE` (MIT) and this changelog.
 - Smoke tests for the new generator (`tests/test_generate_cli.py`).
 
 ### Changed
