@@ -18,6 +18,21 @@ This project follows the ML Workbench methodology. All ML work must adhere to th
 3. **One change at a time**: Each experiment should change exactly one variable from the previous run
 4. **Log everything**: All experiments tracked in MLflow with hyperparameters and metrics
 
+## Documentation Discipline
+
+**Never assert volatile external state as fact in durable documents** (HANDOFF, memories, lineage files, notes,
+commit/PR bodies). This includes PR merge/open/closed status, what's "pushed", branch existence, deployment/release
+status, CI/check results, or "currently running" jobs. Such claims are stale the moment they're written and have
+repeatedly misled later sessions (e.g. a HANDOFF asserting "PR #42 OPEN" long after it merged).
+
+- **Record the durable identifier, not the transient state**: write "PR #42 (`release/v0.1.0-prep` → `main`)",
+  not "PR #42 is open". Reference the branch/PR/commit so a reader can look it up.
+- **Instruct verification at read time**: pair any such reference with "verify current state via `gh pr view <n>`
+  / `git`" rather than stating the state. When you yourself need the state, RUN the command — never rely on a
+  doc's or memory's claim about it.
+- Facts that ARE durable (a commit SHA, a design decision, a measured result, a file path) may be asserted; the
+  rule targets state that changes outside the document.
+
 ## Training Loop Pattern
 
 Every PyTorch training loop must follow this structure:

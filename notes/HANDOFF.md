@@ -78,9 +78,10 @@ guidance = 1.0
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
 ## 5. BRANCH / PR STATE
-- Branch **`gen/full-governor-cond-grid`**. This session's docs/probes are committed (the `/refresh` commit);
-  **NOT pushed, NO PR yet.** Prior arcs: governor SHIPPED (PR #41 merged to `main`); **PR #42**
-  (`release/v0.1.0-prep` → `main`) status not touched — CHECK before assuming. `main` protected by `protect-main`.
+- Branch **`gen/full-governor-cond-grid`**; this session's work is in **PR #47** (→ `main`). Related prior PRs:
+  **#41** (governor), **#42** (`release/v0.1.0-prep` → `main`). **Do NOT trust any merge/open state written here —
+  verify live: `gh pr view <n>` / `git log origin/main`** (per CLAUDE.md "Documentation Discipline"). `main` is
+  protected by `protect-main`.
 - New cached artifacts (gitignored, not committed): `cache/seqctx_c0_cache.npz` (28 deployed-C0 charts),
   `cache/seqctx_train_cache.npz` (800 real train songs) — so `probe_seqcontext_c0.py` re-runs are instant.
 
