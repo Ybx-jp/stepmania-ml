@@ -9,8 +9,10 @@ closed 06-28's last confound — NEGATIVE.**
 **Status:** wall CLOSED NEGATIVE (placement is a chart-PRIOR, not in audio — 4 ways) **BUT the BUILD path RE-OPENED
 06-29 (M1a):** reaching that prior does NOT need a full retrain — the FROZEN deployed decoder's hidden state `h`
 ALREADY encodes the entire placement signal (a conv readout on `h` = 0.892 ≡ the note-context ceiling, 100%). So
-fork (A) collapses to a CHEAP build: a small causal-conv onset head on the FROZEN decoder + drift-taming. **DRIFT
-is now the lone binding gate (M1b).**
+fork (A) collapses to a CHEAP build: a small causal-conv onset head on the FROZEN decoder + drift-taming. **M1b
+drift gate RAN (06-29): the teacher-forced-trained head COLLAPSES free-run (density 0→empty; control TF_rollout
+0.275≈real cleared the harness) → own-output SCHEDULED SAMPLING is the mandatory next step (M1b-3); re-run the gate
+after.**
 
 The wall (every probe's positive control FIRED): the 0.87 teacher-forced note-context signal is a chart-structural
 PRIOR, NOT in the audio: (1) forward audio→16th onset **0.65**; (2) seq refiner MATCHED train-on-deployed-C0
@@ -113,6 +115,26 @@ only existing where→when bridge).
    REPRESENTATION, not DRIFT — `h` is teacher-forced on REAL notes (the upper bound a readout could see). At gen
    time the head reads its OWN emitted notes (onset→note→`h`→onset can snowball; 06-22 free-run density 0.73 vs real
    0.18). DRIFT is the lone binding M1b gate (`diag_ar_stability`). `notes/onset_frozenh_findings.md`.
+
+10. **M1b — drift gate (06-29, `probe_seqonset_rollout.py`) — controlled NEGATIVE: the head COLLAPSES free-run.**
+    M1a settled representation; M1b is the binding DRIFT test. Train the M1a conv head on teacher-forced `h`, then
+    free-run a step-by-step rollout reusing the DEPLOYED decode (`_decoder_step_cached` + `pattern_head`); onset
+    decided by the head, tau calibrated on teacher-forced `h` and TRANSFERRED to free-run. 12 Hard val, MEAN:
+    | arm | density | read |
+    |---|---|---|
+    | real | 0.272 | target |
+    | TF_rollout (incremental `h` + REAL context) | **0.275** | **CONTROL — ≈ real ⇒ no harness bug (Rule 11)** |
+    | FREE-run (incremental `h` + OWN notes) | **0.000** | **COLLAPSE to empty** |
+    | seed32_after (32 real frames → free-run) | 0.026 | NOT cold-start — can't sustain from own context |
+    **VERDICT:** the teacher-forced-trained head is NOT drift-stable. It's the 06-22 exposure-bias failure as
+    COLLAPSE (not explosion): trained where note-context was always real, the head leans on it → at free-run the own
+    context is sparse → under-fire → self-fulfilling empty. The audio is in `h` but the head doesn't weight it enough.
+    **Attribution discipline:** the TF_rollout control (0.275 ≈ real) cleared the harness FIRST (incremental `h` ≡
+    training `h`), so the collapse is a real model property, not a rollout bug; the warm-seed arm then ruled out
+    cold-start. **⇒ own-output SCHEDULED SAMPLING is mandatory (M1b-3)** — train the head on `h` from its OWN pass-k
+    notes so it learns to fire from audio-in-`h` when context is sparse + sustain runs; re-run this gate after. KILL
+    fork (A) only if scheduled sampling also fails. CAVEAT (Rule 9): tap-only/greedy emission is a minor own-context
+    simplification (collapse is to ZERO onsets = an onset-head behavior, control fires fine). `notes/onset_seqrollout_findings.md`.
 
 ## Methodology notes (reuse)
 - **Rule 5/6 (cheap real reference first):** the 06-28 boundary-snap detour first measured what REAL does (density
