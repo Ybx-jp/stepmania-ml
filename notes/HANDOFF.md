@@ -52,6 +52,34 @@ Log the verdict in `playtest_log.md`. It decides the fork:
 - **Experiment-lineage system** (`.claude/skills/experiment-design/experiment_lineage/`) + the **`refresh` skill**
   (runs the whole memory/INDEX/skills/lineage/HANDOFF refresh cycle — invoke at the next checkpoint).
 
+## CANONICAL EXPORT DEFAULTS (the deployed config — VALIDATED by `/refresh`)
+The bare `export_typed_samples.py` run reproduces what the user plays. These values MUST equal the script's
+argparse defaults — `tools/check_export_defaults.py` parses the block below and FAILS the refresh if they drift.
+This is the durable mirror of the `generation-defaults` skill §1; update both (and re-run the validator) on any
+deliberate change. **This section is permanent — keep it in every HANDOFF rewrite.**
+
+<!-- CANONICAL-EXPORT-DEFAULTS:START (do NOT hand-edit values; re-run tools/check_export_defaults.py after a change) -->
+```
+checkpoint = checkpoints/gen_motif_full_fixed/best_val.pt
+features = highres
+type_temperature = 0.4
+pattern_temperature = 1.0
+repetition_penalty = 1.0
+max_jack_run = 2
+jack_penalty = 0.0
+fatigue_penalty = 2.0
+fatigue_free = 6.0
+stamina_ceiling = 50.0
+stamina_tau = 8.0
+stamina_scale = 15.0
+stamina_breathe = 1.2
+onset_phase_calib = 0,1.0
+harm_calib = 0.0
+harm_quiet_q = 40.0
+guidance = 1.0
+```
+<!-- CANONICAL-EXPORT-DEFAULTS:END -->
+
 ## 5. BRANCH / PR STATE
 - This session's work is on **`gen/full-governor-cond-grid`** (renamed from claude/full-governor-cond-grid).
   Committed, **NOT pushed, NO PR yet**. Commits: `26200f2` (canonical-defaults + H11 + diagnostic), `d6bde49`
