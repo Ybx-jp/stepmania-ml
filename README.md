@@ -261,3 +261,12 @@ notes/          a findings write-up per experiment + the playtest log
 checkpoints/    trained weights
 tests/          unit + regression tests (incl. KV-cache bit-identity)
 ```
+
+---
+
+## License
+
+[MIT](LICENSE) © 2026 Jackson Porter. The code and the model weights are MIT-licensed; no song
+**audio** is included. Training charts come from freely-available community packs
+([zenius-i-vanisher](https://zenius-i-vanisher.com/), [search.stepmania.online](https://search.stepmania.online/));
+respect the original pack authors' terms when redistributing charts.
