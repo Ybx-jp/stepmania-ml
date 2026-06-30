@@ -32,6 +32,7 @@ from src.data.dataset import DIFFICULTY_NAMES
 from probe_seqcontext_frozenh import AD, DMODEL, CKPT, HReadConv
 from probe_seqonset_rollout import rollout
 from probe_seqonset_critic import DECODE, audio_onset
+from seqonset_decode import build_rest_env, selfcal_tau
 
 
 def safe_name(s):
@@ -50,7 +51,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--load_head', action='store_true'); ap.add_argument('--n', type=int, default=4)
     ap.add_argument('--cap', type=int, default=640); ap.add_argument('--tau', type=float, default=0.55)
-    ap.add_argument('--out', default="outputs/seqonset_ab",
+    ap.add_argument('--b16', type=float, default=1.0, help='16th-offbeat phase penalty on the SEQ arm (drains the '
+                    'M1b-6 flood to a backbone; 0 = the raw flood the user already played)')
+    ap.add_argument('--rest_gain', type=float, default=3.0, help='REST VALVE: audio-energy bias on the seq logit '
+                    '(0=off=never-pauses; ~3 = real-like rests). tau self-calibrated per song to real density.')
+    ap.add_argument('--out', default="outputs/seqonset_ab_fair",
                     help='BUILD dir (must NOT be under the songs root ~/sm-generated, or install rmtrees the source); '
                          'install_to_stepmania copies it to ~/sm-generated/<basename>')
     args = ap.parse_args()
@@ -99,7 +104,12 @@ def main():
         A42 = torch.from_numpy(a).unsqueeze(0).to(device); diff = torch.tensor([meta['difficulty_class']], device=device)
         bpm = float(meta['chart'].bpm)
 
-        seq_on = torch.from_numpy(rollout(model, head, a, meta['difficulty_class'], T, args.tau, device)).bool()
+        # SEQ on the FAIR decode surface: rest valve (audio-energy envelope) + self-cal tau (to real density) + b16
+        env = build_rest_env(model, a, meta['difficulty_class'], T, device) if args.rest_gain > 0 else None
+        tau = selfcal_tau(model, head, a, meta['difficulty_class'], T, device, float(real_on.mean()),
+                          rest_env=env, rest_gain=args.rest_gain, phase_pen=(0.0, args.b16), iters=8)
+        seq_on = torch.from_numpy(rollout(model, head, a, meta['difficulty_class'], T, tau, device,
+                                          rest_env=env, rest_gain=args.rest_gain, phase_pen=(0.0, args.b16))).bool()
         d_seq = float(seq_on.float().mean())
         aud_on = audio_onset(model, A42, diff, T, d_seq, device)            # density-matched deployed baseline
         seq_chart = gen_typed(model, A42, T, diff, seq_on, bpm, device)
@@ -116,7 +126,7 @@ def main():
                 pass
         charts = [
             {"chart": aud_chart, "difficulty_name": "Challenge", "difficulty_value": nd.difficulty_value, "author": "audio-onset (deployed)"},
-            {"chart": seq_chart, "difficulty_name": "Edit", "difficulty_value": nd.difficulty_value, "author": "seq-onset (SS head)"},
+            {"chart": seq_chart, "difficulty_name": "Edit", "difficulty_value": nd.difficulty_value, "author": f"seq-onset fair-surface (restvalve g={args.rest_gain:g} selfcal-tau b16={args.b16:g})"},
         ]
         if dname not in ("Challenge", "Edit"):
             charts.append({"chart": orig, "difficulty_name": dname, "difficulty_value": nd.difficulty_value, "author": "original"})

@@ -6,18 +6,23 @@ refinement couldn't bootstrap from the old audio-only C0. **RE-OPENED 06-28** wi
 deployed pipeline) the 06-22 wall never tested. **06-29: the own-output refiner (the matched train-on-C0 test)
 closed 06-28's last confound — NEGATIVE.**
 
-**Status (2026-06-29): fork (A) BANKED — the CHEAP build is PLACEMENT-HOLLOW, confirmed 3 ways + by-ear.** The wall
-is CLOSED NEGATIVE (placement is a chart-PRIOR, not in audio — 4 ways). The BUILD path RE-OPENED 06-29 (M1a:
-frozen-`h` conv readout = 0.892 ≡ ceiling) and M1b-3 broke the DENSITY drift (note-dropout scheduled sampling →
-free-run run-length 1.0 at real density). **But density-stability ≠ musicality:** M1b-4/5/6 show the free-run head's
-PLACEMENT does NOT survive its own-context drift — exact-match 16th-AUC ≤ the audio floor (precision 0.04), the
-taste critic ranks it ≪ the deployed baseline, and the by-ear+phase verdict is a SELF-GENERATED 16th-FLOOD (62% vs
-real 4%, backbone collapsed 19/19 vs 64/32) with NO chaos conditioning. The cheap frozen-decoder + dropout-SS build
-is dead for placement; its free-run fixpoint is a backbone-less off-grid smear. Untested escalations (audio-anchor /
-true rollout-SS / joint retrain) remain the EXPENSIVE path the arc sought to avoid, low odds per the 4-way wall.
-**PIVOT: fall to the verified-intact governor stack's nearest-shippable** (perc-gate `harm_calib` re-A/B; 1/16-jack
-`fatigue_penalty` 2→3). `notes/onset_placement_findings.md` (M1b-4/5/6). M1b-3's "drift wall BROKEN" was DENSITY-only;
-this re-closes it for QUALITY.
+**Status (2026-06-29): fork (A) is ALIVE but UNDERTUNED — not dead, not fully understood (user's framing, post-playtest).**
+History: the wall is CLOSED NEGATIVE (placement is a chart-PRIOR not in audio — 4 ways); the BUILD re-opened cheap
+(M1a frozen-`h` conv readout 0.892 ≡ ceiling); M1b-3 broke the DENSITY drift (scheduled sampling, run 1.0 @ real
+density). M1b-4/5/6 then found the free-run head, RUN ON THE AUDIO HEAD'S DECODE SURFACE, floods 16ths (62% vs real
+4%, backbone collapsed) — and I prematurely committed "placement-hollow / BANKED." **The user overturned that twice
+(both correct, experiment-design catches):** (1) M1b-7/8 — the bank measured ONE under-tuned config; the 16th-flood is
+the KNOWN chaos-smear failure and a phase down-weight DRAINS it to a real-aligned backbone (precision 0.24→0.62 ≈ the
+audio head's 0.61). (2) **THE DECODE SURFACE IS HEAD-SPECIFIC** — the deployed palette was co-evolved with the AUDIO
+head and several knobs BREAK / INVERT / are ABSENT for the seq head (tau: global-quantile → must be per-song adaptive;
+16th-unlock: polarity FLIPS to a down-weight; rests: the audio head's energy-silences are absent → need an explicit
+valve). M1b-9 BUILT that surface (rest valve + self-cal tau + inverted phase lever, `seqonset_decode.py`) → by-ear
+"**it's better! still very linear**". So the comparison was never fair (tuned audio head vs an untuned new head). **The
+real fork is now STRATEGIC, not technical: is the seq-onset path the right investment for THIS stage of the project?**
+— it's viable-but-early, like the audio decode when it first landed (which took many hours of vibe-tuning to blossom).
+Open mechanistic leads (next session): the user suspects the head did NOT learn to REST but leans on a HOLD-RELEASE
+phantom note to stave off collapse; the per-song density CLIFF (flood↔collapse bimodal, no real-d operating point on
+some songs); the "still linear" gap. `notes/onset_placement_findings.md`.
 
 The wall (every probe's positive control FIRED): the 0.87 teacher-forced note-context signal is a chart-structural
 PRIOR, NOT in the audio: (1) forward audio→16th onset **0.65**; (2) seq refiner MATCHED train-on-deployed-C0
@@ -192,7 +197,38 @@ only existing where→when bridge).
     behind M1b-4's free-run 16th-AUC < 0.5 (ranks 16th frames ABOVE backbone) + precision 0.04: the head INVERTS the
     rhythm — abandons the quarters it can't author, floods the offbeats. **Methodology win (Rule 1 + Rule 8):** AUC and
     the critic compressed this to "worse" without NAMING it; the phase-share metric SEES the property, and the user's
-    EAR caught it first — the by-ear gate was load-bearing. ⇒ fork (A) BANKED.
+    EAR caught it first — the by-ear gate was load-bearing. (NOTE: I then committed "BANKED/placement-hollow" — that was
+    PREMATURE; points 15–17 overturn it. The 16th-flood is a measurement on the WRONG decode surface, not a verdict.)
+15. **M1b-7/8 — the user's "did you violate experiment-design?" catch (06-29) — YES; the bank was one under-tuned
+    config.** The 16th-flood IS the canonical chaos-smear/backbone-collapse failure the skill's OWN Evidence section is
+    built around (overturned there by the coherent-conditioning fair test). I'd committed model-blame WITHOUT the fair
+    version (Rule 7) and treated 3 metrics on ONE config as robustness (Rule 11). Two fair tests:
+    - **M1b-7 manifold conditioning (`probe_seqonset_cond.py`):** condition the rollout on a backbone-heavy manifold
+      groove. NO effect — diagnosed (Rule 11 dynamic-range) as a LIVE-but-WEAK channel: groove moves the seq head's
+      logits only ~3% (mean|Δlogit| 0.099 vs scale 2.97), because the seq head reads the decoder's `h` and `h` barely
+      encodes groove — **the deployed onset head takes `radar` DIRECTLY**, which is why the user's manifold fix worked
+      THERE but doesn't transfer to this head's wiring. Inconclusive (OOD) → faithful fix = a radar-DIRECT head.
+    - **M1b-8 phase-rebalance (`probe_seqonset_phasepen.py`):** a penalty on the seq head's 16th-offbeat logits DRAINS
+      the flood to a real-aligned backbone — precision **0.24→0.62**, F1 0.27→0.71 ≈ the deployed audio head's 0.70 at
+      matched density. So **"placement-hollow / dead" was WRONG; the truth is AUDIO-PARITY backbone** (the sequence-
+      context 16th advantage is reachable teacher-forced but does NOT survive free-run; the penalty is binary — the
+      cliff jumps 62%→0% at b16≥0.1, no graded 16th control because the head can't RANK which 16ths).
+16. **The DECODE SURFACE is HEAD-SPECIFIC (06-29, the user's architectural reframe) — a durable mechanism finding.**
+    The deployed palette was co-evolved with the AUDIO head (non-causal, calibrated p_onset, 16th-UNDER-confident,
+    naturally silent). The seq head (causal, note-momentum, concentrated logits, 16th-OVER-firing, never silent) BREAKS/
+    INVERTS knobs: **tau** (global quantile → per-song ADAPTIVE; the cliff); **onset_phase_calib** (the +1.0 16th-UNLOCK
+    polarity FLIPS to a down-weight); **stamina/breathing rests** (ABSENT — the audio head's energy-silences are free;
+    the seq head needs an EXPLICIT valve sourced from the audio p_onset). UNAFFECTED: fatigue/jack (per-note "where") —
+    but the pattern head is OOD on the seq trajectory ("throwing in jumps"). Folded into `conditioning-mechanics` §8.
+17. **M1b-9 — the FAIR decode surface BUILT + playtested (06-29, `seqonset_decode.py`, `probe_seqonset_rest.py`).**
+    Rest valve (audio p_onset energy envelope biases the seq logit down in quiet → rests; rests/1k 1.95→3.9 toward real
+    5.1) + self-cal tau (BINARY SEARCH best-tracking → all export songs at real density; a quantile-iteration DIVERGED,
+    collapsing a song to empty) + inverted phase lever. Regen A/B `~/sm-generated/seqonset_ab_fair`. **By-ear: "it's
+    better! still very linear"** — a real improvement (it pauses now), still clearly behind the deployed audio head;
+    user's read: NOT a fair test yet (tuning unfinished, like early audio decode). **HOLD-RELEASE HYPOTHESIS (user,
+    UNTESTED — next session):** the head may not have learned to REST — it may lean on a hold-release phantom note to
+    stave off collapse. Density CLIFF confirmed per-song (flood↔collapse bimodal). **VERDICT: path ALIVE + undertuned;
+    the fork is now STRATEGIC (right investment for this stage?), not "is it viable."**
 
 ## Methodology notes (reuse)
 - **Rule 5/6 (cheap real reference first):** the 06-28 boundary-snap detour first measured what REAL does (density

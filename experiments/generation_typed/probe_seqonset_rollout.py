@@ -66,7 +66,7 @@ def _runlen(onset_row):
 
 @torch.no_grad()
 def rollout(model, head, audio_np, diff, T, tau, device, pattern_sample=False, pat_temp=1.0, tf_states=None,
-            seed_frames=0, collect_logits=False):
+            seed_frames=0, collect_logits=False, radar=None, phase_pen=None, rest_env=None, rest_gain=0.0):
     """Onset[t] decided by head on the rolling h-window from the INCREMENTAL decode (`_decoder_step_cached`, the
     same KV-cached path as generate()). FEEDBACK: own emitted note (free-run) OR — when `tf_states` (T,4) is given
     AND (t < seed_frames OR seed_frames==0-with-tf-only) — the REAL note (control / warm-seed). With `seed_frames>0`
@@ -77,7 +77,7 @@ def rollout(model, head, audio_np, diff, T, tau, device, pattern_sample=False, p
     audio_t = torch.from_numpy(audio_np).unsqueeze(0).to(device)
     diff_t = torch.tensor([diff], device=device)
     memory = model.encode_audio(audio_t)
-    cond = model._cond(diff_t, None, None, None, None)                       # (1,1,d)
+    cond = model._cond(diff_t, radar, None, None, None)                      # (1,1,d) — radar=None native, or a (1,5) manifold groove
     caches = [_LayerCache(layer, memory) for layer in model.decoder.layers]
     panel_bits = ((torch.arange(1, NUM_PATTERNS + 1, device=device).unsqueeze(-1)
                    >> torch.arange(NUM_PANELS, device=device)) & 1)         # (15,4)
@@ -91,6 +91,12 @@ def rollout(model, head, audio_np, diff, T, tau, device, pattern_sample=False, p
         hbuf.append(h)
         win = torch.stack(hbuf[-RF_WIN:], dim=1)                            # (1,w,d)
         ol = head(win)[:, -1]                                              # (1,) onset logit at the last position
+        if rest_env is not None:                                           # REST VALVE: bias the seq logit by the audio
+            ol = ol + rest_gain * float(rest_env[t])                       # energy envelope (z<0 in quiet -> rest; the
+                                                                           # audio head's natural silences the seq head lacks)
+        if phase_pen is not None:                                          # suppress off-beat logits before tau (8th -= b8, 16th -= b16)
+            ph = t % 4
+            ol = ol - (phase_pen[0] if ph == 2 else (phase_pen[1] if ph in (1, 3) else 0.0))
         if collect_logits:
             logits[t] = float(ol.item())
         on = bool((torch.sigmoid(ol) > tau).item())

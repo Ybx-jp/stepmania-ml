@@ -1,70 +1,87 @@
-# HANDOFF — seq-onset fork (A) BANKED (cheap build is PLACEMENT-HOLLOW); PIVOT to nearest-shippable governor items
+# HANDOFF — seq-onset fork (A) is ALIVE but UNDERTUNED; the decode surface is HEAD-SPECIFIC; the fork is now STRATEGIC
 
-**Written 2026-06-29 for the next Claude.** The seq-aware-onset arc is DONE for now. Prior sessions: the wall is
-CLOSED NEGATIVE (16th placement is a chart-PRIOR, not in audio — 4 ways); the BUILD re-opened cheap (M1a: a conv
-readout on the FROZEN decoder's hidden state `h` = 0.892 ≡ the note-context ceiling); M1b-3 broke the DENSITY drift
-(note-dropout scheduled sampling → free-run run-length 1.0 at real density). **THIS session closed the binding
-placement-QUALITY question NEGATIVE and BANKED fork (A): the cheap frozen-decoder + dropout-SS build is
-PLACEMENT-HOLLOW.** Density-stability ≠ musicality (experiment-design Rule 1). Confirmed three ways + by-ear:
-- **M1b-4** (`probe_seqonset_placement.py`): free-run gen-time 16th-AUC **0.43–0.63 ≤ the deployed audio floor 0.751**
-  (vs a re-measured pure-TF conv CEILING 0.839; realized 16th precision **0.04**). The 0.839 representation is
-  contingent on REAL notes in context; the head can't bootstrap the 16th prior from its own audio-placed notes.
-- **M1b-5** (`probe_seqonset_critic.py`): the realism/taste critic (the fair MUSICALITY gate — refutes "AUC vs one
-  reference is too strict") ranks SEQ **0.005 ≪ deployed AUDIO 0.253** on EVERY song (REAL 0.727 ≫ shuf16 0.270,
-  control fired), via a density-matched `onset_override` A/B through the DEPLOYED `generate()` (no loop surgery, Rule 14).
-- **M1b-6** (user BY-EAR on `export_seqonset_ab.py` → `probe_seqonset_phase.py`): the seq charts read "bland, only
-  1/16s"; measured phase shares **19/19/62%** (quarter/8th/16th) vs real **64/32/4** = a self-generated 16th-FLOOD,
-  backbone collapsed, with **radar=None (NO chaos conditioning — verified)**. The head INVERTS the rhythm. The by-ear
-  gate was LOAD-BEARING: AUC and the critic compressed this to "worse"; the phase-share metric + the ear NAMED it.
+**Written 2026-06-29 for the next Claude.** Read this whole header — it corrects a conclusion an earlier commit in
+THIS session got wrong. History: the wall is CLOSED NEGATIVE (16th placement is a chart-PRIOR, not in audio — 4 ways);
+the BUILD re-opened cheap (M1a: a conv readout on the FROZEN decoder's `h` = 0.892 ≡ the note-context ceiling); M1b-3
+broke the DENSITY drift (scheduled sampling). I then measured the free-run head ON THE AUDIO HEAD'S DECODE SURFACE,
+saw a 16th-flood, and **prematurely committed "placement-hollow / BANKED" (M1b-4/5/6). The user overturned that TWICE,
+both valid experiment-design catches** — do not re-derive the bank.
 
-**Deployed model UNCHANGED; conditioning, fatigue, and stamina are confirmed INTACT and untouched** — every probe this
-arc was a diagnostic READ on a frozen decoder (no model writes). The export-defaults validator is ALIGNED and all
-governor knobs are live in `generate()`. The shipped generator is exactly as last played.
+**What's actually true (M1b-7/8/9):**
+- **The bank was one under-tuned config** (Rule 7/11 violation): the 16th-flood is the canonical chaos-smear failure,
+  and the deployed decode palette was co-evolved with the AUDIO head — it does NOT transfer to the seq head.
+- **THE DECODE SURFACE IS HEAD-SPECIFIC** (the durable finding, now in `conditioning-mechanics` §8). For a causal,
+  note-momentum onset head: **tau** (global density quantile → must be per-song ADAPTIVE; the concentrated logits make
+  a fixed tau a flood↔collapse cliff), **onset_phase_calib** (the +1.0 16th-UNLOCK polarity FLIPS to a down-weight —
+  the seq head 16th-OVER-fires), **rests** (the audio head's energy-silences are FREE; the seq head never pauses →
+  needs an EXPLICIT valve sourced from the audio `p_onset` envelope). Per-note fatigue/jack are unaffected, but the
+  pattern head is OOD on the seq onset trajectory.
+- **A head-appropriate surface was BUILT** (`seqonset_decode.py`: rest valve + binary-search self-cal tau + inverted
+  phase lever): it drains the flood to a real-aligned backbone (precision 0.24→0.62 ≈ the audio head's 0.61), the
+  chart now PAUSES (rests/1k 1.95→3.9 toward real 5.1) and sits at real density. **By-ear: "it's better! still very
+  linear."** A real improvement, still clearly behind the heavily-tuned audio head.
+
+**So the fork is now STRATEGIC, not technical: is the seq-onset path the right investment for THIS stage of the
+project?** It is viable-but-EARLY — undertuned and not fully understood, like the AUDIO decode when it first landed
+(which took many hours of vibe-tuning to blossom). It is NOT dead. **Sharpest UNTESTED lead (user's hypothesis):** the
+head may not have learned to REST — it may lean on a HOLD-RELEASE phantom note to stave off collapse (probe: do the
+"rests" coincide with hold tails?). Other open leads: the per-song density CLIFF (flood↔collapse bimodal); the "still
+linear" gap; a radar-DIRECT / phase-aware conditioned RETRAIN (the faithful fix — inference-time manifold is only a 3%
+echo because the seq head reads `h`, not radar directly).
+
+**Deployed model UNCHANGED; conditioning, fatigue, and stamina confirmed INTACT and untouched** — every probe this arc
+was a diagnostic READ on a frozen decoder. The shipped generator is exactly as last played.
 
 Env: conda `stepmania-chart-gen` — call the interpreter DIRECTLY
-(`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`); **NOT `conda run`** (it buffers child stdout until exit
-→ empty logs if the process is killed/polled).
+(`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`); **NOT `conda run`** (it buffers child stdout → empty logs
+if killed/polled).
+
+**READ-FIRST (in order):** `notes/onset_placement_findings.md` (M1b-4..9 + the CORRECTED VERDICT at the top of the
+correction section) → lineage `.claude/skills/experiment-design/experiment_lineage/seq-onset-arc.md` (the full chain,
+status header = current) → `conditioning-mechanics` §8 (the head-specific decode surface) → `onset_ss_findings.md`
+(M1b-3 density break). Load-bearing skills: **experiment-design** (Rule 7 fair-version / Rule 11 isolate-the-variable —
+this session is the worked example of violating BOTH and the user catching it), **conditioning-mechanics** §8,
+**generation-defaults**.
 
 ---
 
 ## 1. WHERE WE ARE
 Deployed model = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor (canonical
-block below). The seq-onset work added DIAGNOSTIC probes only; no model change. New tooling this session:
-`probe_seqonset_placement.py` (M1b-4 — placement-quality bracket; trains+caches a pure-TF ceiling head
-`cache/seqonset_tfceiling_head.pt`), `probe_seqonset_critic.py` (M1b-5 — density-matched `onset_override` taste-critic
-A/B), `probe_seqonset_phase.py` (M1b-6 — phase-share measurement), `export_seqonset_ab.py` (the by-ear A/B export);
-`probe_seqonset_rollout.py`'s `rollout()` gained an opt-in `collect_logits`. New findings:
-`notes/onset_placement_findings.md` (M1b-4/5/6). The M1b-3 SS head is saved at `cache/seqonset_ss_head.pt`.
+block below). All seq-onset work is DIAGNOSTIC (no model change). New tooling this session:
+- `seqonset_decode.py` — the head-appropriate surface: `build_rest_env` (audio `p_onset` energy envelope = the rest
+  valve), `selfcal_tau` (binary-search best-tracking per-song density calibration; defeats the cliff).
+- `probe_seqonset_placement.py` (M1b-4, the AUC bracket + pure-TF ceiling head `cache/seqonset_tfceiling_head.pt`),
+  `probe_seqonset_critic.py` (M1b-5, density-matched `onset_override` taste-critic A/B), `probe_seqonset_phase.py`
+  (M1b-6, phase shares), `probe_seqonset_cond.py` (M1b-7, manifold conditioning), `probe_seqonset_phasepen.py` (M1b-8,
+  phase-rebalance), `probe_seqonset_rest.py` (M1b-9, rest structure), `export_seqonset_ab.py` (the by-ear A/B export).
+- `probe_seqonset_rollout.py`'s `rollout()` gained opt-in `collect_logits` / `radar` / `phase_pen` / `rest_env`.
+The SS head is saved at `cache/seqonset_ss_head.pt`.
 
-## 2. THE ACTIVE THREAD — nearest-shippable governor/onset items (fork A banked)
-Lineage: `seq-onset-arc.md` (now ✅ BANKED, points 12–14 = M1b-4/5/6) and its parent
-`onset-phrasing-calibrator-arc.md`. With fork (A) banked, the ACTIVE work returns to the parent arc's
-nearest-shippable items, both on the VERIFIED-INTACT governor stack:
-1. **perc-gate `harm_calib` re-A/B (by ear).** The Step-2 sparse-harm-in-quiet calibrator came back SPLIT (japa1 ✓,
-   HSL ✗: "1/16s came AFTER the piano solo") because the quiet gate keys on **dim-0 total energy** (a piano solo is
-   energy-LOUD + perc-ABSENT → gate fires in the post-solo lull). FIX = gate on **`perc_onset` dim-35 absence**
-   (`probe_phrasing_coherence.py --quiet_feat perc` exists; wire `--quiet_feat perc` into the exporter's
-   `_sparse_harm_offset`), regen `~/sm-generated/harmcalib_ON` for HSL, user plays: do the 1/16s land IN the solo?
-2. **1/16-jack OOD.** Measure japa1 1/16-jack run-length vs real (`calib_foot_fatigue.py`) BEFORE a `fatigue_penalty`
-   2→3 A/B (by ear). Per-NOTE governor measured with run-length, NOT raw mass (cond-mech §9).
-Play-feel → `notes/playtest_log.md` (subjective only); quantitative → a `notes/*_findings.md`.
+## 2. THE ACTIVE THREAD — the STRATEGIC fork + the technical leads (lineage `seq-onset-arc.md`)
+The binding decision is the user's: **is the seq-onset path the right investment now?** If pursued, the technical
+leads in priority order:
+1. **Test the HOLD-RELEASE hypothesis** — does the seq head genuinely rest, or use hold-release phantom notes to avoid
+   collapse? (Cheap diagnostic: correlate the rests with hold tails.) This decides whether the rest valve is real.
+2. **A radar-DIRECT / phase-aware conditioned RETRAIN** — the faithful version of the user's manifold fix (feed groove
+   to the seq head as a DIRECT input + train phase-aware so it stops over-firing 16ths at the source). `/autotune`
+   first. This is the path to the better-than-audio 16th advantage (M1a 0.89) that free-run doesn't yet reach.
+3. **Finer rest texture** (the rests are currently too long/clustered vs real) + tame the density cliff.
 
-**The banked seq-onset escalation (only if revisited, eyes open):** audio-anchor (blend the audio onset logits into
-the `h`-readout so placement stays audio-grounded) / true own-output rollout-SS / a joint unfreeze-retrain. All are the
-EXPENSIVE path the arc tried to avoid, and the 4-way wall predicts low odds for fine 16th placement. `/autotune`
-before any retrain. The SS head + pure-TF ceiling head are cached for re-probing.
+**Also-open, INDEPENDENT nearest-shippable** (no longer a fork-A fallback — they stand on their own, governor stack
+verified intact): (1) perc-gate `harm_calib` re-A/B (gate on `perc_onset` dim-35 absence, not dim-0 energy — fixes the
+HSL piano-solo gate-targeting); (2) 1/16-jack OOD — measure japa1 1/16-jack run-length (`calib_foot_fatigue.py`) BEFORE
+a `fatigue_penalty` 2→3 A/B.
 
 ## 3. AWAITING USER
-The by-ear A/B set is INSTALLED at `~/sm-generated/seqonset_ab` (4 chaotic Hard songs; each `.sm` has Challenge=AUDIO
-onsets, Edit=SEQ onsets, + the original). The user PLAYED it and confirmed the seq (Edit) charts are a bland 16th-flood
-— this is M1b-6, already recorded. No open by-ear gate for seq-onset. NEXT by-ear gate will be the perc-gate
-`harm_calib` re-A/B once wired (item 1 above).
+The fair-surface A/B is installed at `~/sm-generated/seqonset_ab_fair` (Challenge=audio, Edit=seq fair-surface, +
+original). The user PLAYED it: "it's better! still very linear" + the hold-release hypothesis. No open by-ear gate;
+the pending decision is the STRATEGIC fork (pursue seq-onset now vs the nearest-shippable vs something else).
 
 ## CANONICAL EXPORT DEFAULTS (the deployed config — VALIDATED by `/refresh`)
-The bare `export_typed_samples.py` run reproduces what the user plays. These values MUST equal the script's
-argparse defaults — `tools/check_export_defaults.py` parses the block below and FAILS the refresh if they drift.
-This is the durable mirror of the `generation-defaults` skill §1; update both (and re-run the validator) on any
-deliberate change. **This section is permanent — keep it in every HANDOFF rewrite.** (Unchanged this session.)
+The bare `export_typed_samples.py` run reproduces what the user plays. These values MUST equal the script's argparse
+defaults — `tools/check_export_defaults.py` parses the block below and FAILS the refresh if they drift. Durable mirror
+of `generation-defaults` §1; update both (and re-run the validator) on any deliberate change. **This section is
+permanent — keep it in every HANDOFF rewrite.** (Unchanged this session.)
 
 <!-- CANONICAL-EXPORT-DEFAULTS:START (do NOT hand-edit values; re-run tools/check_export_defaults.py after a change) -->
 ```
@@ -89,40 +106,37 @@ guidance = 1.0
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
 ## 4. RESOLVED THIS SESSION (don't re-derive)
-- **The cheap frozen-decoder seq-onset build is PLACEMENT-HOLLOW** (M1b-4/5/6). Don't re-run the M1b-3 density/run
-  gate and conclude the wall is "broken" — it's broken for DENSITY only; placement is re-closed three ways + by-ear.
-- **The M1b-4 first run's control FAILED for a HARNESS reason, not the model** (HARNESS→DATA→MODEL): the SS head's
-  teacher-forced pass (0.736) is NOT the representation ceiling (SS training trades ~0.10 TF accuracy for
-  drift-robustness). Use a PURE-TF conv head (0.839) as the ceiling. Don't bracket placement with the SS head's TF pass.
-- **The seq head's 16th-flood is NOT chaos conditioning** — `radar=None` throughout (verified in the rollout cond, the
-  `generate()` call, AND the audio baseline). It's the head's intrinsic free-run fixpoint (backbone collapse).
-- **`onset_override` is the Rule-14-clean way to A/B a candidate onset source** (audio vs seq) through the deployed
-  `generate()` without surgery — it skips stamina for BOTH arms (controlled), runs per-note fatigue + playability.
-- **`install_to_stepmania` rmtrees a same-named group:** build the export OUT dir under `outputs/...` (NOT under the
-  songs root `~/sm-generated`, or install deletes the source before copying). It copies to `~/sm-generated/<basename>`.
+- **The decode surface is HEAD-SPECIFIC** — never test a new onset head on the deployed (audio-tuned) palette: tau,
+  the 16th-unlock, and rests all break/invert (§ header + conditioning-mechanics §8). This is the session's keeper.
+- **The "BANKED / placement-hollow" conclusion was PREMATURE** — three metrics on ONE under-tuned config is not
+  robustness (Rule 11), and I skipped the fair version (Rule 7). The user caught it. The path is alive + undertuned.
+- **The 16th-flood is NOT chaos conditioning** — `radar=None` throughout (verified). It's the head's free-run fixpoint.
+- **Inference-time manifold conditioning is a ~3% echo on the seq head** (it reads `h`, not radar directly) — the
+  faithful fix is a radar-DIRECT head, not a decode knob.
+- **`onset_override` A/B + `enforce_playability`** is the Rule-14-clean way to compare onset sources (skips stamina for
+  both arms = controlled). **`install_to_stepmania` rmtrees a same-named group** — build under `outputs/...`, NOT under
+  `~/sm-generated`.
+- **Self-cal tau must be a BINARY SEARCH best-tracking realized density** — a quantile-of-realized-logits iteration
+  DIVERGES on the cliff (collapsed a song to empty).
 
 ## 5. BRANCH / PR STATE
-- This refresh's docs are on branch **`docs/seq-onset-placement-banked`** (off `main`). Prior seq-onset work
-  (M1a+M1b+M1b-3) merged via **PR #50** (`docs/seq-onset-frozenh-m1a` → `main`, merge commit `0d30ee2`). **Do NOT
-  trust any merge/open state written here — verify live: `gh pr view <n>` / `git log origin/main`** (CLAUDE.md
-  Documentation Discipline). `main` is protected by `protect-main`.
-- New cached artifacts are gitignored (not committed): `cache/seqonset_ss_head.pt`, `cache/seqonset_tfceiling_head.pt`,
-  `cache/seqctx_frozenh_{train,val}.npz`. The `outputs/seqonset_ab` build dir is gitignored too.
+- This refresh's docs are on **`docs/seq-onset-placement-banked`** (the branch name predates the correction; PR **#51**
+  carries the now-corrected framing). Prior seq-onset work merged via **PR #50** (merge commit `0d30ee2`). **Verify
+  live state: `gh pr view <n>` / `git log origin/main`** (CLAUDE.md Documentation Discipline). `main` protected by `protect-main`.
+- Gitignored (not committed): `cache/seqonset_ss_head.pt`, `cache/seqonset_tfceiling_head.pt`, `cache/seqctx_frozenh_*`,
+  `outputs/seqonset_ab*`.
 
-## 6. INFRA / PERF NOTES (cost real time — know these)
-- **Deployed generation throughput:** ~10 s/chart (B=1 AR) on the RTX 3060; the seq-onset rollout is lighter (onset
-  head + pattern argmax, no type head). The dataset re-parse (4452 files) is the slow part of `probe_seqonset_critic`/
-  `export_seqonset_ab` (~min); the `*_phase`/`*_placement` probes use the M1a caches and skip it.
-- **Stale-cache footgun:** the `seqctx_frozenh_*` caches are keyed to a FIXED split; for a fresh subset always
-  re-extract from the current split ([[dataset-cache-footgun]]). `cache/samples_v3` = the deployed highres feature cache.
-- **autotune skill** (never run): the right tool BEFORE any seq-onset retrain escalation (batch/AMP/bucketing/Optuna).
+## 6. INFRA / PERF NOTES
+- Deployed generation ~10 s/chart (B=1 AR, RTX 3060); the seq rollout is lighter. The dataset re-parse (4452 files) is
+  the slow part of `probe_seqonset_critic`/`export_seqonset_ab` (~min); the cache-based probes skip it.
+- `cache/samples_v3` = the deployed highres feature cache; the `seqctx_frozenh_*` caches are a FIXED split (re-extract
+  for a fresh subset — [[dataset-cache-footgun]]).
+- `/autotune` (never run) — the right tool BEFORE any seq-onset retrain (batch/AMP/bucketing/Optuna).
 
-## 7. DISCIPLINE (load-bearing — this arc proved it repeatedly)
-- **experiment-design Rule 1 (the metric must SEE the property):** M1b-3's density/run-length gate was BLIND to
-  placement — it said "wall broken" while the head sprayed 16ths on the wrong frames. The by-ear gate + phase-share
-  metric (Rule 8) NAMED the failure the aggregates hid. ALWAYS pair an aggregate with an artifact-level check.
-- **Rule 11 (confirm the control fires / the metric can move):** the M1b-4 control failure (SS-TF "ceiling" < floor)
-  was caught and fixed (pure-TF ceiling) BEFORE interpreting — don't read a measurement against an invalid bracket.
-- **Rule 14 (route through shared infra):** `onset_override` + `enforce_playability`, not a bespoke generate() path.
-- **Rule 0** (grep notes + lineage + skills BEFORE a probe); **HARNESS→DATA→MODEL**; **by-ear is the binding gate**
-  (Rule 8); **one change at a time;** `playtest_log.md` = subjective only; quantitative → `notes/*_findings.md`.
+## 7. DISCIPLINE (this session is the cautionary tale)
+- **Rule 7 (run the fair version before blaming the model) + Rule 11 (isolate the variable / confirm dynamic range):**
+  I committed "placement-hollow" from ONE under-tuned config; the fair version (head-appropriate decode surface) showed
+  the path is alive. The user caught both. When a result indicts a NEW component, suspect YOUR setup first (HARNESS→DATA→MODEL).
+- **By-ear is the binding gate** (Rule 8) — it named the flood AND the "still linear"/hold-release leads the metrics missed.
+- **Match the verb to the evidence** ([[claim-precision]]): "alive + undertuned" ≠ "viable/shippable"; "audio-parity
+  backbone" ≠ "good". One change at a time; `playtest_log.md` = subjective only; quantitative → `notes/*_findings.md`.

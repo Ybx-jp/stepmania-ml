@@ -125,7 +125,66 @@ can't author from audio+own-notes and floods the offbeats. **Methodology win (Ru
 taste critic both compressed this to "worse" without naming it; the PHASE-SHARE metric SEES the property, and the
 user's EAR caught it first. The by-ear gate was load-bearing — it surfaced the failure MODE the aggregate metrics hid.
 
-## Verdict (M1b-4 + M1b-5 + M1b-6 together) — BANK fork (A): the cheap build is placement-hollow, confirmed three ways
+## ⚠️ CORRECTION (M1b-7/8, 06-29) — "placement-hollow" was OVERSTATED; the truth is AUDIO-PARITY, not dead
+User pushback (correct, an experiment-design catch): M1b-4/5/6 measured ONE under-tuned config (native `radar=None`,
+the dmax=1.0 over-firing SS head, a global tau) and banked the build — but the 16th-flood is the KNOWN chaos-smear
+failure (conditioning-mechanics §2), and the skill's OWN Evidence section is the canonical case where a backbone-
+collapse committed as "the model can't" was overturned by the coherent-conditioning fair test. I committed model-blame
+on the signature config artifact WITHOUT running the fair version (Rule 7) — and treated three metrics on ONE config as
+robustness (they're one operating point measured three ways, NOT three independent tests; Rule 11).
+
+Two fair tests followed:
+- **M1b-7 manifold conditioning (`probe_seqonset_cond.py`):** condition the rollout on a backbone-heavy manifold groove
+  (`build_target`, conditional-fill). NO effect — phase shares identical to the decimal. Diagnosed (Rule 11, dynamic
+  range): the channel is LIVE but WEAK — groove changes the seq head's logits only ~3% (mean|Δlogit| 0.099 vs scale
+  2.97), because the seq head reads the decoder's `h` and `h` barely encodes groove (the deployed onset head takes
+  `radar` DIRECTLY — that's why the user's manifold fix worked THERE but doesn't transfer to this head's wiring).
+  INCONCLUSIVE (OOD: head trained native) → the faithful fix is a radar-DIRECT conditioned head (a retrain).
+- **M1b-8 phase-rebalance (`probe_seqonset_phasepen.py`):** a penalty on the seq head's 16th-offbeat logits.
+  | arm | phase q/8/16 | precision | F1 |
+  |---|---|---|---|
+  | seq flood (b16=0) | 19/19/62 | 0.24 | 0.27 |
+  | seq rebalanced (b16≥1) | 50/50/0 | 0.62 | **0.71** |
+  | deployed audio head @ matched density | 55/28/17 | 0.61 | **0.70** |
+  The flood DRAINS to a real-aligned backbone (precision 0.24→0.62) → the flood was a recoverable DECODE ARTIFACT, NOT
+  an intrinsic dead end → **"placement-hollow / dead" was WRONG.** BUT calibrated against the deployed audio head, the
+  rebalanced seq backbone reaches **F1 0.71 ≈ 0.70 = PARITY** — it reproduces the audio backbone without the
+  sequence-context 16th advantage that was fork (A)'s whole point (the 0.87 teacher-forced ceiling does NOT survive
+  free-run; the best free-run does is match audio, at 0% 16ths vs audio's 17%). The penalty is also binary (b16=1
+  saturates → 0% 16ths; no graded control to hit real's 4%).
+
+## M1b-9 (06-29) — the DECODE SURFACE is HEAD-SPECIFIC; the FAIR surface BUILT + playtested → path ALIVE, undertuned
+The user's deeper reframe (correct): the whole prior comparison was a heavily-TUNED audio head vs an UNTUNED new head
+on the audio head's OWN decode palette. The palette doesn't transfer — knobs BREAK/INVERT/are ABSENT for the seq head:
+- **tau** — global density quantile assumes the audio head's non-causal calibrated `p_onset`; the seq head's concentrated
+  in-loop logits make a fixed tau a per-song CLIFF (flood↔collapse). FIX = `seqonset_decode.selfcal_tau` (binary-search
+  best-tracking to a target density; a quantile-iteration DIVERGED, collapsing a song to empty).
+- **onset_phase_calib (16th-unlock)** — POLARITY FLIPS: the audio head 16th-UNDER-fires (the +1.0 unlock lifts it); the
+  seq head 16th-OVER-fires → needs a DOWN-weight (the M1b-8 phase penalty).
+- **rests** — the audio head is naturally silent in quiet (energy-tracking); the seq head NEVER pauses → needs an EXPLICIT
+  rest valve sourced from the audio head's `p_onset` energy envelope (`seqonset_decode.build_rest_env`, the deployed
+  breathing math). Built + measured (`probe_seqonset_rest.py`): rests/1k **1.95→3.9** toward real 5.1 at rest_gain~3.
+- UNAFFECTED: per-note fatigue/jack (govern "where") — but the pattern head is OOD on the seq onset trajectory ("jumps").
+
+FAIR-surface A/B regenerated (`export_seqonset_ab.py --rest_gain 3`, `~/sm-generated/seqonset_ab_fair`; all songs self-
+cal'd to real density). **By-ear (the user): "it's better! still very linear."** A real improvement (it pauses now),
+still clearly behind the deployed audio head. User's read: NOT a fair test yet — the tuning is unfinished, exactly as the
+AUDIO decode was when it first landed (which took many hours of vibe-research to blossom).
+**HOLD-RELEASE HYPOTHESIS (user, UNTESTED — the sharpest next lead):** the head may NOT have learned to REST — it may be
+using a hold-release phantom note to stave off collapse. Worth a direct probe (does the "rest" coincide with hold tails?).
+
+## CORRECTED VERDICT (supersedes the "hollow/dead/banked" framing below) — path ALIVE + undertuned; the fork is STRATEGIC
+Fork (A) is NOT placement-hollow/dead. The 16th-flood was a measurement on the WRONG (audio-tuned) decode surface; a
+head-appropriate surface (adaptive tau + inverted phase lever + rest valve) drains the flood to a real-aligned backbone
+(precision 0.24→0.62 ≈ the audio head's 0.61) that now PAUSES and sits at real density. It is "better, still very linear"
+— viable-but-early, **like the audio decode when it first landed.** The sequence-context 16th ADVANTAGE (M1a 0.84–0.89)
+is reachable teacher-forced but does NOT yet survive free-run; whether a properly-tuned/retrained head reaches it is OPEN.
+**The decision is now STRATEGIC — is the seq-onset path the right investment for THIS stage of the project? — not "is it
+viable."** Open technical leads (next session): the hold-release-phantom-rest hypothesis; the per-song density cliff; the
+"still linear" gap; a radar-DIRECT / phase-aware conditioned RETRAIN (the faithful fix — the inference-time manifold
+channel is only a 3% echo, M1b-7). The M1b-4/5/6 sections below stand as RAW measurements; their FRAMING is superseded.
+
+## (superseded framing) Verdict (M1b-4 + M1b-5 + M1b-6) — read with the CORRECTION above
 Exact-match AUC (M1b-4: free-run ≤ audio floor, 16th precision 0.04), the metric-agnostic musicality critic (M1b-5:
 SEQ ≪ deployed baseline), AND the by-ear-confirmed phase distribution (M1b-6: a self-generated 16th-flood, backbone
 collapsed) all agree. Density-drift is broken (M1b-3) but placement quality is not recovered by the cheap

@@ -52,7 +52,14 @@ STABILITY, blind to placement (Rule 1): free-run 16th-AUC **≤ the audio floor*
 ranks seq **≪ the deployed baseline**, and by-ear+phase = a self-generated **16th-FLOOD (62% vs real 4%, backbone
 collapsed) with NO chaos conditioning**. The by-ear gate NAMED the failure mode the aggregate metrics hid (Rule 1+8).
 **PIVOT → the nearest-shippable governor items** (perc-gate harm_calib re-A/B; 1/16-jack fatigue 2→3); conditioning/
-fatigue/stamina confirmed INTACT+unchanged throughout.
+fatigue/stamina confirmed INTACT+unchanged throughout. **UPDATE (06-29, SUPERSEDES the bank): fork (A) is ALIVE +
+UNDERTUNED, not dead** (M1b-7/8/9 — the user overturned the bank twice, valid experiment-design catches). The 16th-flood
+was measured on the AUDIO head's decode surface; **the decode surface is HEAD-SPECIFIC** (tau→adaptive, 16th-unlock
+polarity flips, rests need an explicit valve — conditioning-mechanics §8). A head-appropriate surface (`seqonset_decode.py`:
+rest valve + self-cal tau + inverted lever) drains the flood to a real-aligned backbone that PAUSES at real density;
+playtest "better, still very linear". **The fork is now STRATEGIC (right investment for this stage?), not "is it viable"**
+— viable-but-early, like the audio decode when it first landed. Untested lead: the head may lean on a hold-release
+phantom note instead of genuinely resting.
 - `onset_frozenh_findings.md` — M1a: is the placement signal decodable from the FROZEN decoder's `h`? Conv readout
   hits the full 0.892 ceiling → yes, the cheap frozen-head build is greenlit on representation; DRIFT is the M1b gate.
 - `onset_seqrollout_findings.md` — M1b drift gate: free-run rollout reading `h`. The teacher-forced-trained head
