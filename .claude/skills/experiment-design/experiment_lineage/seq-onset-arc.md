@@ -6,16 +6,26 @@ refinement couldn't bootstrap from the old audio-only C0. **RE-OPENED 06-28** wi
 deployed pipeline) the 06-22 wall never tested. **06-29: the own-output refiner (the matched train-on-C0 test)
 closed 06-28's last confound — NEGATIVE.**
 
-**Status:** CLOSED NEGATIVE — wall AIRTIGHT across FOUR independent directions (every probe's positive control
-FIRED). The 0.87 teacher-forced note-context signal is a chart-structural PRIOR, NOT in the audio:
-(1) forward audio→16th onset **0.65**; (2) seq refiner MATCHED train-on-deployed-C0 **0.672** (06-29; 06-22 v4-C0
-0.666, 06-28 mismatched 0.667 — converge); (3) inverse analysis-by-synthesis critic real-vs-corrupted **0.570**;
-(4) inverse critic real-vs-deployed-C0 **0.468** (06-29) — vs the 0.871 note-context ceiling. BOTH the own-output
-ITERATIVE-REFINER (user's chosen decode form) and the ANALYSIS-BY-SYNTHESIS critic (user's inverse idea) are DEAD:
-the audio likelihood is COARSE/density-compatible only, placement-blind beyond density. In `P(chart|audio) ∝
-P(audio|chart)·P(chart)` the likelihood carries no fine placement → it ALL lives in the prior P(chart) = a chart
-sequence model → only remaining path = a **causal-AR head retrain** (explodes; serious drift-taming) OR bank the
-bound. Probes `probe_seqcontext_c0.py`, `probe_seqcontext_matched.py`, `probe_recon_audio.py`, `probe_recon_critic.py`;
+**Status:** wall CLOSED NEGATIVE (placement is a chart-PRIOR, not in audio — 4 ways) **BUT the BUILD path RE-OPENED
+06-29 (M1a):** reaching that prior does NOT need a full retrain — the FROZEN deployed decoder's hidden state `h`
+ALREADY encodes the entire placement signal (a conv readout on `h` = 0.892 ≡ the note-context ceiling, 100%). So
+fork (A) collapses to a CHEAP build: a small causal-conv onset head on the FROZEN decoder + drift-taming. **M1b
+drift gate (06-29): the teacher-forced head appeared to COLLAPSE free-run — but M1b-3 (note-dropout SCHEDULED
+SAMPLING) BREAKS it: the head free-runs COHERENTLY from its own context (run 1.0; tau≈0.56 → real density), and the
+0.000 was partly a TAU-TRANSFER calibration artifact. **The drift wall (which killed fork A twice) is BROKEN.**
+Remaining: a steep calibration cliff + placement QUALITY (gen-time 16th-AUC / by-ear) + `generate()` wiring.**
+
+The wall (every probe's positive control FIRED): the 0.87 teacher-forced note-context signal is a chart-structural
+PRIOR, NOT in the audio: (1) forward audio→16th onset **0.65**; (2) seq refiner MATCHED train-on-deployed-C0
+**0.672** (06-29; 06-22 v4-C0 0.666, 06-28 mismatched 0.667 — converge); (3) inverse analysis-by-synthesis critic
+real-vs-corrupted **0.570**; (4) inverse critic real-vs-deployed-C0 **0.468** (06-29) — vs the 0.871 note-context
+ceiling. BOTH the own-output ITERATIVE-REFINER (refine a FROZEN audio-only C0) and the ANALYSIS-BY-SYNTHESIS critic
+are DEAD: the audio likelihood is COARSE/density-compatible only, placement-blind beyond density. In
+`P(chart|audio) ∝ P(audio|chart)·P(chart)` the likelihood carries no fine placement → it ALL lives in the prior
+P(chart) = a chart sequence model. **The M1a insight:** that chart sequence model ALREADY EXISTS — it's the
+deployed decoder (the pattern head's causal stack); we just never read onset off it. So the "retrain" is an
+onset-head ADD on a frozen decoder, not a from-scratch model. Probes `probe_seqcontext_c0.py`,
+`probe_seqcontext_matched.py`, `probe_recon_audio.py`, `probe_recon_critic.py`, `probe_seqcontext_frozenh.py` (M1a);
 train-C0 generator `gen_train_c0.py`.
 
 **Memory:** roots in [[jack-heaviness]]; corroborates/【depends-on】 [[onset-phrase-calibrator]] (the decode-time
@@ -85,6 +95,70 @@ only existing where→when bridge).
    placement; the user's "inverse generator" fallback is bounded by the SAME finding (inverting chart→audio for
    placement needs placement IN the audio). The placement signal is the PRIOR, reachable only by a chart sequence
    model (the AR head). `notes/sequence_aware_onset_plan.md` (the ANALYSIS-BY-SYNTHESIS + 4-way CONVERGENCE sections).
+
+9. **M1a — frozen-decoder-`h` representation probe (06-29, `probe_seqcontext_frozenh.py`) — POSITIVE, the cheap
+   build greenlit on REPRESENTATION.** The wall says placement = the chart PRIOR (a sequence model). M1a asks the
+   build-sizing question: does the DEPLOYED decoder (the pattern head's causal stack) ALREADY encode that prior in
+   its per-frame hidden state `h` (`typed_model.py:635`), so the onset retrain is a cheap HEAD-ADD on a FROZEN
+   decoder rather than a from-scratch model? Read `h` teacher-forced over REAL typed states (native mode, causal:
+   `h[t]` sees states[<t]), train a small onset readout, eval 16th-AUC. 800 train / 98 Hard val:
+   | arm | 16th-AUC | read |
+   |---|---|---|
+   | audio | **0.624** | floor ✓ |
+   | both_real (raw-note CNN) | **0.892** | ceiling — POSITIVE CONTROL FIRED ✓ |
+   | frozen_h (1×1 readout) | **0.763** | 52% of the gap |
+   | frozen_h (conv readout, capacity-matched) | **0.892** | **100% — ≡ ceiling** |
+   **VERDICT:** the frozen decoder encodes the ENTIRE placement signal; `frozen_h_conv` ≡ `both_real` (onset-AUC
+   0.952 > 0.945 too). M1b can be a small causal-conv onset head on the FROZEN decoder — no unfreeze, no dedicated
+   note branch. **Attribution save (Rule 11):** the 1×1 arm's 0.763 looked like "decoder compressed half the signal
+   away"; a capacity-matched conv arm OVERTURNED it to 100% — the shortfall was readout temporal-mixing, not lost
+   signal. Committing the 1×1 number would have wrongly prescribed an unfreeze. **BOUNDARY (Rule 9):** this settles
+   REPRESENTATION, not DRIFT — `h` is teacher-forced on REAL notes (the upper bound a readout could see). At gen
+   time the head reads its OWN emitted notes (onset→note→`h`→onset can snowball; 06-22 free-run density 0.73 vs real
+   0.18). DRIFT is the lone binding M1b gate (`diag_ar_stability`). `notes/onset_frozenh_findings.md`.
+
+10. **M1b — drift gate (06-29, `probe_seqonset_rollout.py`) — controlled NEGATIVE: the head COLLAPSES free-run.**
+    M1a settled representation; M1b is the binding DRIFT test. Train the M1a conv head on teacher-forced `h`, then
+    free-run a step-by-step rollout reusing the DEPLOYED decode (`_decoder_step_cached` + `pattern_head`); onset
+    decided by the head, tau calibrated on teacher-forced `h` and TRANSFERRED to free-run. 12 Hard val, MEAN:
+    | arm | density | read |
+    |---|---|---|
+    | real | 0.272 | target |
+    | TF_rollout (incremental `h` + REAL context) | **0.275** | **CONTROL — ≈ real ⇒ no harness bug (Rule 11)** |
+    | FREE-run (incremental `h` + OWN notes) | **0.000** | **COLLAPSE to empty** |
+    | seed32_after (32 real frames → free-run) | 0.026 | NOT cold-start — can't sustain from own context |
+    **VERDICT:** the teacher-forced-trained head is NOT drift-stable. It's the 06-22 exposure-bias failure as
+    COLLAPSE (not explosion): trained where note-context was always real, the head leans on it → at free-run the own
+    context is sparse → under-fire → self-fulfilling empty. The audio is in `h` but the head doesn't weight it enough.
+    **Attribution discipline:** the TF_rollout control (0.275 ≈ real) cleared the harness FIRST (incremental `h` ≡
+    training `h`), so the collapse is a real model property, not a rollout bug; the warm-seed arm then ruled out
+    cold-start. **⇒ own-output SCHEDULED SAMPLING is mandatory (M1b-3)** — train the head on `h` from its OWN pass-k
+    notes so it learns to fire from audio-in-`h` when context is sparse + sustain runs; re-run this gate after. KILL
+    fork (A) only if scheduled sampling also fails. CAVEAT (Rule 9): tap-only/greedy emission is a minor own-context
+    simplification (collapse is to ZERO onsets = an onset-head behavior, control fires fine). `notes/onset_seqrollout_findings.md`.
+    **⚠️ SEVERITY CONFOUND found in M1b-3 (point 11): the 0.000 was partly TAU-TRANSFER calibration (teacher-forced
+    tau applied to free-run logits); the TF-only head's collapse is real but "can't fire AT ALL" overstated it.**
+11. **M1b-3 — note-dropout SCHEDULED SAMPLING (06-29, `probe_seqonset_ss.py`) — POSITIVE: the drift wall BREAKS.**
+    Fix the collapse cheaply/in-parallel: per batch drop real notes `d∼U(0,1)`, decode `h` from the corrupted
+    (sparse/empty) context, train the head to predict the FULL real onsets (`d→1` = empty context → forces firing
+    from audio-in-`h`). Decoder FROZEN, grad through head only. Then the drift gate + an ABSOLUTE-threshold SWEEP.
+    | tau | free_d | run | (real ≈ 0.27 / 1.05) |
+    |---|---|---|---|
+    | 0.62 | 0.000 | 0.00 | cliff edge |
+    | 0.58 | 0.213 | 0.67 | |
+    | ~0.56 | ≈0.27 | ~0.8 | **near-real operating point EXISTS** |
+    | 0.50 | 0.39 | 1.00 | stable plateau (run 1.0) |
+    | 0.10 | 0.51 | 6.9 | runs begin |
+    | 0.02 | 0.89 | 83 | explosion |
+    **VERDICT:** the head free-runs COHERENTLY from its OWN context (run 1.0, no collapse/explosion across tau
+    0.2–0.55); tau≈0.56 hits real density. **TWO corrections:** (a) M1b's "collapse to 0.000" was CONFOUNDED by
+    TAU-TRANSFER (teacher-forced tau, calibrated on dense real-context logits, sat above the sparse free-run logit
+    range → buried everything; the §3 "tau from the wrong distribution" bug) — the SWEEP is the fair test that
+    overturned the SEVERITY (Rules 7–9); (b) dropout-SS genuinely added the audio-firing the TF-only head lacked.
+    **Remaining:** a STEEP calibration cliff (free-run logits concentrated → global tau density-sensitive → use
+    self/per-song tau or the density-target/stamina mechanisms); slight OVER-fire at dmax=1.0. **NOT yet shown:**
+    placement QUALITY (gen-time 16th-AUC vs real / by-ear) — the gate is density/run-length only. NEXT: 16th-AUC of
+    free-run onsets at tau≈0.56, then wire into `generate()` (real types + governors) + by-ear. `notes/onset_ss_findings.md`.
 
 ## Methodology notes (reuse)
 - **Rule 5/6 (cheap real reference first):** the 06-28 boundary-snap detour first measured what REAL does (density
