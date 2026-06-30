@@ -5,16 +5,18 @@ a chart-PRIOR, not in audio). THIS work asked the build-sizing question and got 
 (`probe_seqcontext_frozenh.py`) shows the FROZEN deployed decoder's hidden state `h` ALREADY encodes the full
 placement signal** — a capacity-matched conv readout on `h` hits **0.892 ≡ the note-context ceiling (100%)** (audio
 floor 0.624; 1×1 readout 0.763 = a capacity confound caught by Rule 11). So fork (A) is NOT a from-scratch retrain —
-it's a CHEAP onset-head ADD on a frozen decoder. M1a settles REPRESENTATION; the M1b DRIFT gate then ran and the
-teacher-forced-trained head **COLLAPSES free-run** (controlled — the TF_rollout control cleared the harness) → the
-mandatory next step is **own-output SCHEDULED SAMPLING (M1b-3)**, then re-run the gate. Env: conda
-`stepmania-chart-gen` — call the interpreter DIRECTLY
+it's a CHEAP onset-head ADD on a frozen decoder. M1a settles REPRESENTATION; the M1b drift gate looked like collapse
+but **M1b-3 note-dropout SCHEDULED SAMPLING BROKE the drift wall** — the frozen-decoder head free-runs COHERENTLY from
+its own context (run 1.0; tau≈0.56 → real density), and the apparent collapse was partly a tau-transfer calibration
+artifact. Fork (A)'s blocking risk is cleared; NEXT = placement quality (gen-time 16th-AUC / by-ear) + `generate()`
+wiring. Env: conda `stepmania-chart-gen` — call the interpreter DIRECTLY
 (`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`); **NOT `conda run`** (it buffers all child stdout until
 exit → empty logs if the process is killed/polled).
 
-**READ-FIRST (in order):** `notes/onset_seqrollout_findings.md` (M1b — the freshest: the drift gate, free-run
-COLLAPSE → scheduled sampling next) → `notes/onset_frozenh_findings.md` (M1a — frozen `h` ≡ ceiling, the cheap-build
-greenlight + the DRIFT boundary) → `notes/sequence_aware_onset_plan.md` (the M1a addendum + the SCOPING +
+**READ-FIRST (in order):** `notes/onset_ss_findings.md` (M1b-3 — the freshest: scheduled sampling BREAKS the drift
+wall; the tau-transfer correction; what's left) → `notes/onset_seqrollout_findings.md` (M1b drift gate; its severity
+was partly a calibration artifact) → `notes/onset_frozenh_findings.md` (M1a — frozen `h` ≡ ceiling) →
+`notes/sequence_aware_onset_plan.md` (the M1a addendum + the SCOPING +
 M0 + ANALYSIS-BY-SYNTHESIS + 4-WAY CONVERGENCE — the whole story) → lineage
 `.claude/skills/experiment-design/experiment_lineage/seq-onset-arc.md` (hypothesis chain incl. M1a + the methodology
 wins) → `onset-phrasing-calibrator-arc.md` (the parent active arc, with the nearest-shippable pending items). Load-bearing skills: **experiment-design** (Rule 11 positive-control — it's the
@@ -27,11 +29,12 @@ hero of this session), **conditioning-mechanics** §8 (the WHEN↔WHERE isolatio
 Deployed model UNCHANGED: `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor
 (canonical block below intact). M1a was a DIAGNOSTIC probe (no model change); M1b is DIAGNOSTIC so far (the
 drift gate, no model change); the eventual `generate()` wiring happens only AFTER scheduled sampling passes the gate.
-New tooling: `probe_seqcontext_frozenh.py` (M1a — the frozen-`h` representation probe) + `probe_seqonset_rollout.py`
-(M1b — the free-run DRIFT gate: trains the head, TF_rollout control + free-run + warm-seed arms). New findings:
-`notes/onset_frozenh_findings.md` (M1a), `notes/onset_seqrollout_findings.md` (M1b). New caches (gitignored):
-`cache/seqctx_frozenh_{train,val}.npz` (800 train all-diff + 98 Hard val, typed states; both present → the probes
-skip the 4452-file dataset re-parse).
+New tooling: `probe_seqcontext_frozenh.py` (M1a — frozen-`h` representation) + `probe_seqonset_rollout.py` (M1b —
+free-run drift gate: TF_rollout control + free-run + warm-seed) + `probe_seqonset_ss.py` (M1b-3 — note-dropout
+scheduled sampling + threshold sweep; saves the head). New findings: `notes/onset_frozenh_findings.md` (M1a),
+`onset_seqrollout_findings.md` (M1b), `onset_ss_findings.md` (M1b-3). New caches/artifacts (gitignored):
+`cache/seqctx_frozenh_{train,val}.npz` (800 train all-diff + 98 Hard val, typed; both present → probes skip the
+4452-file dataset re-parse), `cache/seqonset_ss_head.pt` (the trained SS onset head — re-sweep via `--load_head`).
 
 ## 2. THE ACTIVE THREAD — seq-aware onset, CLOSED NEGATIVE (lineage `seq-onset-arc.md`)
 The 0.87 teacher-forced note-context placement signal is a chart PRIOR, NOT recoverable from audio — confirmed FOUR
@@ -63,19 +66,26 @@ onset head on the FROZEN decoder reaches the ceiling — no unfreeze, no dedicat
 to 100%. **BOUNDARY: settles REPRESENTATION, NOT DRIFT** (`h` teacher-forced on REAL notes = the upper bound; gen-time
 the head reads its OWN notes → snowball risk). DRIFT is the lone binding gate.
 
-## 3. M1b DRIFT GATE RAN (controlled NEGATIVE) → NEXT = own-output SCHEDULED SAMPLING (M1b-3)
-M1a greenlit the cheap frozen-head build on REPRESENTATION; M1b tested DRIFT and the teacher-forced-trained head
-**COLLAPSES free-run** (`probe_seqonset_rollout.py` → `notes/onset_seqrollout_findings.md`). 12 Hard val MEAN: real
-0.272 · **TF_rollout 0.275 ≈ real (CONTROL FIRED — incremental `h` ≡ training `h`, no harness bug)** · **FREE-run
-density 0.000 (COLLAPSE to empty)** · seed32_after 0.026 (NOT cold-start). It's the 06-22 exposure-bias failure as
-COLLAPSE (the head leans on note-context, sparse at free-run → self-fulfilling empty; audio-in-`h` under-weighted).
-**NEXT (M1b-3, the mandatory fix): own-output scheduled sampling** — generate the head's OWN pass-k rollout context
-(mix teacher-forced + own, anneal eps→1), retrain the head on it so it fires from audio-in-`h` when note-context is
-sparse + sustains runs. Then RE-RUN this drift gate (`probe_seqonset_rollout.py`). `/autotune` before the SS retrain.
-Tooling exists: the rollout probe + the M1a head/caches. **KILL fork (A) only if SS ALSO fails to stabilize** → then
-(B) BANK + the nearest-shippable below. When SS stabilizes, the LAST step is wiring the head into `generate()`'s loop
-(opt-in kwarg, default off; decide onset[t] from `h[t]` at `typed_model.py:635`, today precomputed at :481) — but
-NOT before the drift gate passes. Deployed model stays `gen_motif_full_fixed` until it proves out **by ear** (Rule 8).
+## 3. M1b-3 BROKE THE DRIFT WALL (positive) → NEXT = placement quality (16th-AUC / by-ear) + `generate()` wiring
+M1a greenlit the cheap frozen-head build (REPRESENTATION). M1b's free-run rollout LOOKED like collapse (density
+0.000), but **M1b-3 note-dropout SCHEDULED SAMPLING (`probe_seqonset_ss.py` → `notes/onset_ss_findings.md`) BROKE the
+wall.** Per batch drop real notes `d∼U(0,1)`, decode `h` from the corrupted/empty context, train the head to predict
+FULL real onsets (`d→1` forces firing from audio-in-`h`); decoder FROZEN. An absolute-threshold SWEEP shows the head
+free-runs COHERENTLY from its OWN context: run-length **1.0** (real-like) across tau 0.2–0.55, explosion only below
+tau ~0.1; **tau≈0.56 → density ≈ real 0.27**. TWO corrections: (a) M1b's 0.000 was partly a TAU-TRANSFER calibration
+artifact (teacher-forced tau on free-run logits — the §3 wrong-distribution-tau bug; the SWEEP overturned the severity,
+Rules 7–9); (b) dropout-SS genuinely added the audio-firing the TF-only head lacked. **The drift wall that killed fork
+(A) twice (06-22 explosion, M1b collapse) is BROKEN.** Head saved `cache/seqonset_ss_head.pt` (re-sweep `--load_head`).
+
+**NEXT (binding, in order):**
+1. **Placement QUALITY** — the gate is density/run-length ONLY. Measure gen-time **16th-AUC of the free-run onsets vs
+   real** at the tau≈0.56 operating point; does it place 16ths in the right spots (toward the 0.87 TF ceiling)?
+2. **Tame the calibration cliff** — free-run logits are concentrated (tau 0.62→0, 0.55→0.33) → use a self/per-song
+   free-run tau or the deployed density-target/stamina, NOT the teacher-forced tau. Maybe a balanced `d` (less over-fire).
+3. **Wire into `generate()`** (opt-in kwarg, default off; decide onset[t] from `h[t]` at `typed_model.py:635`, today
+   precomputed at :481) with REAL types + the playability/governor stack. `/autotune` before any bigger retrain.
+4. **By-ear = the binding gate** (Rule 8). Deployed model stays `gen_motif_full_fixed` until it proves out.
+If placement quality DISappoints → (B) BANK + the nearest-shippable below.
 - **(Nearest-shippable FALLBACK, from the parent onset-phrasing arc):** (1) **perc-gate harm_calib re-A/B** — wire
   `--quiet_feat perc` into `export_typed_samples.py`'s `_sparse_harm_offset`, regen `~/sm-generated/harmcalib_ON`
   for HSL, user plays: do the 1/16s land IN the piano solo? (2) **1/16-jack OOD** — measure japa1 1/16-jack

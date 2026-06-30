@@ -10,9 +10,10 @@ closed 06-28's last confound — NEGATIVE.**
 06-29 (M1a):** reaching that prior does NOT need a full retrain — the FROZEN deployed decoder's hidden state `h`
 ALREADY encodes the entire placement signal (a conv readout on `h` = 0.892 ≡ the note-context ceiling, 100%). So
 fork (A) collapses to a CHEAP build: a small causal-conv onset head on the FROZEN decoder + drift-taming. **M1b
-drift gate RAN (06-29): the teacher-forced-trained head COLLAPSES free-run (density 0→empty; control TF_rollout
-0.275≈real cleared the harness) → own-output SCHEDULED SAMPLING is the mandatory next step (M1b-3); re-run the gate
-after.**
+drift gate (06-29): the teacher-forced head appeared to COLLAPSE free-run — but M1b-3 (note-dropout SCHEDULED
+SAMPLING) BREAKS it: the head free-runs COHERENTLY from its own context (run 1.0; tau≈0.56 → real density), and the
+0.000 was partly a TAU-TRANSFER calibration artifact. **The drift wall (which killed fork A twice) is BROKEN.**
+Remaining: a steep calibration cliff + placement QUALITY (gen-time 16th-AUC / by-ear) + `generate()` wiring.**
 
 The wall (every probe's positive control FIRED): the 0.87 teacher-forced note-context signal is a chart-structural
 PRIOR, NOT in the audio: (1) forward audio→16th onset **0.65**; (2) seq refiner MATCHED train-on-deployed-C0
@@ -135,6 +136,29 @@ only existing where→when bridge).
     notes so it learns to fire from audio-in-`h` when context is sparse + sustain runs; re-run this gate after. KILL
     fork (A) only if scheduled sampling also fails. CAVEAT (Rule 9): tap-only/greedy emission is a minor own-context
     simplification (collapse is to ZERO onsets = an onset-head behavior, control fires fine). `notes/onset_seqrollout_findings.md`.
+    **⚠️ SEVERITY CONFOUND found in M1b-3 (point 11): the 0.000 was partly TAU-TRANSFER calibration (teacher-forced
+    tau applied to free-run logits); the TF-only head's collapse is real but "can't fire AT ALL" overstated it.**
+11. **M1b-3 — note-dropout SCHEDULED SAMPLING (06-29, `probe_seqonset_ss.py`) — POSITIVE: the drift wall BREAKS.**
+    Fix the collapse cheaply/in-parallel: per batch drop real notes `d∼U(0,1)`, decode `h` from the corrupted
+    (sparse/empty) context, train the head to predict the FULL real onsets (`d→1` = empty context → forces firing
+    from audio-in-`h`). Decoder FROZEN, grad through head only. Then the drift gate + an ABSOLUTE-threshold SWEEP.
+    | tau | free_d | run | (real ≈ 0.27 / 1.05) |
+    |---|---|---|---|
+    | 0.62 | 0.000 | 0.00 | cliff edge |
+    | 0.58 | 0.213 | 0.67 | |
+    | ~0.56 | ≈0.27 | ~0.8 | **near-real operating point EXISTS** |
+    | 0.50 | 0.39 | 1.00 | stable plateau (run 1.0) |
+    | 0.10 | 0.51 | 6.9 | runs begin |
+    | 0.02 | 0.89 | 83 | explosion |
+    **VERDICT:** the head free-runs COHERENTLY from its OWN context (run 1.0, no collapse/explosion across tau
+    0.2–0.55); tau≈0.56 hits real density. **TWO corrections:** (a) M1b's "collapse to 0.000" was CONFOUNDED by
+    TAU-TRANSFER (teacher-forced tau, calibrated on dense real-context logits, sat above the sparse free-run logit
+    range → buried everything; the §3 "tau from the wrong distribution" bug) — the SWEEP is the fair test that
+    overturned the SEVERITY (Rules 7–9); (b) dropout-SS genuinely added the audio-firing the TF-only head lacked.
+    **Remaining:** a STEEP calibration cliff (free-run logits concentrated → global tau density-sensitive → use
+    self/per-song tau or the density-target/stamina mechanisms); slight OVER-fire at dmax=1.0. **NOT yet shown:**
+    placement QUALITY (gen-time 16th-AUC vs real / by-ear) — the gate is density/run-length only. NEXT: 16th-AUC of
+    free-run onsets at tau≈0.56, then wire into `generate()` (real types + governors) + by-ear. `notes/onset_ss_findings.md`.
 
 ## Methodology notes (reuse)
 - **Rule 5/6 (cheap real reference first):** the 06-28 boundary-snap detour first measured what REAL does (density

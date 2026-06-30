@@ -50,8 +50,13 @@ fallback. 2nd open thread: 1/16-jack OOD → `fatigue_penalty` 2→3.
 - `onset_frozenh_findings.md` — M1a: is the placement signal decodable from the FROZEN decoder's `h`? Conv readout
   hits the full 0.892 ceiling → yes, the cheap frozen-head build is greenlit on representation; DRIFT is the M1b gate.
 - `onset_seqrollout_findings.md` — M1b drift gate: free-run rollout reading `h`. The teacher-forced-trained head
-  COLLAPSES to empty (density 0; control TF_rollout 0.275≈real cleared the harness; warm-seed didn't rescue) →
-  own-output SCHEDULED SAMPLING is mandatory before integration (the 06-22 exposure-bias prediction, as collapse).
+  appears to COLLAPSE to empty (control TF_rollout 0.275≈real cleared the harness). ⚠️ severity later found partly a
+  tau-transfer artifact (see onset_ss) → motivated scheduled sampling.
+- `onset_ss_findings.md` — M1b-3: note-dropout SCHEDULED SAMPLING **BREAKS the drift wall**. The frozen-decoder head
+  free-runs COHERENTLY from its own context (run 1.0; tau≈0.56 → real density ~0.27; explosion only below tau ~0.1).
+  TWO corrections: M1b's 0.000 was partly tau-transfer calibration (teacher-forced tau on free-run logits, §3 bug);
+  dropout-SS added the audio-firing the TF-only head lacked. Remaining: steep calibration cliff + placement QUALITY
+  (gen-time 16th-AUC / by-ear) + `generate()` wiring. The drift wall that killed fork (A) twice is broken.
 - `arc_lag_findings.md` — WHERE the HSL cold-start lives: breathe arc is zero-phase (exonerated); by elimination
   the AR pattern head. Decisive no-gen timing+direction cut on the complaint song.
 - `h11_rerun_findings.md` — transition responsiveness on the canonical model; governor-off + density-dropped
