@@ -33,6 +33,13 @@ mechanism; **this skill is the config VALUES.**
 > exporter moved on. Current canonical values: `pattern_temperature=1.0`, `type_temperature=0.4`,
 > `fatigue_penalty=2`/`fatigue_free=6`, `stamina_ceiling=50`/`breathe=1.2`, **`onset_phase_calib=(0.0,1.0)` the
 > 16th-unlock** (offset also baked into `tau`).
+>
+> **PROBES: don't hand-roll the tau pipeline — import `src/generation/decode_harness.py`.** It exports
+> `conditioned_p_onset(model, memory, diff, radar=, style=, guidance=, phase_calib=, extra_offset=)` (the deployed
+> onset→p_onset path: conditioning + CFG blend + phase-calib, built exactly as the decode does), `compute_tau(p,
+> density)`, and `phase_shares(onset_frames)` (the canonical quarter/8th/16th metric). generate.py + the exporter
+> are DOGFOODED through these, so a probe that uses them matches deployment by construction (this is the §3/§6
+> footgun — 30+ probes re-derived it, some with a buggy `calibrated_p_onset`). `DEPLOYED_CHECKPOINT` is here too.
 
 ## 0. THE MODEL (get this right first — it's the most-missed)
 - **Deployed model = `checkpoints/gen_motif_full_fixed/best_val.pt`** — the 42-dim H19 highres retrain (radar +
