@@ -186,6 +186,18 @@ audio-only), not a from-scratch model. CAVEAT: this is REPRESENTATION only — `
 at gen time the head reads its OWN notes and DRIFT (onset→note→`h`→onset snowball; 06-22 free-run density 0.73 vs
 real 0.18) is the lone binding gate (`diag_ar_stability`). A probe replicating the future seq-onset head MUST test
 it free-running, not just teacher-forced.
+**FORK (A) BANKED 06-29 — the cheap frozen-decoder build is PLACEMENT-HOLLOW (M1b-4/5/6, `onset_placement_findings.md`).**
+M1b-3 (note-dropout scheduled sampling) broke the DENSITY drift (free-run run-length 1.0 @ real density) — but
+density-stability ≠ placement (Rule 1). M1b-4 (`probe_seqonset_placement.py`): free-run 16th-AUC **0.43–0.63 ≤ the
+audio floor 0.751** (vs a pure-TF conv ceiling 0.839; realized 16th precision **0.04**). M1b-5
+(`probe_seqonset_critic.py`): the taste critic ranks the seq onsets **≪ the deployed audio path** on every song (a
+density-matched `onset_override` A/B — the deployed-faithful way to test a candidate onset source by ear/critic
+WITHOUT loop surgery, Rule 14). M1b-6 (by-ear → `probe_seqonset_phase.py`): the free-run head produces a self-generated
+**16th-FLOOD (phase shares 19/19/62% vs real 64/32/4, backbone collapsed) with radar=None** — a chaos-LIKE smear with
+NO chaos conditioning (the head INVERTS the rhythm, abandoning the quarters it can't author from its own audio-placed
+notes). ⇒ the cheap build is dead for placement; reaching the 16th prior free-run needs the EXPENSIVE path
+(audio-anchor / rollout-SS / joint retrain), low odds per the 4-way wall. The deployed onset path (audio head + the
+`onset_phase_calib` 16th-unlock) stays the shipped placement.
 
 ### 8a. Soft JACK governor (`jack_penalty`, OLD — exporter default now 0; SUPERSEDED by 8b) — single-foot
 Accumulate `jack_exertion` over a same-panel single-run: on a repeat at gap `g` frames (≤ `jack_max_gap`=4),

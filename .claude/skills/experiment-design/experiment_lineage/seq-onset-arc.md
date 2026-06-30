@@ -6,14 +6,18 @@ refinement couldn't bootstrap from the old audio-only C0. **RE-OPENED 06-28** wi
 deployed pipeline) the 06-22 wall never tested. **06-29: the own-output refiner (the matched train-on-C0 test)
 closed 06-28's last confound — NEGATIVE.**
 
-**Status:** wall CLOSED NEGATIVE (placement is a chart-PRIOR, not in audio — 4 ways) **BUT the BUILD path RE-OPENED
-06-29 (M1a):** reaching that prior does NOT need a full retrain — the FROZEN deployed decoder's hidden state `h`
-ALREADY encodes the entire placement signal (a conv readout on `h` = 0.892 ≡ the note-context ceiling, 100%). So
-fork (A) collapses to a CHEAP build: a small causal-conv onset head on the FROZEN decoder + drift-taming. **M1b
-drift gate (06-29): the teacher-forced head appeared to COLLAPSE free-run — but M1b-3 (note-dropout SCHEDULED
-SAMPLING) BREAKS it: the head free-runs COHERENTLY from its own context (run 1.0; tau≈0.56 → real density), and the
-0.000 was partly a TAU-TRANSFER calibration artifact. **The drift wall (which killed fork A twice) is BROKEN.**
-Remaining: a steep calibration cliff + placement QUALITY (gen-time 16th-AUC / by-ear) + `generate()` wiring.**
+**Status (2026-06-29): fork (A) BANKED — the CHEAP build is PLACEMENT-HOLLOW, confirmed 3 ways + by-ear.** The wall
+is CLOSED NEGATIVE (placement is a chart-PRIOR, not in audio — 4 ways). The BUILD path RE-OPENED 06-29 (M1a:
+frozen-`h` conv readout = 0.892 ≡ ceiling) and M1b-3 broke the DENSITY drift (note-dropout scheduled sampling →
+free-run run-length 1.0 at real density). **But density-stability ≠ musicality:** M1b-4/5/6 show the free-run head's
+PLACEMENT does NOT survive its own-context drift — exact-match 16th-AUC ≤ the audio floor (precision 0.04), the
+taste critic ranks it ≪ the deployed baseline, and the by-ear+phase verdict is a SELF-GENERATED 16th-FLOOD (62% vs
+real 4%, backbone collapsed 19/19 vs 64/32) with NO chaos conditioning. The cheap frozen-decoder + dropout-SS build
+is dead for placement; its free-run fixpoint is a backbone-less off-grid smear. Untested escalations (audio-anchor /
+true rollout-SS / joint retrain) remain the EXPENSIVE path the arc sought to avoid, low odds per the 4-way wall.
+**PIVOT: fall to the verified-intact governor stack's nearest-shippable** (perc-gate `harm_calib` re-A/B; 1/16-jack
+`fatigue_penalty` 2→3). `notes/onset_placement_findings.md` (M1b-4/5/6). M1b-3's "drift wall BROKEN" was DENSITY-only;
+this re-closes it for QUALITY.
 
 The wall (every probe's positive control FIRED): the 0.87 teacher-forced note-context signal is a chart-structural
 PRIOR, NOT in the audio: (1) forward audio→16th onset **0.65**; (2) seq refiner MATCHED train-on-deployed-C0
@@ -159,6 +163,36 @@ only existing where→when bridge).
     self/per-song tau or the density-target/stamina mechanisms); slight OVER-fire at dmax=1.0. **NOT yet shown:**
     placement QUALITY (gen-time 16th-AUC vs real / by-ear) — the gate is density/run-length only. NEXT: 16th-AUC of
     free-run onsets at tau≈0.56, then wire into `generate()` (real types + governors) + by-ear. `notes/onset_ss_findings.md`.
+12. **M1b-4 — placement QUALITY (06-29, `probe_seqonset_placement.py`) — NEGATIVE: free-run placement ≤ the audio
+    floor.** M1b-3's gate measured density/run-length (STABILITY), blind to WHERE the 16ths land (Rule 1). M1b-4
+    measures the free-run head's gen-time 16th-AUC against a bracket on the SAME 12 Hard-val songs: FLOOR = the
+    deployed audio onset head (0.751); CEILING = a PURE-TF conv head (0.839, POSITIVE CONTROL >> floor — re-measured
+    on this set). FREE-RUN (SS head, own-note `h`, tau plateau 0.45–0.56): **16th-AUC 0.43–0.63, ≤ floor across all
+    taus**; realized 16th precision **0.02–0.04** (of the 16ths it fires, ~96–98% miss real 16ths). **Attribution
+    save (the FIRST run's control FAILED → harness, not model):** I'd used the SS head's TF pass as "ceiling" (0.736,
+    < floor) — but SS training trades ~0.10 of TF accuracy for drift-robustness, so its TF pass is NOT the
+    representation ceiling. Adding the pure-TF conv ceiling (0.839) fixed the bracket (Rule 11). Real-note context
+    (0.839) beats the audio floor → chart-context carries placement; own-note free-run collapses below it → DRIFT
+    destroys it. The 0.839 representation (M1a) is CONTINGENT on real notes in context; the head can't bootstrap the
+    16th prior from its own audio-placed notes. `notes/onset_placement_findings.md`.
+13. **M1b-5 — taste-critic A/B (06-29, `probe_seqonset_critic.py`) — refutes "the AUC metric is too strict."** User's
+    sharp objection: 16th-AUC vs ONE reference penalizes valid ALTERNATIVE phrasing. The fair MUSICALITY gate is the
+    realism critic (learned P(real), not exact-match). One-change A/B via the SANCTIONED `onset_override` (NO loop
+    surgery — Rule 14) through the DEPLOYED `generate()` + canonical governor config (generation-defaults skill),
+    density-matched, radar off, stamina off BOTH arms; baseline = the audio head WITH the 16th-unlock (the STRONGEST
+    deployed path, Rule 15). 8 chaotic Hard songs: REAL 0.727 ≫ shuf16 0.270 (control FIRED); AUDIO@d_seq **0.253**
+    vs SEQ@d_seq **0.005** (SEQ ≤ AUDIO on EVERY song; never fires "real-like", AUDIO does on 25%). The lenient
+    musicality gate ALSO ranks SEQ far below the deployed baseline → "too strict" REFUTED, not just unconfirmed.
+14. **M1b-6 — the FAILURE MODE: a self-generated 16th-FLOOD (06-29, by-ear → `probe_seqonset_phase.py`).** User
+    played the M1b export (`export_seqonset_ab.py`) and read the seq charts as "bland, only 1/16s" — the chaos-OOD
+    smear signature — and asked if chaos conditioning leaked. It did NOT (radar=None verified in the rollout cond, the
+    `generate()` call, AND the audio baseline). The phase-share measurement confirms the by-ear read: SEQ free-run =
+    **19/19/62%** (quarter/8th/16th) vs real **64/32/4** — a self-generated 16th-flood with the backbone COLLAPSED, no
+    chaos knob. Audio arms on the SAME harness give sane backbone-heavy shares (controls clean). This is the MECHANISM
+    behind M1b-4's free-run 16th-AUC < 0.5 (ranks 16th frames ABOVE backbone) + precision 0.04: the head INVERTS the
+    rhythm — abandons the quarters it can't author, floods the offbeats. **Methodology win (Rule 1 + Rule 8):** AUC and
+    the critic compressed this to "worse" without NAMING it; the phase-share metric SEES the property, and the user's
+    EAR caught it first — the by-ear gate was load-bearing. ⇒ fork (A) BANKED.
 
 ## Methodology notes (reuse)
 - **Rule 5/6 (cheap real reference first):** the 06-28 boundary-snap detour first measured what REAL does (density

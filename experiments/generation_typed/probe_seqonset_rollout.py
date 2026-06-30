@@ -66,11 +66,13 @@ def _runlen(onset_row):
 
 @torch.no_grad()
 def rollout(model, head, audio_np, diff, T, tau, device, pattern_sample=False, pat_temp=1.0, tf_states=None,
-            seed_frames=0):
+            seed_frames=0, collect_logits=False):
     """Onset[t] decided by head on the rolling h-window from the INCREMENTAL decode (`_decoder_step_cached`, the
     same KV-cached path as generate()). FEEDBACK: own emitted note (free-run) OR — when `tf_states` (T,4) is given
     AND (t < seed_frames OR seed_frames==0-with-tf-only) — the REAL note (control / warm-seed). With `seed_frames>0`
-    + `tf_states`: feed REAL notes for t<seed_frames then switch to OWN (cold-start vs sustain test). Returns onset(T,)."""
+    + `tf_states`: feed REAL notes for t<seed_frames then switch to OWN (cold-start vs sustain test). Returns onset(T,);
+    with `collect_logits=True` returns (onset(T,), logits(T,)) — the head's per-frame FREE-RUN logit along the realized
+    (tau-thresholded) trajectory, for placement-quality AUC (the logit at t is conditioned on the OWN notes fed for <t)."""
     model.eval()
     audio_t = torch.from_numpy(audio_np).unsqueeze(0).to(device)
     diff_t = torch.tensor([diff], device=device)
@@ -82,12 +84,15 @@ def rollout(model, head, audio_np, diff, T, tau, device, pattern_sample=False, p
     prev_emb = model.bos.expand(1, 1, -1)
     hbuf = []                                                               # rolling list of h_t (1,d)
     onset = np.zeros(T, dtype=bool)
+    logits = np.zeros(T, dtype=np.float32) if collect_logits else None
     for t in range(T):
         pe_t = model.pos_encoding.pe[:, t:t + 1]
         h = model._decoder_step_cached(prev_emb + pe_t + cond, caches)[:, -1]   # (1,d) — SAME h as generate()
         hbuf.append(h)
         win = torch.stack(hbuf[-RF_WIN:], dim=1)                            # (1,w,d)
         ol = head(win)[:, -1]                                              # (1,) onset logit at the last position
+        if collect_logits:
+            logits[t] = float(ol.item())
         on = bool((torch.sigmoid(ol) > tau).item())
         onset[t] = on
         use_real = tf_states is not None and (seed_frames == 0 or t < seed_frames)
@@ -103,6 +108,8 @@ def rollout(model, head, audio_np, diff, T, tau, device, pattern_sample=False, p
         else:
             state = torch.zeros(1, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = model._state_emb(state.unsqueeze(1))                   # (1,1,d) AR feedback
+    if collect_logits:
+        return onset, logits
     return onset
 
 
