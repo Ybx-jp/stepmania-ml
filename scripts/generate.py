@@ -42,8 +42,8 @@ from src.generation.typed import pair_holds
 from src.generation.sm_writer import charts_to_sm
 from src.generation.playtest_export import enforce_playability
 from src.generation.radar_manifold import RadarManifold
-from src.generation.decode_defaults import (
-    CANONICAL_DECODE, calib_arg_default, parse_phase_calib, apply_phase_calib)
+from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
+from src.generation.decode_harness import conditioned_p_onset, compute_tau
 
 SR = 22050
 TIMESTEPS_PER_BEAT = 4  # 16th-note resolution — must match the parser's hop formula
@@ -177,18 +177,16 @@ def main():
     # the 16th-unlock offset (b8,b16) — applied to the onset logits BEFORE tau AND inside generate(); the two
     # MUST match or the calib floods past a tau computed without it (conditioning-mechanics §6 / generation-defaults §1a)
     phase_calib = parse_phase_calib(args.onset_phase_calib)
+    # the radar fed to BOTH tau and the decode MUST be the same one, else tau is calibrated on a different
+    # distribution than generate() decodes from (conditioning-mechanics §3). No --style -> radar=None (null token).
+    radar_arg = radar_for_gen if style_spec else None
 
-    # 5. tau from the SAME conditioned + phase-calibrated logits generate() decodes from (else conditioning/calib
-    #    floods past a tau calibrated on unconditioned p — conditioning-mechanics §6/§8)
+    # 5. tau via the shared decode harness (conditioned + guided + phase-calibrated, exactly as generate() decodes)
     with torch.no_grad():
         memory = model.encode_audio(audio)
-        ol = model.onset_logits(memory, diff, radar=radar_for_gen, style=None)[0]
-        if args.guidance != 1.0 and style_spec:
-            ol_u = model.onset_logits(memory, diff, radar=None, style=None)[0]
-            ol = ol_u + args.guidance * (ol - ol_u)
-        ol = apply_phase_calib(ol, phase_calib)  # SAME offset generate() applies internally (shared helper)
-        p_onset = torch.sigmoid(ol).cpu().numpy()
-    tau = float(np.quantile(p_onset, 1 - gen_density)) if gen_density and gen_density > 0 else 0.5
+        p_onset = conditioned_p_onset(model, memory, diff, radar=radar_arg,
+                                      guidance=args.guidance, phase_calib=phase_calib)
+    tau = compute_tau(p_onset, gen_density)
 
     # 6. generate with the CANONICAL full-stack palette + mandatory playability (mirrors export_typed_samples.py)
     gen_kwargs = dict(
@@ -203,7 +201,7 @@ def main():
         stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),
         stamina_tau=CANONICAL_DECODE["stamina_tau"], stamina_scale=CANONICAL_DECODE["stamina_scale"],
         stamina_breathe=args.stamina_breathe,
-        bpm=bpm, radar=(radar_for_gen if style_spec else None),
+        bpm=bpm, radar=radar_arg,  # SAME radar tau was computed from (conditioning-mechanics §3)
         style=None, guidance_scale=(args.guidance if style_spec else 1.0),
     )
     enforce_playability(gen_kwargs, False)  # forces hold_aware / no_jump_during_hold / no_cross_during_hold

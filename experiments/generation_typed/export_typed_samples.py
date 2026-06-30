@@ -34,8 +34,8 @@ from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
 from src.generation.typed_model import LayeredTypedChartGenerator, MOTIF_DIM
-from src.generation.decode_defaults import (
-    CANONICAL_DECODE, calib_arg_default, parse_phase_calib, apply_phase_calib)
+from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
+from src.generation.decode_harness import conditioned_p_onset, compute_tau
 from src.generation.motif_codebook import FIGURE_CLASSES
 from src.generation.typed import symbol_histogram, pair_holds
 from src.generation.sm_writer import charts_to_sm
@@ -466,21 +466,16 @@ def main():
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
         diff = torch.tensor([diff_idx], device=device)
         with torch.no_grad():
-            # tau MUST be computed from the SAME conditioned logits generate() decodes from, else radar/style
-            # conditioning (which raises p broadly) floods past a tau calibrated on the unconditioned p.
             memory = model.encode_audio(audio)
-            ol_onset = model.onset_logits(memory, diff, radar=radar_for_gen, style=style_for_gen)[0]
-            if args.guidance != 1.0 and (radar_for_gen is not None or style_for_gen is not None):
-                ol_u = model.onset_logits(memory, diff, radar=None, style=None)[0]
-                ol_onset = ol_u + args.guidance * (ol_onset - ol_u)
-            ol_onset = apply_phase_calib(ol_onset, phase_calib)  # SAME offset generate() applies internally (shared helper)
             harm_off_t = None
             if args.harm_calib > 0:  # sparse-harm-in-quiet calibrator: tau MUST see the same offset generate() uses
                 if audio_dim != 42:
                     raise SystemExit("--harm_calib needs --features highres (the 42-dim perc/harm channels).")
                 harm_off_t = torch.from_numpy(_sparse_harm_offset(audio_np, args.harm_calib, args.harm_quiet_q)).to(device)
-                ol_onset = ol_onset + harm_off_t
-            p_onset = torch.sigmoid(ol_onset).cpu().numpy()
+            # tau via the shared decode harness — conditioned + guided + phase-calibrated + harm offset, EXACTLY as
+            # generate() decodes (conditioning-mechanics §3/§6). harm_off_t is also fed to generate() below.
+            p_onset = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
+                                          guidance=args.guidance, phase_calib=phase_calib, extra_offset=harm_off_t)
         real_density = float((orig_typed != 0).any(1).mean())
         # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
         # E[density | difficulty, style], so stream-as-a-knob works and no source chart is needed) > the
@@ -493,7 +488,7 @@ def main():
             gen_density = style_density
         else:
             gen_density = real_density
-        tau = float(np.quantile(p_onset, 1 - gen_density)) if gen_density > 0 else 0.5
+        tau = compute_tau(p_onset, gen_density)
 
         gen_kwargs = dict(onset_threshold=tau, type_sample=True,
                           type_temperature=args.type_temperature,
