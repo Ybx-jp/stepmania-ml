@@ -186,6 +186,29 @@ audio-only), not a from-scratch model. CAVEAT: this is REPRESENTATION only — `
 at gen time the head reads its OWN notes and DRIFT (onset→note→`h`→onset snowball; 06-22 free-run density 0.73 vs
 real 0.18) is the lone binding gate (`diag_ar_stability`). A probe replicating the future seq-onset head MUST test
 it free-running, not just teacher-forced.
+**FORK (A) — ALIVE but UNDERTUNED 06-29; the DECODE SURFACE IS HEAD-SPECIFIC (M1b-4..9, `onset_placement_findings.md`).**
+A probe swapping the audio onset head for a candidate (e.g. the seq-onset head) must NOT reuse the deployed decode
+palette — it was co-evolved with the AUDIO head and several knobs BREAK or INVERT:
+- **`onset_threshold`/tau** — the global density quantile assumes the audio head's NON-CAUSAL calibrated `p_onset`. A
+  causal head emits concentrated in-loop logits → a fixed tau is CLIFF-y (density jumps flood↔collapse). Use a per-song
+  ADAPTIVE tau (binary-search to a target density; a quantile-of-realized-logits iteration DIVERGES). See `seqonset_decode.selfcal_tau`.
+- **`onset_phase_calib` (the 16th-unlock)** — POLARITY FLIPS. The +1.0 b16 exists because the audio head is 16th-UNDER-
+  confident; a causal note-momentum head 16th-OVER-fires (the flood) → it needs a DOWN-weight (a phase penalty), not the
+  unlock. The unlock makes the flood WORSE.
+- **stamina/breathing RESTS** — the audio head is naturally silent in quiet sections (energy-tracking); a note-momentum
+  head NEVER pauses → needs an EXPLICIT rest valve sourced from the audio head's `p_onset` energy envelope
+  (`seqonset_decode.build_rest_env`; the deployed breathing math, §8c). "Never pauses" was the loudest by-ear gap.
+- UNAFFECTED: the per-NOTE fatigue/jack governors (govern "where", on `pat_logits`) — BUT the pattern head is now OOD on
+  the new onset trajectory (it was trained on audio-head onsets) → spurious jumps.
+History (don't re-derive): M1b-4/5/6 measured the seq head ON THE AUDIO SURFACE → a 16th-flood, and I prematurely
+committed "placement-hollow / BANKED" (an experiment-design Rule 7/11 violation the user caught — three metrics on ONE
+under-tuned config). M1b-8: a phase down-weight DRAINS the flood to a real-aligned backbone (precision 0.24→0.62 ≈ the
+audio head's 0.61). M1b-9: the fair surface (rest valve + self-cal tau + inverted lever) playtested "better, still very
+linear" — a real improvement, still behind the tuned audio head. The teacher-forced 16th advantage (M1a 0.89) does NOT
+survive free-run; the cheap head reaches audio-PARITY backbone. **The fork is now STRATEGIC (right investment for this
+stage?), not "is it viable" — the path is alive + undertuned (like the audio decode when it first landed).** Open lead:
+the head may not REST genuinely but lean on a hold-release phantom note (UNTESTED). The deployed onset path (audio head
++ the `onset_phase_calib` 16th-unlock) stays the shipped placement.
 
 ### 8a. Soft JACK governor (`jack_penalty`, OLD — exporter default now 0; SUPERSEDED by 8b) — single-foot
 Accumulate `jack_exertion` over a same-panel single-run: on a repeat at gap `g` frames (≤ `jack_max_gap`=4),
