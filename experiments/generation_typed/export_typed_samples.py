@@ -34,6 +34,8 @@ from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
 from src.generation.typed_model import LayeredTypedChartGenerator, MOTIF_DIM
+from src.generation.decode_defaults import (
+    CANONICAL_DECODE, calib_arg_default, parse_phase_calib, apply_phase_calib)
 from src.generation.motif_codebook import FIGURE_CLASSES
 from src.generation.typed import symbol_histogram, pair_holds
 from src.generation.sm_writer import charts_to_sm
@@ -130,10 +132,11 @@ def parse_args():
                    help='which difficulty of the reference chart to use (name, e.g. Hard); default = hardest available')
     p.add_argument('--guidance', type=float, default=1.0,
                    help='classifier-free guidance scale; >1 amplifies the reference style (2-3 is a good range)')
-    p.add_argument('--type_temperature', type=float, default=0.4)
-    p.add_argument('--pattern_temperature', type=float, default=1.0,  # sample patterns for variety (greedy->Left/jacks)
+    # palette defaults sourced from the CANONICAL single source of truth (src/generation/decode_defaults.py)
+    p.add_argument('--type_temperature', type=float, default=CANONICAL_DECODE['type_temperature'])
+    p.add_argument('--pattern_temperature', type=float, default=CANONICAL_DECODE['pattern_temperature'],
                    help='which-panels sampling temperature; 1.0 matches real panel balance & jack rate')
-    p.add_argument('--repetition_penalty', type=float, default=1.0,
+    p.add_argument('--repetition_penalty', type=float, default=CANONICAL_DECODE['repetition_penalty'],
                    help='>1 further discourages repeating the previous note; 1.0 already matches real')
     p.add_argument('--jump_bias', type=float, default=0.0, help='pattern preference: + = more jumps, - = fewer')
     p.add_argument('--no_crossovers', action='store_true', help='forbid crossover steps (foot automaton)')
@@ -150,7 +153,7 @@ def parse_args():
                    help='[DEPRECATED — SMEARS, prefer --onset_phase_calib] phase-aware onset threshold: target note shares "quarter,8th,16th" (real ~"0.707,0.252,0.041"). '
                         'Redistributes the density budget across phases so the model\'s own 16th confidence wins 16th '
                         'slots instead of losing to 8ths (which a single threshold buries). None = single threshold.')
-    p.add_argument('--onset_phase_calib', type=str, default='0,1.0',
+    p.add_argument('--onset_phase_calib', type=str, default=calib_arg_default(),
                    help='[LIVE — the validated 16th-unlock lever; NOW DEFAULT-ON] per-phase calibration offset '
                         '"b8,b16" (logit space) for VARIABLE per-song chaos: corrects the model\'s 16th '
                         'under-confidence so the 16th count floats with the audio (chaotic songs get many, calm '
@@ -164,31 +167,31 @@ def parse_args():
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='[NICHE] metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
-    p.add_argument('--max_jack_run', type=int, default=2,
+    p.add_argument('--max_jack_run', type=int, default=CANONICAL_DECODE['max_jack_run'],
                    help='HARD 16th-jack cap: max consecutive same-panel 16th-adjacent presses. =2 (default, '
                         'user-approved) allows a justified 2-note 16th jack, hard-forbids 3+. 0/negative = off.')
     p.add_argument('--jack_penalty', type=float, default=0.0,
                    help='[DEPRECATED] OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
                         'generalizes it), so default 0 = off. Set >0 only to use the jack governor INSTEAD of fatigue. '
                         'notes/foot_exertion_findings.md')
-    p.add_argument('--fatigue_penalty', type=float, default=2.0,
+    p.add_argument('--fatigue_penalty', type=float, default=CANONICAL_DECODE['fatigue_penalty'],
                    help='PER-FOOT FATIGUE governor (lambda) — the RELEASE per-note governor (default 2.0). Two-foot '
                         'biomechanical simulator; governs jacks AND jump streams via min-exertion footing (generalizes '
                         'the jack governor; required for --stamina_ceiling). Good range 1.5-3 (matches real jack dist, '
                         'density held); 0=off. notes/governor_release_region.md')
-    p.add_argument('--fatigue_free', type=float, default=6.0,
+    p.add_argument('--fatigue_free', type=float, default=CANONICAL_DECODE['fatigue_free'],
                    help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams '
                         'gated). 6 and generate()\'s 12 are BOTH in the vouched 6-12 range (governor_release_'
                         'region.md): 12 = design-note default (barrier set high), 6 = the more-gating end this '
                         'exporter has always playtested. <6 jump-starves, >=18 silent.')
-    p.add_argument('--stamina_ceiling', type=float, default=50.0,
+    p.add_argument('--stamina_ceiling', type=float, default=CANONICAL_DECODE['stamina_ceiling'],
                    help='STAGE-2 STAMINA governor (per-region DENSITY): a slow exertion accumulator thins UPCOMING '
                         'onset density only where sustained workload is high (a CEILING, never a global dent). Needs '
                         '--fatigue_penalty (the foot model supplies the cost). DEFAULT 50 (the full-governor playtest '
                         'value; 25 thins harder toward natural density). <=0 = off. notes/foot_fatigue_design.md "STAGE 2".')
-    p.add_argument('--stamina_tau', type=float, default=8.0, help='stamina slow-decay (beats, ~several measures)')
-    p.add_argument('--stamina_scale', type=float, default=15.0, help='excess-workload scale for the tau bump (tanh)')
-    p.add_argument('--stamina_breathe', type=float, default=1.2,
+    p.add_argument('--stamina_tau', type=float, default=CANONICAL_DECODE['stamina_tau'], help='stamina slow-decay (beats, ~several measures)')
+    p.add_argument('--stamina_scale', type=float, default=CANONICAL_DECODE['stamina_scale'], help='excess-workload scale for the tau bump (tanh)')
+    p.add_argument('--stamina_breathe', type=float, default=CANONICAL_DECODE['stamina_breathe'],
                    help='[DEFAULT 1.2 = arc ON] STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high '
                         'at climaxes -> keep the spicy notes, low in verses -> rest) = a difficulty arc. Needs '
                         '--stamina_ceiling (inert without it). 0 = flat (no arc). notes/foot_fatigue_design.md "STAGE 3".')
@@ -270,8 +273,7 @@ def main():
             "   reach test, re-run with --radar_ood. See the conditioning-mechanics skill §2.")
     phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
                    if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
-    phase_calib = (tuple(float(x) for x in args.onset_phase_calib.split(','))
-                   if args.onset_phase_calib else None)  # per-phase logit offset (b8, b16) for variable chaos
+    phase_calib = parse_phase_calib(args.onset_phase_calib)  # per-phase logit offset (b8, b16) for variable chaos
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # H15 motif-knob conditioning (continuous): build a GLOBAL (1, MOTIF_DIM) vector from "name/idx=z" pairs.
@@ -471,9 +473,7 @@ def main():
             if args.guidance != 1.0 and (radar_for_gen is not None or style_for_gen is not None):
                 ol_u = model.onset_logits(memory, diff, radar=None, style=None)[0]
                 ol_onset = ol_u + args.guidance * (ol_onset - ol_u)
-            if phase_calib is not None:  # apply the SAME per-phase offset used inside generate() before tau
-                b8, b16 = phase_calib; ph = torch.arange(ol_onset.shape[0], device=device) % 4
-                ol_onset = ol_onset + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
+            ol_onset = apply_phase_calib(ol_onset, phase_calib)  # SAME offset generate() applies internally (shared helper)
             harm_off_t = None
             if args.harm_calib > 0:  # sparse-harm-in-quiet calibrator: tau MUST see the same offset generate() uses
                 if audio_dim != 42:
