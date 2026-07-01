@@ -24,14 +24,14 @@ Usage:
 
 import warnings, os
 warnings.filterwarnings('ignore'); os.environ['AUDIOREAD_LOG_LEVEL'] = 'ERROR'
-import argparse, glob, re, shutil, sys
+import argparse, re, shutil, sys
 from pathlib import Path
 import numpy as np, torch, yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
-from src.utils.data_splits import create_data_splits
+from src.utils.data_splits import split_chart_files
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
 from src.generation.typed_model import MOTIF_DIM
 from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
@@ -295,8 +295,7 @@ def main():
         FIG_ALIAS = {'sweep': 'sweep/staircase', 'candle': 'candle/cross', 'jump': 'jump/bracket'}
         figure_tok = FIGURE_CLASSES.index(FIG_ALIAS.get(args.figure, args.figure))
         print(f"figure conditioning: '{args.figure}' -> token {figure_tok} ({FIGURE_CLASSES[figure_tok]})")
-    cf = glob.glob(f"{args.data_dir}/**/*.sm", recursive=True) + glob.glob(f"{args.data_dir}/**/*.ssc", recursive=True)
-    _, val_files, _ = create_data_splits(cf, random_state=args.seed)
+    _, val_files, _ = split_chart_files(root=args.data_dir, random_state=args.seed)  # discover + seeded split (harness)
     if args.song_filter:  # restrict to named songs UP FRONT (before the pool cap) so they're loaded at all
         terms = [t.strip().lower() for t in args.song_filter.split(',') if t.strip()]
         val_files = [f for f in val_files if any(t in f.lower() for t in terms)]
