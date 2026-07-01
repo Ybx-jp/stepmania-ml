@@ -53,14 +53,27 @@ def documented_block():
     return out
 
 
+def _num_tuple(s):
+    """'0,1.0' -> (0.0, 1.0); None if any element isn't numeric. Compares VALUE, not string formatting."""
+    parts = [p.strip() for p in str(s).split(",")]
+    try:
+        return tuple(float(p) for p in parts)
+    except ValueError:
+        return None
+
+
 def matches(doc_val, live_val):
-    """Compare a documented string to a live argparse default, tolerant of float formatting / None."""
+    """Compare a documented string to a live argparse default, tolerant of float formatting / None / tuples."""
     if live_val is None:
         return doc_val.strip().lower() in ("none", "off", "")
-    try:                                            # numeric compare when both look numeric
+    try:                                            # scalar numeric compare when both look numeric
         return abs(float(doc_val) - float(live_val)) < 1e-9
     except (TypeError, ValueError):
-        return doc_val.strip() == str(live_val).strip()
+        pass
+    dt, lt = _num_tuple(doc_val), _num_tuple(live_val)   # comma-separated numeric tuple (e.g. onset_phase_calib)
+    if dt is not None and lt is not None:               # '0,1.0' == '0.0,1.0' — formatting-insensitive
+        return len(dt) == len(lt) and all(abs(a - b) < 1e-9 for a, b in zip(dt, lt))
+    return doc_val.strip() == str(live_val).strip()
 
 
 def main():

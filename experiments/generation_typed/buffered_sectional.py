@@ -11,18 +11,18 @@ an A/B playtest (groove-validated, Hard songs with real section structure).
 """
 import warnings, os
 warnings.filterwarnings('ignore'); os.environ['AUDIOREAD_LOG_LEVEL'] = 'ERROR'
-import argparse, glob, re, shutil, sys
+import argparse, re, shutil, sys
 from pathlib import Path
 import numpy as np, torch, yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT)); sys.path.insert(0, str(Path(__file__).resolve().parent))
 from src.utils.reproducibility import set_seed
-from src.utils.data_splits import create_data_splits
+from src.utils.data_splits import split_chart_files
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
-from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
 from src.data.song_selection import select_by_groove
-from src.generation.typed_model import LayeredTypedChartGenerator
+from src.generation.decode_harness import (
+    CANONICAL_DECODE, conditioned_p_onset, make_feature_extractor, load_generator)
 from src.generation.typed import pair_holds
 from src.generation.sm_writer import charts_to_sm
 from diag_transitions_freerun import foote_boundaries, responsiveness, SSM_DIMS, descriptor, W
@@ -47,26 +47,20 @@ def responsiveness_nodens(typed, bnds, rng, T):
 # less is the recurring "ran with a stale subset of settings" failure (wrong model, 41-dim features,
 # pattern_temperature 0.7, no governor) that invalidates the delta.
 GEN_CKPT = "checkpoints/gen_motif_full_fixed/best_val.pt"   # the deployed 42-dim H19 highres retrain (was gen_stage1)
-CALIB = (0.0, 1.0)                              # onset_phase_calib (b8,b16) — the 16th-unlock; tau MUST use the SAME offset
-DECODE = dict(                                  # bpm is per-song -> added at each call site (governor needs it)
-    type_sample=True, type_temperature=0.4,
-    pattern_sample=True, pattern_temperature=1.0,    # 1.0 = real panel balance & jack rate (was 0.7, the pre-governor cap)
-    repetition_penalty=1.0,
-    hold_aware=True, no_jump_during_hold=True, no_cross_during_hold=True, max_jack_run=2,  # MANDATORY playability
-    fatigue_penalty=2.0, fatigue_free=6.0,           # per-note FOOT governor (release center; §8b)
-    stamina_ceiling=50.0, stamina_tau=8.0, stamina_scale=15.0, stamina_breathe=1.2,        # per-region STAMINA+ARC (§8c)
-    onset_phase_calib=CALIB,                          # the validated 16th-unlock lever (default-on, "knee not node")
+# the canonical decode palette (single source; can no longer drift from the deployed regime) + playability.
+# bpm is per-song -> added at each call site (governor needs it).
+CALIB = CANONICAL_DECODE["onset_phase_calib"]   # the 16th-unlock; tau MUST use the SAME offset (conditioned_p_onset does)
+DECODE = dict(
+    **CANONICAL_DECODE,
+    type_sample=True, pattern_sample=True,
+    hold_aware=True, no_jump_during_hold=True, no_cross_during_hold=True,  # MANDATORY playability
 )
 
 
-def calibrated_p_onset(model, aud, diff, calib, device):
-    """sigmoid(onset logits + the SAME per-phase calib offset generate() uses) -> p for the tau quantile.
-    Applying calib to tau is MANDATORY (else the unlocked 16ths flood past a tau computed without it)."""
-    ol = model.onset_logits(model.encode_audio(aud), diff)[0]
-    if calib is not None:
-        b8, b16 = calib; ph = torch.arange(ol.shape[0], device=device) % 4
-        ol = ol + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
-    return torch.sigmoid(ol).detach().cpu().numpy()
+def calibrated_p_onset(model, aud, diff, calib, device=None):
+    """sigmoid(onset logits + the SAME per-phase calib offset the decode uses) -> p for the tau quantile.
+    Thin wrapper over the shared harness (was a hand-rolled copy of conditioned_p_onset; `device` now unused)."""
+    return conditioned_p_onset(model, model.encode_audio(aud), diff, phase_calib=calib)
 
 
 def safe_name(s):
@@ -112,16 +106,13 @@ def main():
     decode = dict(DECODE)
     if args.governor_off:                              # one labeled change: governor off, all else canonical
         decode.update(fatigue_penalty=None, stamina_ceiling=None, stamina_breathe=0.0)
-    cf = glob.glob("data/**/*.sm", recursive=True) + glob.glob("data/**/*.ssc", recursive=True)
-    _, vf, _ = create_data_splits(cf, random_state=42)
+    _, vf, _ = split_chart_files(random_state=42)  # discover data/ + seeded split (harness)
     msl = yaml.safe_load(open(PROJECT_ROOT / "config/model_config.yaml"))['classifier']['max_sequence_length']
     # 42-dim HIGHRES features (use_highres_onset=True, cache samples_v3) = what gen_motif_full_fixed expects.
-    ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
-                                                   use_metric_phase=True, use_highres_onset=True))
+    fspec = make_feature_extractor("highres")  # harness = single source of the feature ladder
     ds = StepManiaDataset(chart_files=vf[:args.num_songs * 40], audio_dir="data/", max_sequence_length=msl,
-                          feature_extractor=ext, cache_dir='cache/samples_v3')
-    gen = LayeredTypedChartGenerator(audio_dim=42, d_model=128, num_layers=4, onset_layers=2).to(device)
-    gen.load_state_dict(torch.load(GEN_CKPT, map_location=device)['model_state_dict']); gen.eval()
+                          feature_extractor=fspec.extractor, cache_dir=fspec.cache_dir)
+    gen = load_generator(GEN_CKPT, fspec.audio_dim, device)  # builds + loads (strict=False) + .eval()
     order = select_by_groove(ds, by='rich', difficulty=3)   # rich Hard songs with real structure
 
     out = Path(args.out_dir)

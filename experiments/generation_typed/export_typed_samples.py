@@ -24,16 +24,19 @@ Usage:
 
 import warnings, os
 warnings.filterwarnings('ignore'); os.environ['AUDIOREAD_LOG_LEVEL'] = 'ERROR'
-import argparse, glob, re, shutil, sys
+import argparse, re, shutil, sys
 from pathlib import Path
 import numpy as np, torch, yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
-from src.utils.data_splits import create_data_splits
+from src.utils.data_splits import split_chart_files
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
-from src.generation.typed_model import LayeredTypedChartGenerator, MOTIF_DIM
+from src.generation.typed_model import MOTIF_DIM
+from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
+from src.generation.decode_harness import (
+    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator)
 from src.generation.motif_codebook import FIGURE_CLASSES
 from src.generation.typed import symbol_histogram, pair_holds
 from src.generation.sm_writer import charts_to_sm
@@ -130,10 +133,11 @@ def parse_args():
                    help='which difficulty of the reference chart to use (name, e.g. Hard); default = hardest available')
     p.add_argument('--guidance', type=float, default=1.0,
                    help='classifier-free guidance scale; >1 amplifies the reference style (2-3 is a good range)')
-    p.add_argument('--type_temperature', type=float, default=0.4)
-    p.add_argument('--pattern_temperature', type=float, default=1.0,  # sample patterns for variety (greedy->Left/jacks)
+    # palette defaults sourced from the CANONICAL single source of truth (src/generation/decode_defaults.py)
+    p.add_argument('--type_temperature', type=float, default=CANONICAL_DECODE['type_temperature'])
+    p.add_argument('--pattern_temperature', type=float, default=CANONICAL_DECODE['pattern_temperature'],
                    help='which-panels sampling temperature; 1.0 matches real panel balance & jack rate')
-    p.add_argument('--repetition_penalty', type=float, default=1.0,
+    p.add_argument('--repetition_penalty', type=float, default=CANONICAL_DECODE['repetition_penalty'],
                    help='>1 further discourages repeating the previous note; 1.0 already matches real')
     p.add_argument('--jump_bias', type=float, default=0.0, help='pattern preference: + = more jumps, - = fewer')
     p.add_argument('--no_crossovers', action='store_true', help='forbid crossover steps (foot automaton)')
@@ -150,7 +154,7 @@ def parse_args():
                    help='[DEPRECATED — SMEARS, prefer --onset_phase_calib] phase-aware onset threshold: target note shares "quarter,8th,16th" (real ~"0.707,0.252,0.041"). '
                         'Redistributes the density budget across phases so the model\'s own 16th confidence wins 16th '
                         'slots instead of losing to 8ths (which a single threshold buries). None = single threshold.')
-    p.add_argument('--onset_phase_calib', type=str, default='0,1.0',
+    p.add_argument('--onset_phase_calib', type=str, default=calib_arg_default(),
                    help='[LIVE — the validated 16th-unlock lever; NOW DEFAULT-ON] per-phase calibration offset '
                         '"b8,b16" (logit space) for VARIABLE per-song chaos: corrects the model\'s 16th '
                         'under-confidence so the 16th count floats with the audio (chaotic songs get many, calm '
@@ -164,31 +168,31 @@ def parse_args():
     p.add_argument('--onset_phase_penalty', type=float, default=0.0,
                    help='[NICHE] metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
                         '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
-    p.add_argument('--max_jack_run', type=int, default=2,
+    p.add_argument('--max_jack_run', type=int, default=CANONICAL_DECODE['max_jack_run'],
                    help='HARD 16th-jack cap: max consecutive same-panel 16th-adjacent presses. =2 (default, '
                         'user-approved) allows a justified 2-note 16th jack, hard-forbids 3+. 0/negative = off.')
     p.add_argument('--jack_penalty', type=float, default=0.0,
                    help='[DEPRECATED] OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
                         'generalizes it), so default 0 = off. Set >0 only to use the jack governor INSTEAD of fatigue. '
                         'notes/foot_exertion_findings.md')
-    p.add_argument('--fatigue_penalty', type=float, default=2.0,
+    p.add_argument('--fatigue_penalty', type=float, default=CANONICAL_DECODE['fatigue_penalty'],
                    help='PER-FOOT FATIGUE governor (lambda) — the RELEASE per-note governor (default 2.0). Two-foot '
                         'biomechanical simulator; governs jacks AND jump streams via min-exertion footing (generalizes '
                         'the jack governor; required for --stamina_ceiling). Good range 1.5-3 (matches real jack dist, '
                         'density held); 0=off. notes/governor_release_region.md')
-    p.add_argument('--fatigue_free', type=float, default=6.0,
+    p.add_argument('--fatigue_free', type=float, default=CANONICAL_DECODE['fatigue_free'],
                    help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams '
                         'gated). 6 and generate()\'s 12 are BOTH in the vouched 6-12 range (governor_release_'
                         'region.md): 12 = design-note default (barrier set high), 6 = the more-gating end this '
                         'exporter has always playtested. <6 jump-starves, >=18 silent.')
-    p.add_argument('--stamina_ceiling', type=float, default=50.0,
+    p.add_argument('--stamina_ceiling', type=float, default=CANONICAL_DECODE['stamina_ceiling'],
                    help='STAGE-2 STAMINA governor (per-region DENSITY): a slow exertion accumulator thins UPCOMING '
                         'onset density only where sustained workload is high (a CEILING, never a global dent). Needs '
                         '--fatigue_penalty (the foot model supplies the cost). DEFAULT 50 (the full-governor playtest '
                         'value; 25 thins harder toward natural density). <=0 = off. notes/foot_fatigue_design.md "STAGE 2".')
-    p.add_argument('--stamina_tau', type=float, default=8.0, help='stamina slow-decay (beats, ~several measures)')
-    p.add_argument('--stamina_scale', type=float, default=15.0, help='excess-workload scale for the tau bump (tanh)')
-    p.add_argument('--stamina_breathe', type=float, default=1.2,
+    p.add_argument('--stamina_tau', type=float, default=CANONICAL_DECODE['stamina_tau'], help='stamina slow-decay (beats, ~several measures)')
+    p.add_argument('--stamina_scale', type=float, default=CANONICAL_DECODE['stamina_scale'], help='excess-workload scale for the tau bump (tanh)')
+    p.add_argument('--stamina_breathe', type=float, default=CANONICAL_DECODE['stamina_breathe'],
                    help='[DEFAULT 1.2 = arc ON] STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high '
                         'at climaxes -> keep the spicy notes, low in verses -> rest) = a difficulty arc. Needs '
                         '--stamina_ceiling (inert without it). 0 = flat (no arc). notes/foot_fatigue_design.md "STAGE 3".')
@@ -270,8 +274,7 @@ def main():
             "   reach test, re-run with --radar_ood. See the conditioning-mechanics skill §2.")
     phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
                    if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
-    phase_calib = (tuple(float(x) for x in args.onset_phase_calib.split(','))
-                   if args.onset_phase_calib else None)  # per-phase logit offset (b8, b16) for variable chaos
+    phase_calib = parse_phase_calib(args.onset_phase_calib)  # per-phase logit offset (b8, b16) for variable chaos
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # H15 motif-knob conditioning (continuous): build a GLOBAL (1, MOTIF_DIM) vector from "name/idx=z" pairs.
@@ -292,8 +295,7 @@ def main():
         FIG_ALIAS = {'sweep': 'sweep/staircase', 'candle': 'candle/cross', 'jump': 'jump/bracket'}
         figure_tok = FIGURE_CLASSES.index(FIG_ALIAS.get(args.figure, args.figure))
         print(f"figure conditioning: '{args.figure}' -> token {figure_tok} ({FIGURE_CLASSES[figure_tok]})")
-    cf = glob.glob(f"{args.data_dir}/**/*.sm", recursive=True) + glob.glob(f"{args.data_dir}/**/*.ssc", recursive=True)
-    _, val_files, _ = create_data_splits(cf, random_state=args.seed)
+    _, val_files, _ = split_chart_files(root=args.data_dir, random_state=args.seed)  # discover + seeded split (harness)
     if args.song_filter:  # restrict to named songs UP FRONT (before the pool cap) so they're loaded at all
         terms = [t.strip().lower() for t in args.song_filter.split(',') if t.strip()]
         val_files = [f for f in val_files if any(t in f.lower() for t in terms)]
@@ -303,25 +305,14 @@ def main():
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)['classifier']['max_sequence_length']
     # feature set: base (23-dim) vs stage1 (41-dim musical) vs highres (42-dim, + high-res onset)
-    from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
-    if args.features == 'highres':
-        feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
-                                                            use_metric_phase=True, use_highres_onset=True))
-        audio_dim, cache = 42, 'cache/samples_v3'
-    elif args.features == 'stage1':
-        feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
-        audio_dim, cache = 41, 'cache/samples_v2'
-    else:
-        feat_ext, audio_dim, cache = None, 23, 'cache/samples'
+    feat_ext, audio_dim, cache = make_feature_extractor(args.features)  # harness = single source of the feature ladder
     # widen the candidate pool when groove-selecting (parsing is cheap; audio is extracted only for the
     # chosen songs) so the selector has enough songs to find strong-on-axis ones.
     pool = args.num_songs * (40 if args.groove_select != 'none' else 8)
     ds = StepManiaDataset(chart_files=val_files[:pool], audio_dir=args.audio_dir,
                           max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=cache)
 
-    model = LayeredTypedChartGenerator(audio_dim=audio_dim, d_model=128, num_layers=4, onset_layers=2).to(device)
-    # strict=False: gen_radar/gen_layered predate style_encoder; those params stay at init (unused unless --reference)
-    model.load_state_dict(torch.load(args.checkpoint, map_location=device)['model_state_dict'], strict=False); model.eval()
+    model = load_generator(args.checkpoint, audio_dim, device)  # harness: builds + loads (strict=False) + .eval()
     critic = DifficultyCritic(device=device)
 
     # Step 3: optional reference chart -> condition every generated song on its style
@@ -464,23 +455,16 @@ def main():
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
         diff = torch.tensor([diff_idx], device=device)
         with torch.no_grad():
-            # tau MUST be computed from the SAME conditioned logits generate() decodes from, else radar/style
-            # conditioning (which raises p broadly) floods past a tau calibrated on the unconditioned p.
             memory = model.encode_audio(audio)
-            ol_onset = model.onset_logits(memory, diff, radar=radar_for_gen, style=style_for_gen)[0]
-            if args.guidance != 1.0 and (radar_for_gen is not None or style_for_gen is not None):
-                ol_u = model.onset_logits(memory, diff, radar=None, style=None)[0]
-                ol_onset = ol_u + args.guidance * (ol_onset - ol_u)
-            if phase_calib is not None:  # apply the SAME per-phase offset used inside generate() before tau
-                b8, b16 = phase_calib; ph = torch.arange(ol_onset.shape[0], device=device) % 4
-                ol_onset = ol_onset + torch.where(ph == 2, b8, torch.where((ph == 1) | (ph == 3), b16, 0.0))
             harm_off_t = None
             if args.harm_calib > 0:  # sparse-harm-in-quiet calibrator: tau MUST see the same offset generate() uses
                 if audio_dim != 42:
                     raise SystemExit("--harm_calib needs --features highres (the 42-dim perc/harm channels).")
                 harm_off_t = torch.from_numpy(_sparse_harm_offset(audio_np, args.harm_calib, args.harm_quiet_q)).to(device)
-                ol_onset = ol_onset + harm_off_t
-            p_onset = torch.sigmoid(ol_onset).cpu().numpy()
+            # tau via the shared decode harness — conditioned + guided + phase-calibrated + harm offset, EXACTLY as
+            # generate() decodes (conditioning-mechanics §3/§6). harm_off_t is also fed to generate() below.
+            p_onset = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
+                                          guidance=args.guidance, phase_calib=phase_calib, extra_offset=harm_off_t)
         real_density = float((orig_typed != 0).any(1).mean())
         # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
         # E[density | difficulty, style], so stream-as-a-knob works and no source chart is needed) > the
@@ -493,7 +477,7 @@ def main():
             gen_density = style_density
         else:
             gen_density = real_density
-        tau = float(np.quantile(p_onset, 1 - gen_density)) if gen_density > 0 else 0.5
+        tau = compute_tau(p_onset, gen_density)
 
         gen_kwargs = dict(onset_threshold=tau, type_sample=True,
                           type_temperature=args.type_temperature,

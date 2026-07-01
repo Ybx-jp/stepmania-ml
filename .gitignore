@@ -113,6 +113,9 @@ mlflow.db
 # Generated decode samples (collapsed from ~5.4k per-file entries)
 cache/samples/
 
+# scripts/generate.py default output dir (charted song folders — artifacts, not source)
+/Generated/
+
 # Internal release-prep / claims-audit working docs (kept local, not shipped in the tag)
 readme-0.1.0-audit.md
 RELEASE_CRITERIA.md

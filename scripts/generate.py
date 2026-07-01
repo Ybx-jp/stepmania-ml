@@ -34,14 +34,15 @@ import torch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
-from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
 from src.data.stepmania_parser import StepManiaChart, TimingEvent
 from src.data.dataset import DIFFICULTY_NAMES
-from src.generation.typed_model import LayeredTypedChartGenerator
 from src.generation.typed import pair_holds
 from src.generation.sm_writer import charts_to_sm
 from src.generation.playtest_export import enforce_playability
 from src.generation.radar_manifold import RadarManifold
+from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
+from src.generation.decode_harness import (
+    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator)
 
 SR = 22050
 TIMESTEPS_PER_BEAT = 4  # 16th-note resolution — must match the parser's hop formula
@@ -81,17 +82,29 @@ def parse_args():
     p.add_argument("--checkpoint", default="checkpoints/gen_motif_full_fixed/best_val.pt",
                    help="generator weights (default: the deployed 42-dim highres model)")
     p.add_argument("--bpm", type=float, default=None, help="song BPM (default: estimate it)")
-    p.add_argument("--style", default=None,
-                   help="optional groove feel, e.g. 'chaos=q0.7' (manifold conditional-fill path)")
+    p.add_argument("--style", action="append", default=None, metavar="DIM=VAL",
+                   help="optional groove feel, e.g. 'chaos=q0.7'. Multidimensional: comma-separate "
+                        "('chaos=high,freeze=low') OR repeat the flag ('--style chaos=high --style freeze=low'); "
+                        "both merge into one manifold spec.")
     p.add_argument("--guidance", type=float, default=1.5, help="CFG scale for --style (default 1.5)")
-    p.add_argument("--fatigue_penalty", type=float, default=2.0,
-                   help="per-note foot governor (shipped default 2; 0 disables)")
-    p.add_argument("--stamina_ceiling", type=float, default=None,
-                   help="opt-in Stage-2 density relief (e.g. 25); needs --fatigue_penalty")
-    p.add_argument("--stamina_breathe", type=float, default=None,
-                   help="opt-in Stage-3 difficulty arc (e.g. 1.2); needs --stamina_ceiling")
-    p.add_argument("--pattern_temperature", type=float, default=0.7,
-                   help="footwork sampling temperature (coherence range ~0.6-0.85)")
+    # ---- decode palette: defaults sourced from the CANONICAL single source of truth
+    #      (src/generation/decode_defaults.py = the same values export_typed_samples.py uses = what the user
+    #      plays). These are NOT opt-in tweaks; they ARE the deployed regime. Pass 0 to disable a governor.
+    p.add_argument("--fatigue_penalty", type=float, default=CANONICAL_DECODE["fatigue_penalty"],
+                   help="per-note foot governor (canonical 2; 0 disables)")
+    p.add_argument("--fatigue_free", type=float, default=CANONICAL_DECODE["fatigue_free"],
+                   help="foot-governor free zone before the ceiling bites (canonical 6)")
+    p.add_argument("--stamina_ceiling", type=float, default=CANONICAL_DECODE["stamina_ceiling"],
+                   help="Stage-2 per-region density relief (canonical 50; 0 disables; needs --fatigue_penalty)")
+    p.add_argument("--stamina_breathe", type=float, default=CANONICAL_DECODE["stamina_breathe"],
+                   help="Stage-3 difficulty arc — ceiling breathes with audio energy (canonical 1.2; 0 = flat)")
+    p.add_argument("--pattern_temperature", type=float, default=CANONICAL_DECODE["pattern_temperature"],
+                   help="footwork sampling temperature (canonical 1.0 — real jack/jump balance; NOT 0.7)")
+    p.add_argument("--type_temperature", type=float, default=CANONICAL_DECODE["type_temperature"],
+                   help="per-panel tap/hold/roll sampling temperature (canonical 0.4 — surfaces holds at rate)")
+    p.add_argument("--onset_phase_calib", type=str, default=calib_arg_default(),
+                   help="★ the 16th-UNLOCK 'b8,b16' (logit space): un-buries 16th-offbeats so they float with "
+                        "the audio per song. Canonical '0.0,1.0' (a KNEE: ~0.5 calm song .. 2.0 dense). '' = off.")
     p.add_argument("--max_len", type=int, default=2048,
                    help="cap on generated frames (clamped to the model's trained context, 2048)")
     p.add_argument("--seed", type=int, default=42)
@@ -122,19 +135,16 @@ def main():
     # 2. extract the 42-dim highres feature set via a stub chart (same pipeline as the dataset)
     import librosa
     duration = librosa.get_duration(path=args.audio)
-    feat_ext = AudioFeatureExtractor(AudioFeatureConfig(
-        use_chroma=True, use_hpss_onsets=True, use_metric_phase=True, use_highres_onset=True))
+    fspec = make_feature_extractor("highres")  # the deployed 42-dim space (harness = single source of the config)
     stub = build_stub_chart(args.audio, bpm, duration, hop)
-    feats = feat_ext.extract_from_chart(args.audio, stub)
+    feats = fspec.extractor.extract_from_chart(args.audio, stub)
     if feats is None:
         raise SystemExit(f"feature extraction failed for {args.audio}")
     audio_tensor = feats.get_aligned_features()  # (T, 42)
     if np.any(~np.isfinite(audio_tensor)):
         raise SystemExit("non-finite audio features — bad/corrupt audio?")
     # 3. model
-    model = LayeredTypedChartGenerator(audio_dim=42, d_model=128, num_layers=4, onset_layers=2).to(device)
-    model.load_state_dict(torch.load(ckpt, map_location=device)["model_state_dict"], strict=False)
-    model.eval()
+    model = load_generator(ckpt, fspec.audio_dim, device)  # builds + loads (strict=False) + .eval()
 
     # the model's positional encoding is a HARD context cap (trained length) — never feed more frames than that,
     # or the pos-encoding add throws a size mismatch. Longer songs are truncated to the context, with a warning.
@@ -149,34 +159,46 @@ def main():
     diff = torch.tensor([diff_idx], device=device)
 
     # 4. manifold: source-chart-free density target for this difficulty (+ optional --style feel)
+    #    --style may be repeated and/or comma-separated; merge every occurrence into ONE manifold spec
+    #    (parse_spec dedupes by dim, last value wins) so multidimensional groove works either way.
+    style_spec = ",".join(args.style) if args.style else ""
     manifold = RadarManifold.load(manifold_path)
-    tvec, tinfo = manifold.build_target(args.style or "", diff_idx)
+    tvec, tinfo = manifold.build_target(style_spec, diff_idx)
     radar_for_gen = torch.from_numpy(tvec).unsqueeze(0).to(device)
     gen_density = tinfo["density"]
     print(f"BPM {bpm:.1f} | hop {hop} | {T} frames (~{T*hop/SR:.0f}s) | {args.difficulty} | "
           f"target density {gen_density:.3f}"
-          + (f" | style '{args.style}'" if args.style else ""))
+          + (f" | style '{style_spec}'" if style_spec else ""))
 
-    # 5. tau from the SAME conditioned logits generate() decodes from (else conditioning floods past
-    #    a tau calibrated on unconditioned p — conditioning-mechanics §8)
+    # the 16th-unlock offset (b8,b16) — applied to the onset logits BEFORE tau AND inside generate(); the two
+    # MUST match or the calib floods past a tau computed without it (conditioning-mechanics §6 / generation-defaults §1a)
+    phase_calib = parse_phase_calib(args.onset_phase_calib)
+    # the radar fed to BOTH tau and the decode MUST be the same one, else tau is calibrated on a different
+    # distribution than generate() decodes from (conditioning-mechanics §3). No --style -> radar=None (null token).
+    radar_arg = radar_for_gen if style_spec else None
+
+    # 5. tau via the shared decode harness (conditioned + guided + phase-calibrated, exactly as generate() decodes)
     with torch.no_grad():
         memory = model.encode_audio(audio)
-        ol = model.onset_logits(memory, diff, radar=radar_for_gen, style=None)[0]
-        if args.guidance != 1.0 and args.style:
-            ol_u = model.onset_logits(memory, diff, radar=None, style=None)[0]
-            ol = ol_u + args.guidance * (ol - ol_u)
-        p_onset = torch.sigmoid(ol).cpu().numpy()
-    tau = float(np.quantile(p_onset, 1 - gen_density)) if gen_density and gen_density > 0 else 0.5
+        p_onset = conditioned_p_onset(model, memory, diff, radar=radar_arg,
+                                      guidance=args.guidance, phase_calib=phase_calib)
+    tau = compute_tau(p_onset, gen_density)
 
-    # 6. generate with the shipped governor default + mandatory playability
+    # 6. generate with the CANONICAL full-stack palette + mandatory playability (mirrors export_typed_samples.py)
     gen_kwargs = dict(
-        onset_threshold=tau, type_sample=True, pattern_sample=True,
-        pattern_temperature=args.pattern_temperature,
-        max_jack_run=2,
+        onset_threshold=tau,
+        type_sample=True, type_temperature=args.type_temperature,
+        pattern_sample=True, pattern_temperature=args.pattern_temperature,
+        repetition_penalty=CANONICAL_DECODE["repetition_penalty"],
+        max_jack_run=CANONICAL_DECODE["max_jack_run"],
+        onset_phase_calib=phase_calib,  # ★ the 16th-unlock (same offset baked into tau above)
         fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
-        stamina_ceiling=args.stamina_ceiling, stamina_breathe=args.stamina_breathe,
-        bpm=bpm, radar=(radar_for_gen if args.style else None),
-        style=None, guidance_scale=(args.guidance if args.style else 1.0),
+        fatigue_free=args.fatigue_free,
+        stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),
+        stamina_tau=CANONICAL_DECODE["stamina_tau"], stamina_scale=CANONICAL_DECODE["stamina_scale"],
+        stamina_breathe=args.stamina_breathe,
+        bpm=bpm, radar=radar_arg,  # SAME radar tau was computed from (conditioning-mechanics §3)
+        style=None, guidance_scale=(args.guidance if style_spec else 1.0),
     )
     enforce_playability(gen_kwargs, False)  # forces hold_aware / no_jump_during_hold / no_cross_during_hold
     with torch.no_grad():

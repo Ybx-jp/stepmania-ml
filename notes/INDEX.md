@@ -141,6 +141,13 @@ phantom note instead of genuinely resting.
 - `style_decoding.md` — sample the pattern head (greedy = always-Left).
 - `playtest_log.md` — **the subjective play-feel ledger** (standing hypotheses H1–H20, newest on top).
 - `h11_transitions_findings.md` — AR pattern head drifts through section boundaries (exposure bias).
+- **UPDATE 2026-06-30 — SINGLE-SOURCE DECODE REFACTOR (no findings file; infra):** the canonical decode palette +
+  tau pipeline + model/feature/split loaders now live in ONE place (`src/generation/decode_defaults.py` +
+  `decode_harness.py` + `src/utils/data_splits.py` helpers). `generate.py` (public CLI) had drifted stale
+  (`pattern_temperature=0.7`, no 16th-unlock, stamina off) → realigned; both it and `export_typed_samples.py` are
+  dogfooded through the harness. A new probe should IMPORT the harness, not hand-roll the tau pipeline. Verified
+  end-to-end byte-identical (migrated `buffered_sectional`). See memory `decode-harness-single-source` + the
+  `generation-defaults` skill (harness pointer added).
 
 ## CHAOS / 16th-PLACEMENT ARC
 Read roughly in this order:
