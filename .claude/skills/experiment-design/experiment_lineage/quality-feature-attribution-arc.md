@@ -1,10 +1,12 @@
 # Quality-feature attribution — lineage
 
-**Status (2026-07-01): CLOSED NEGATIVE (substantive) + two methodological WINS.** Question (user): *"which audio
-features influence the variation in QUALITY among songs applying the canonical defaults?"* Answer: **no
-interpretable audio feature drives within-difficulty generator quality** — triangulated on THREE independent quality
-instruments (realism critic; choreography distance-to-real; a purpose-built GRADED critic), plus a pre-registered
-refutation of the one apparent lead. The only robust axis is coarse difficulty/density. No open fork.
+**Status (2026-07-01): RESOLVED POSITIVE — the driver is BPM.** Question (user): *"which audio features influence
+the variation in QUALITY among songs applying the canonical defaults?"* Answer: **song TEMPO (BPM) — faster Hard
+songs → worse generations (r=−0.68, family-wise p=0.004).** ⚠️ This OVERTURNED an earlier committed "three-instrument
+NULL": that null was a NOISE-ATTENUATION artifact (a single generation's quality score is ~46% sample noise, ICC=0.54).
+The user's fix — measure/average K generations/song — revealed the signal (8-gen mean 0.90-reliable). Validated:
+not density (partial −0.75), not outlier, not a critic bias (fast HUMAN charts score fine). No open fork; mechanism
+(governor BPM-coupling vs intrinsic difficulty vs training coverage) is the follow-up.
 
 Primary notes: [`notes/quality_feature_attribution_findings.md`](../../../../notes/quality_feature_attribution_findings.md).
 Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreography), `probe_holdburst_dynamics.py`
@@ -70,7 +72,23 @@ Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreog
 - **corroborates** [[generation-defaults]] / `decode-harness-single-source` — a probe built on the harness matched
   deployment by construction; the stale `eval_taste_current.py` is the counter-example.
 
-## The graded-critic follow-up (the "recalibrated critic", done right — RESOLVED the fork)
+## THE OVERTURN — reliability/denoising revealed BPM (`probe_quality_variance.py`, the culminating step)
+The three "instruments" all scored ONE generation per song. But generation is stochastic → a single score = quality
++ big sample noise. The user's two ideas (denoise; measure within-song variance across K generations) were the fair
+test the committed null had skipped.
+- **Variance decomposition (graded critic, n=30, K=8):** within-song sd 0.67 ≈ between-song sd 0.76 → **ICC(single)
+  =0.54**; the K=8 MEAN is **0.90-reliable** (split-half +0.85). A stable per-song signal EXISTS; single-gen
+  attribution attenuated it below the family-wise floor (true r≈0.68 → ≈0.50 single → buried).
+- **Denoised attribution: BPM r=−0.68, family-wise p=0.004.** Overturning checks all pass (density-partial −0.75;
+  outlier-robust −0.55 mid-80%; **critic-bias ruled out — bpm↔m_real human-score −0.08 vs bpm↔m_gen −0.68**, so it's
+  a GENERATION defect; sign-consistent single-gen −0.15 → 8-gen −0.68). Co-drivers survive partial|bpm.
+- **Attribution correction (the arc's biggest):** a NULL is only meaningful if the TARGET is reliable. I committed a
+  three-instrument null without checking the target's ICC — it was ~46% noise. **Rule add: before "no feature
+  explains Y", measure reliability(Y)/ICC and denoise.** Mirror image of the earlier lessons (there, POSITIVES were
+  overturned by fair tests; here a NULL was). The graded critic was still essential — its dynamic range is what made
+  the within-song variance visible (the binary critic railed all K to ~0, ICC undefined).
+
+## The graded-critic follow-up (the "recalibrated critic", done right — the instrument that enabled the overturn)
 The rescale being a dead end, the genuine version = a RETRAINED GRADED critic
 (`experiments/realism_critic/train_graded_critic.py` → `checkpoints/realism_critic_graded`). Objective: GRADED
 corrupted-real ladders (panel-scramble fraction {0,.2,.45,.7,1.0} + shift {0,2,6,16}) + a WITHIN-SONG margin-ranking

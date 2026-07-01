@@ -3,21 +3,27 @@
 **Written 2026-07-01 for the next Claude.** The quality-feature-attribution thread (incl. its graded-critic
 follow-up) is now fully CLOSED; the ONE open ML thread is the seq-onset fork.
 
-## CLOSED THIS SESSION — quality-feature attribution (NULL, three instruments)
-*"which audio features drive per-song generator QUALITY under the canonical defaults?"* → **no interpretable audio
-feature drives within-difficulty quality** (only axis = coarse difficulty/density). Triangulated on THREE
-independent quality instruments (`notes/quality_feature_attribution_findings.md`, lineage
-`quality-feature-attribution-arc.md`, [[quality-feature-attribution]]): (1) the deployed realism critic (SATURATES —
-~94% of canonical Hard gens railed to "fake", so the deficit = the human chart's score); (2) the validated
-choreography distance-to-real (`trans_KL`+`hold_burst`; the one lead was a truncation artifact, refuted
-pre-registered); (3) a purpose-built GRADED critic (`experiments/realism_critic/train_graded_critic.py` →
-`checkpoints/realism_critic_graded`; retrained non-saturating — gen 0.1–0.9 band 0%→44% — STILL family-wise p=0.12).
-- **Reusable WINS:** choreography distance-to-real AND the graded critic are both NON-SATURATING quality
-  instruments — use either over the near-binary deployed critic for any fixed-difficulty quality question. A
-  "recalibrated critic" via monotonic rescale is a DEAD END (identical ranks); the graded RETRAIN was required.
+## CLOSED THIS SESSION — quality-feature attribution → the driver is BPM (overturned an earlier null)
+*"which audio features drive per-song generator QUALITY under the canonical defaults?"* → **song TEMPO (BPM):
+faster Hard songs → worse generations, r=−0.68, family-wise p=0.004** (`notes/quality_feature_attribution_findings.md`,
+lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]).
+- ⚠️ **This OVERTURNED an earlier committed "three-instrument NULL"** (that null is SUPERSEDED in the findings note).
+  The null was a NOISE-ATTENUATION artifact: a single generation's quality score is ~46% sample noise (ICC=0.54).
+  The fix (user's idea, `probe_quality_variance.py`, n=30 × K=8): the 8-generation MEAN is 0.90-reliable
+  (split-half +0.85) → BPM emerges. Validated: not density (partial −0.75), not outlier, not a critic bias
+  (fast HUMAN charts score fine, bpm↔m_real −0.08 → a GENERATION defect). **METHOD KEEPER: check a target's
+  RELIABILITY/ICC before concluding "no feature explains it" — denoise (average K samples) first.**
+- **Reusable instruments built:** choreography distance-to-real (`trans_KL`+`hold_burst`) AND a GRADED critic
+  (`experiments/realism_critic/train_graded_critic.py` → `checkpoints/realism_critic_graded`, gitignored) — both
+  NON-SATURATING (the deployed critic rails ~94% of Hard gens to "fake"; the graded critic's range is what made the
+  within-song variance visible). Use either over the deployed critic for fixed-difficulty quality questions.
+- **Open follow-up (not started):** isolate the BPM mechanism — governor BPM-coupling (`frame_hz=bpm·4/60`) vs
+  intrinsic fast-song difficulty vs training coverage. n=30 observational; a governor-off ablation on fast songs is
+  the cheap next cut.
 - Probes (import the harness, match deployment): `probe_quality_features.py` (critic; `--critic` swaps the graded
   checkpoint; holds shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`,
-  `probe_holdburst_dynamics.py`. Docs landed via **PR #55** (verify state `gh pr view 55`).
+  `probe_holdburst_dynamics.py`, `probe_quality_variance.py` (the denoiser/ICC). Docs on branch
+  `docs/quality-feature-attribution` (**PR #55** — verify `gh pr view 55`); the BPM overturn is a later commit on it.
 
 ## ACTIVE OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
 Full state in lineage `seq-onset-arc.md` + `notes/onset_placement_findings.md`. Short version: 16th placement is a

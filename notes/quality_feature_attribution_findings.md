@@ -135,7 +135,35 @@ interpretable-only best (real_density −0.365) → **p_fw=0.157**. Nothing clea
 instruments is `real_density` (−0.37, denser Hard → worse gen quality) — but n.s. AND it is the within-Hard shadow
 of the difficulty/density axis (the macro driver), not a new audio feature.
 
-## FINAL VERDICT (whole thread) — THREE instruments agree
+## ⚠️ OVERTURNED 2026-07-01 — the "null" was NOISE ATTENUATION; the driver is BPM (`probe_quality_variance.py`)
+**The three-instrument "null" below is WRONG — corrected here.** It assumed one generation per song = the song's
+quality. But generation is STOCHASTIC, so a single score is mostly sample noise. Measuring it (user's idea: K
+generations/song on the graded critic, which unlike the saturated binary critic has the range to show within-song
+spread):
+- **VARIANCE DECOMPOSITION (n=30, K=8):** within-song sd 0.67 ≈ between-song sd 0.76 → **ICC (single generation) =
+  0.54** (a single score is ~46% sampling noise). The **8-gen MEAN is 0.90-reliable** (Spearman-Brown; split-half
+  +0.85). So a stable per-song quality signal EXISTS; single-generation attribution ATTENUATED it below the
+  family-wise floor (true r≈0.68 → ≈0.50 single-gen → buried). **The earlier null was a reliability failure, not an
+  absence of signal.**
+- **DENOISED ATTRIBUTION (features vs the 8-gen-mean quality): BPM r = −0.682, family-wise p = 0.004 (SIGNAL).**
+  Faster Hard songs → worse generations. Validated against every overturning check:
+  - NOT density: bpm↔density −0.17; bpm partial|density = −0.745 (stronger); density partial|bpm = −0.45.
+  - NOT an outlier: −0.55 on the middle-80% BPM; Pearson −0.53 ≈ Spearman −0.68 (monotone).
+  - NOT a critic bias: bpm↔m_real (human chart score) = −0.08 → the critic scores fast HUMAN charts fine; only the
+    GENERATOR degrades on fast songs (bpm↔m_gen −0.68). A generation defect, localized by tempo.
+  - Sign-consistent across denoising: graded single-gen bpm −0.15 → 8-gen −0.68 (grows as attenuation predicts);
+    the earlier POSITIVE binary bpm (+0.04/+0.21) was confirmed noise (those runs were p_fw 0.67).
+  - Coherent co-drivers survive partial|bpm: spectral-centroid variability +0.30, perc/harm +0.28, onset-rate +0.23
+    ("fast, percussive, spectrally-flat songs are harder to chart").
+- **Mechanism (plausible, not isolated):** the fatigue/stamina governor is BPM-coupled (`frame_hz=bpm·4/60`) and
+  stressed hardest on fast songs; fast songs are also denser-per-second and likely less represented in training.
+  ACTIONABLE — points at fast-song generation / the governor BPM-coupling as the quality bottleneck. Caveat: n=30,
+  observational; which mechanism dominates is a follow-up.
+- **METHOD LESSON (the keeper):** before concluding "no feature explains Y", check the RELIABILITY (ICC) of Y — a
+  null on a target that is mostly sample noise is uninformative. Denoise (average K samples) or measure the ICC
+  ceiling FIRST. Artifacts: `probe_quality_variance.py`, `cache/quality_variance_hard.csv`.
+
+## SUPERSEDED — the pre-denoising "three-instrument null" (kept for the record; see the OVERTURN above)
 **No interpretable audio feature drives within-Hard generator quality** — confirmed on TWO independent quality
 **THREE independent quality instruments now agree** that no interpretable audio feature drives within-Hard
 generator quality above the family-wise noise floor: (1) the deployed realism critic (saturated → deficit is the

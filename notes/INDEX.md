@@ -63,8 +63,13 @@ phantom note instead of genuinely resting.
 
 ## Quality-feature attribution (2026-07-01 thread — see the lineage file)
 **UPDATE (2026-07-01):** "which audio features drive per-song generator QUALITY under the canonical defaults?" →
-`quality_feature_attribution_findings.md`. Answer **NULL within a difficulty**, confirmed on TWO independent quality
-instruments and a pre-registered refutation: (1) critic-DEFICIT probe (`probe_quality_features.py`) — the taste critic
+`quality_feature_attribution_findings.md`. **ANSWER = BPM/tempo (faster Hard → worse generations, r=−0.68 p_fw=0.004).**
+⚠️ This OVERTURNED an earlier committed "three-instrument NULL" — the null was NOISE ATTENUATION (a single generation's
+graded-critic score is ~46% sample noise, ICC=0.54; the 8-gen MEAN is 0.90-reliable → the signal emerges;
+`probe_quality_variance.py`). Validated: not density (partial −0.75), not outlier, not a critic bias (fast HUMAN charts
+score fine → a GENERATION defect). **Method keeper: check a target's RELIABILITY/ICC before concluding "no feature
+explains it" — denoise first.** The now-superseded null had been (mis)confirmed on TWO instruments + a pre-registered
+refutation: (1) critic-DEFICIT probe (`probe_quality_features.py`) — the taste critic
 SATURATES (~94% of canonical Hard gens railed to "fake", 0% mid-band) so the deficit is 91% the HUMAN chart's score
 (Rule 11 in the wrong term); pooled, difficulty/density dominates (Rule 12 → stratify). (2) choreography distance-to-
 real (`probe_quality_choreo.py`) — a VALIDATED, NON-SATURATING proxy (`trans_KL`+`hold_burst`); composite/trans_KL =
