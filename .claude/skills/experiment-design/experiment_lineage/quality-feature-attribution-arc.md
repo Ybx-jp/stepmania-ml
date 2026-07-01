@@ -1,10 +1,10 @@
 # Quality-feature attribution — lineage
 
-**Status (2026-07-01): CLOSED NEGATIVE (substantive) + a methodological WIN.** Question (user): *"which audio
+**Status (2026-07-01): CLOSED NEGATIVE (substantive) + two methodological WINS.** Question (user): *"which audio
 features influence the variation in QUALITY among songs applying the canonical defaults?"* Answer: **no
-interpretable audio feature drives within-difficulty generator quality** (two independent instruments agree; the
-one lead was an artifact, refuted by a pre-registered test). The only robust axis is coarse difficulty/density.
-**Active fork:** the user directed a **retrained GRADED critic** as the next instrument.
+interpretable audio feature drives within-difficulty generator quality** — triangulated on THREE independent quality
+instruments (realism critic; choreography distance-to-real; a purpose-built GRADED critic), plus a pre-registered
+refutation of the one apparent lead. The only robust axis is coarse difficulty/density. No open fork.
 
 Primary notes: [`notes/quality_feature_attribution_findings.md`](../../../../notes/quality_feature_attribution_findings.md).
 Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreography), `probe_holdburst_dynamics.py`
@@ -70,7 +70,18 @@ Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreog
 - **corroborates** [[generation-defaults]] / `decode-harness-single-source` — a probe built on the harness matched
   deployment by construction; the stale `eval_taste_current.py` is the counter-example.
 
-## Open fork
-Retrain a **GRADED critic** (ranking loss / graded-corruption targets) → re-run feature attribution on the
-holistic-realism axis. `/autotune` first. Expect a possible repeat of the null (choreography, an orthogonal
-validated axis, already returned null), but it reads a different quality dimension.
+## The graded-critic follow-up (the "recalibrated critic", done right — RESOLVED the fork)
+The rescale being a dead end, the genuine version = a RETRAINED GRADED critic
+(`experiments/realism_critic/train_graded_critic.py` → `checkpoints/realism_critic_graded`). Objective: GRADED
+corrupted-real ladders (panel-scramble fraction {0,.2,.45,.7,1.0} + shift {0,2,6,16}) + a WITHIN-SONG margin-ranking
+loss (monotone-decreasing score along each ladder; within-song pairs hold density/timing/audio fixed = the v2 taste
+isolation, now graded) + end-anchor BCE; score = logit margin; warm-started from the binary critic. **KEEPS the v2
+no-generator anti-fingerprint property.**
+- **Instrument SUCCESS:** trained ladder cleanly graded; on canonical Hard GENERATIONS the saturation is fixed —
+  gen 0.1–0.9 band **0%→44%**, `m_gen` sd 0.75. A non-saturating realism critic now exists (reusable).
+- **Substantive: STILL NULL** — family-wise p_fw=0.118 (all) / 0.157 (interpretable). Top = z-scored chroma-mean
+  cluster (same truncation-artifact type) + `real_density` −0.37 (n.s., = the difficulty-axis shadow). CAVEAT:
+  per-song ladder monotonicity ~0.35 → single-chart scores noisy (cross-critic agreement only +0.32).
+- **Conclusion:** three instruments now agree on the null; the graded retrain confirmed rather than overturned it.
+  No open fork. If ever revisited, reduce the graded critic's per-chart noise (wider/fewer ladder levels, more
+  epochs, a listwise loss) — but the substantive question is answered.

@@ -109,19 +109,51 @@ the z-score/truncation mismatch that made `d##_std` murky).
 - **Conclusion: the d##_std signal was a z-score/TRUNCATION ARTIFACT, not a real audio→choreography relationship.**
   Cleanly measured, spectral/chroma dynamics do NOT predict the hold-burst defect. The lone lead is dead.
 
-## FINAL VERDICT (whole thread)
-**No interpretable audio feature drives within-Hard generator quality** — confirmed on TWO independent quality
-instruments (the realism critic; the validated choreography distance-to-real) AND by a clean pre-registered
-follow-up that killed the only apparent lead. The single robust axis of generator-quality variation is COARSE
-chart difficulty / note density (across difficulties). Methodological keeper: **choreography distance-to-real is a
-NON-SATURATING, validated quality instrument** — use it, not the near-binary critic, for fixed-difficulty quality
-questions. A "recalibrated critic" via monotonic rescale cannot help (identical ranks); only a retrained GRADED
-critic could, and it would likely reach the same null.
+## FOLLOW-UP 2 — the GRADED critic retrain (the "recalibrated critic" done right; 2026-07-01)
+*User-directed after the choreography near-null. `experiments/realism_critic/train_graded_critic.py` → checkpoint
+`checkpoints/realism_critic_graded/best_val.pt`; re-attribution `cache/quality_features_hard_graded.csv`.*
 
-Artifacts: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreography), `probe_holdburst_dynamics.py`
-(the pre-registered refutation); CSVs `cache/quality_{features_hard,features_hard_margin,choreo_hard}.csv`,
-`cache/holdburst_dynamics.csv`. Shared infra factored into `probe_quality_features.py` (`load_val_dataset`,
-`build_songs`, `canonical_gen_typed`).
+**WHY a retrain (not a rescale):** the deployed critic saturates because it's trained with BINARY cross-entropy on
+SEVERE corrupted-real negatives (full panel-scramble / shift = 0) vs real = 1 — the objective bakes in a saturated
+boundary. A temperature/Platt rescale is monotonic → identical ranks. The fix must change the OBJECTIVE.
+
+**The graded objective (keeps the v2 anti-fingerprint win — NO generator in training):** GRADED corrupted-real
+ladders (panel-scramble FRACTION {0,.2,.45,.7,1.0} + audio-shift {0,2,6,16}) + a WITHIN-SONG MARGIN-RANKING loss
+(score must decrease monotonically along each song's ladder; within-song pairs hold density/timing/audio fixed =
+the taste isolation, now graded) + a light end-anchor BCE. Score = the logit margin; warm-started from the binary
+critic.
+
+**Instrument = SUCCESS.** Trained ladder is cleanly graded (real +1.99 → .2 +0.29 → .45 −0.95 → .7 −1.63 →
+1.0 −2.06, pooled monotone). On canonical Hard GENERATIONS the saturation is FIXED: **gen PROB in the 0.1–0.9 band
+0% → 44%**, `m_gen` sd 0.75 over [−3.55, +0.32]. A non-saturating realism critic now exists (reusable asset).
+CAVEAT: per-song ladder monotonicity only ~0.35 → single-chart scores are NOISY; cross-critic agreement (graded vs
+binary `m_gen`) is only +0.32.
+
+**Substantive answer = STILL NULL.** Family-wise permutation over 99 features: best |r|=0.455 → **p_fw=0.118**;
+interpretable-only best (real_density −0.365) → **p_fw=0.157**. Nothing clears. The top chroma-dim-MEAN cluster
+(d25/26/27) is the same z-scored/truncation-artifact type and is n.s. The only recurring interpretable hint across
+instruments is `real_density` (−0.37, denser Hard → worse gen quality) — but n.s. AND it is the within-Hard shadow
+of the difficulty/density axis (the macro driver), not a new audio feature.
+
+## FINAL VERDICT (whole thread) — THREE instruments agree
+**No interpretable audio feature drives within-Hard generator quality** — confirmed on TWO independent quality
+**THREE independent quality instruments now agree** that no interpretable audio feature drives within-Hard
+generator quality above the family-wise noise floor: (1) the deployed realism critic (saturated → deficit is the
+human score); (2) the validated choreography distance-to-real (non-saturating; the one lead refuted pre-registered);
+(3) a purpose-built GRADED critic (retrained to be non-saturating — 44% in-band on generations — STILL p_fw=0.12).
+The single robust axis of generator-quality variation is COARSE chart difficulty / note density (across
+difficulties; `real_density` is the only recurring interpretable within-Hard hint, n.s., and is that same axis's
+shadow). Methodological keepers: **choreography distance-to-real** AND **the graded critic
+(`checkpoints/realism_critic_graded`, `train_graded_critic.py`)** are both NON-SATURATING quality instruments —
+use either over the near-binary deployed critic for fixed-difficulty quality questions. A "recalibrated critic" via
+monotonic rescale cannot help (identical ranks) — the graded RETRAIN was required, and it confirmed the null rather
+than overturning it.
+
+Artifacts: `probe_quality_features.py` (critic; `--critic` swaps in the graded checkpoint), `probe_quality_choreo.py`
+(choreography), `probe_holdburst_dynamics.py` (pre-registered refutation), `experiments/realism_critic/train_graded_critic.py`
+(the graded critic). CSVs `cache/quality_{features_hard,features_hard_margin,features_hard_graded,choreo_hard}.csv`,
+`cache/holdburst_dynamics.csv`. Shared infra in `probe_quality_features.py` (`load_val_dataset`, `build_songs`,
+`canonical_gen_typed`).
 
 Cross-refs: `choreography_metrics_findings.md` (the validated battery this reuses — trans_KL + holdburst),
 `taste_critic_transfer_findings.md` (the near-binary caveat this sharpens), `conditioning-mechanics`

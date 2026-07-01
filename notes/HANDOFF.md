@@ -1,25 +1,25 @@
-# HANDOFF — ACTIVE: retrain a GRADED critic (quality-attribution closed NULL); parallel open: seq-onset fork (strategic)
+# HANDOFF — ACTIVE OPEN: seq-onset fork (strategic); quality-attribution thread CLOSED NULL (3 instruments)
 
-**Written 2026-07-01 for the next Claude.** TWO open threads; the CURRENT one is the graded-critic retrain.
+**Written 2026-07-01 for the next Claude.** The quality-feature-attribution thread (incl. its graded-critic
+follow-up) is now fully CLOSED; the ONE open ML thread is the seq-onset fork.
 
-## ACTIVE THREAD — recalibrated (GRADED) critic
-The **quality-feature attribution** thread just CLOSED NEGATIVE (2026-07-01, `notes/quality_feature_attribution_findings.md`,
-lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]): *"which audio features drive per-song
-generator QUALITY under the canonical defaults?"* → **no interpretable audio feature drives within-difficulty quality**,
-confirmed on TWO instruments (realism critic; validated choreography distance-to-real) + a pre-registered refutation of
-the one lead (a z-score/truncation artifact). Only axis = coarse difficulty/density.
-- **WIN (reusable):** choreography distance-to-real (`trans_KL`+`hold_burst`, from `choreography_metrics.py`/
-  `bipedal_metrics.py`) is the **NON-SATURATING quality instrument** — use it, not the near-binary critic, for any
-  fixed-difficulty quality question. The critic rails ~94% of canonical **Hard** generations to "fake" (0% mid-band).
-- **Why the retrain:** a "recalibrated critic" via temperature/Platt is a DEAD END — monotonic → identical Spearman
-  ranks. The genuine fix (user-directed NEXT) = a **retrained GRADED critic** (ranking loss / graded-corruption
-  targets) so it scores quality on a graded scale instead of near-binary real/fake; then re-run feature attribution
-  on the holistic-realism axis. **`/autotune` before the train run.** Likely repeats the null (choreography, an
-  orthogonal validated axis, already did) but reads a different quality dimension. STARTING NOW — nothing built yet.
-- Probes this thread (all import the harness, match deployment): `probe_quality_features.py` (critic; also holds the
-  shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`, `probe_holdburst_dynamics.py`.
+## CLOSED THIS SESSION — quality-feature attribution (NULL, three instruments)
+*"which audio features drive per-song generator QUALITY under the canonical defaults?"* → **no interpretable audio
+feature drives within-difficulty quality** (only axis = coarse difficulty/density). Triangulated on THREE
+independent quality instruments (`notes/quality_feature_attribution_findings.md`, lineage
+`quality-feature-attribution-arc.md`, [[quality-feature-attribution]]): (1) the deployed realism critic (SATURATES —
+~94% of canonical Hard gens railed to "fake", so the deficit = the human chart's score); (2) the validated
+choreography distance-to-real (`trans_KL`+`hold_burst`; the one lead was a truncation artifact, refuted
+pre-registered); (3) a purpose-built GRADED critic (`experiments/realism_critic/train_graded_critic.py` →
+`checkpoints/realism_critic_graded`; retrained non-saturating — gen 0.1–0.9 band 0%→44% — STILL family-wise p=0.12).
+- **Reusable WINS:** choreography distance-to-real AND the graded critic are both NON-SATURATING quality
+  instruments — use either over the near-binary deployed critic for any fixed-difficulty quality question. A
+  "recalibrated critic" via monotonic rescale is a DEAD END (identical ranks); the graded RETRAIN was required.
+- Probes (import the harness, match deployment): `probe_quality_features.py` (critic; `--critic` swaps the graded
+  checkpoint; holds shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`,
+  `probe_holdburst_dynamics.py`. Docs landed via **PR #55** (verify state `gh pr view 55`).
 
-## PARALLEL OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
+## ACTIVE OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
 Full state in lineage `seq-onset-arc.md` + `notes/onset_placement_findings.md`. Short version: 16th placement is a
 chart-PRIOR not in audio (wall CLOSED NEGATIVE 4 ways); the BUILD re-opened cheap (M1a: conv readout on the FROZEN
 decoder's `h` = 0.892 ≡ ceiling); M1b-3 broke the DENSITY drift (scheduled sampling). **THE DECODE SURFACE IS
@@ -64,8 +64,8 @@ plumbing. The trigger: `scripts/generate.py` (the PUBLIC CLI) had drifted to a *
 
 ## 1. WHERE WE ARE
 Deployed model = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor (canonical
-block below). BOTH threads are DIAGNOSTIC so far (no model change). The ACTIVE thread (graded-critic retrain) is
-described in the header + §2a; the parallel seq-onset thread's tooling (unchanged since 2026-06-29):
+block below). No model change this session (the quality thread was diagnostic; the graded critic is a SEPARATE
+evaluator model, not the generator). The one OPEN thread = seq-onset (§2b); its tooling (unchanged since 2026-06-29):
 - `seqonset_decode.py` — the head-appropriate surface: `build_rest_env` (audio `p_onset` energy envelope = the rest
   valve), `selfcal_tau` (binary-search best-tracking per-song density calibration; defeats the cliff).
 - `probe_seqonset_placement.py` (M1b-4, the AUC bracket + pure-TF ceiling head `cache/seqonset_tfceiling_head.pt`),
@@ -75,12 +75,12 @@ described in the header + §2a; the parallel seq-onset thread's tooling (unchang
 - `probe_seqonset_rollout.py`'s `rollout()` gained opt-in `collect_logits` / `radar` / `phase_pen` / `rest_env`.
 The SS head is saved at `cache/seqonset_ss_head.pt`.
 
-## 2a. ACTIVE THREAD — the GRADED-critic retrain (lineage `quality-feature-attribution-arc.md`)
-See the header. Deployed near-binary critic can't grade same-difficulty generations; the fix = a retrained GRADED
-critic (ranking loss / graded-corruption targets). `/autotune` before the train run; then re-run feature attribution
-(reuse `probe_quality_features.py`'s harness, swap the scorer). Nothing built yet.
+## 2a. CLOSED — quality-feature attribution + the graded-critic retrain (lineage `quality-feature-attribution-arc.md`)
+Done this session; NULL across three instruments (see the header). The graded critic
+(`checkpoints/realism_critic_graded`, `train_graded_critic.py`) exists as a reusable non-saturating instrument but
+is NOISY per-chart (ladder monotonicity ~0.35). No open action.
 
-## 2b. PARALLEL THREAD — the seq-onset STRATEGIC fork + technical leads (lineage `seq-onset-arc.md`)
+## 2b. ACTIVE OPEN THREAD — the seq-onset STRATEGIC fork + technical leads (lineage `seq-onset-arc.md`)
 The binding decision is the user's: **is the seq-onset path the right investment now?** If pursued, the technical
 leads in priority order:
 1. **Test the HOLD-RELEASE hypothesis** — does the seq head genuinely rest, or use hold-release phantom notes to avoid
