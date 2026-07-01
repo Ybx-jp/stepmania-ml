@@ -3,6 +3,7 @@ Data splitting utilities for StepMania chart dataset.
 Handles train/validation/test splits and DataLoader creation.
 """
 
+import glob
 from typing import List, Tuple, Dict, Optional
 import torch
 from torch.utils.data import DataLoader
@@ -11,6 +12,30 @@ from sklearn.model_selection import train_test_split
 from ..data.dataset import StepManiaDataset
 from ..data.stepmania_parser import StepManiaParser
 from ..data.audio_features import AudioFeatureExtractor
+
+
+def discover_chart_files(root: str = "data") -> List[str]:
+    """All .sm + .ssc chart files under `root` (recursive) — the canonical probe/eval discovery idiom
+    (was copy-pasted as `glob.glob(f"{root}/**/*.sm") + glob.glob(f"{root}/**/*.ssc")` in ~60 probes).
+
+    NOTE: glob returns FILESYSTEM order, which is not stable across machines; the returned list is NOT sorted
+    (deliberately — sorting would change which files land in val via create_data_splits below, altering every
+    probe's cited results). Reproducibility of the SPLIT rests on create_data_splits(random_state=), not on order.
+    """
+    return (glob.glob(f"{root}/**/*.sm", recursive=True)
+            + glob.glob(f"{root}/**/*.ssc", recursive=True))
+
+
+def split_chart_files(root: str = "data", random_state: int = 42,
+                      **split_kwargs) -> Tuple[List[str], List[str], List[str]]:
+    """discover_chart_files(root) + create_data_splits(random_state) -> (train, val, test).
+
+    The one-liner for the ubiquitous probe idiom `cf = glob(...); tf, vf, _ = create_data_splits(cf,
+    random_state=42)`. Drop-in for both `tf, vf, _ = split_chart_files()` and `_, vf, _ = split_chart_files()`.
+    Bit-identical to the inline form on a given machine (same glob, same seed). Extra ratio/stratify args pass
+    through to create_data_splits.
+    """
+    return create_data_splits(discover_chart_files(root), random_state=random_state, **split_kwargs)
 
 
 def create_data_splits(chart_files: List[str],

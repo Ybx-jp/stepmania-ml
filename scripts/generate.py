@@ -34,16 +34,15 @@ import torch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
-from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
 from src.data.stepmania_parser import StepManiaChart, TimingEvent
 from src.data.dataset import DIFFICULTY_NAMES
-from src.generation.typed_model import LayeredTypedChartGenerator
 from src.generation.typed import pair_holds
 from src.generation.sm_writer import charts_to_sm
 from src.generation.playtest_export import enforce_playability
 from src.generation.radar_manifold import RadarManifold
 from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
-from src.generation.decode_harness import conditioned_p_onset, compute_tau
+from src.generation.decode_harness import (
+    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator)
 
 SR = 22050
 TIMESTEPS_PER_BEAT = 4  # 16th-note resolution — must match the parser's hop formula
@@ -136,19 +135,16 @@ def main():
     # 2. extract the 42-dim highres feature set via a stub chart (same pipeline as the dataset)
     import librosa
     duration = librosa.get_duration(path=args.audio)
-    feat_ext = AudioFeatureExtractor(AudioFeatureConfig(
-        use_chroma=True, use_hpss_onsets=True, use_metric_phase=True, use_highres_onset=True))
+    fspec = make_feature_extractor("highres")  # the deployed 42-dim space (harness = single source of the config)
     stub = build_stub_chart(args.audio, bpm, duration, hop)
-    feats = feat_ext.extract_from_chart(args.audio, stub)
+    feats = fspec.extractor.extract_from_chart(args.audio, stub)
     if feats is None:
         raise SystemExit(f"feature extraction failed for {args.audio}")
     audio_tensor = feats.get_aligned_features()  # (T, 42)
     if np.any(~np.isfinite(audio_tensor)):
         raise SystemExit("non-finite audio features — bad/corrupt audio?")
     # 3. model
-    model = LayeredTypedChartGenerator(audio_dim=42, d_model=128, num_layers=4, onset_layers=2).to(device)
-    model.load_state_dict(torch.load(ckpt, map_location=device)["model_state_dict"], strict=False)
-    model.eval()
+    model = load_generator(ckpt, fspec.audio_dim, device)  # builds + loads (strict=False) + .eval()
 
     # the model's positional encoding is a HARD context cap (trained length) — never feed more frames than that,
     # or the pos-encoding add throws a size mismatch. Longer songs are truncated to the context, with a warning.
