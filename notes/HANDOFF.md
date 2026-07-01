@@ -1,48 +1,56 @@
-# HANDOFF — seq-onset fork (A) is ALIVE but UNDERTUNED; the decode surface is HEAD-SPECIFIC; the fork is now STRATEGIC
+# HANDOFF — ACTIVE OPEN: seq-onset fork (strategic); quality-attribution thread CLOSED NULL (3 instruments)
 
-**Written 2026-06-29 for the next Claude; §0 + branch state updated 2026-06-30 (single-source decode refactor —
-an infra detour, seq-onset is still THE active ML thread).** Read this whole header — it corrects a conclusion an
-earlier commit got wrong. History: the wall is CLOSED NEGATIVE (16th placement is a chart-PRIOR, not in audio — 4 ways);
-the BUILD re-opened cheap (M1a: a conv readout on the FROZEN decoder's `h` = 0.892 ≡ the note-context ceiling); M1b-3
-broke the DENSITY drift (scheduled sampling). I then measured the free-run head ON THE AUDIO HEAD'S DECODE SURFACE,
-saw a 16th-flood, and **prematurely committed "placement-hollow / BANKED" (M1b-4/5/6). The user overturned that TWICE,
-both valid experiment-design catches** — do not re-derive the bank.
+**Written 2026-07-01 for the next Claude.** The quality-feature-attribution thread (incl. its graded-critic
+follow-up) is now fully CLOSED; the ONE open ML thread is the seq-onset fork.
 
-**What's actually true (M1b-7/8/9):**
-- **The bank was one under-tuned config** (Rule 7/11 violation): the 16th-flood is the canonical chaos-smear failure,
-  and the deployed decode palette was co-evolved with the AUDIO head — it does NOT transfer to the seq head.
-- **THE DECODE SURFACE IS HEAD-SPECIFIC** (the durable finding, now in `conditioning-mechanics` §8). For a causal,
-  note-momentum onset head: **tau** (global density quantile → must be per-song ADAPTIVE; the concentrated logits make
-  a fixed tau a flood↔collapse cliff), **onset_phase_calib** (the +1.0 16th-UNLOCK polarity FLIPS to a down-weight —
-  the seq head 16th-OVER-fires), **rests** (the audio head's energy-silences are FREE; the seq head never pauses →
-  needs an EXPLICIT valve sourced from the audio `p_onset` envelope). Per-note fatigue/jack are unaffected, but the
-  pattern head is OOD on the seq onset trajectory.
-- **A head-appropriate surface was BUILT** (`seqonset_decode.py`: rest valve + binary-search self-cal tau + inverted
-  phase lever): it drains the flood to a real-aligned backbone (precision 0.24→0.62 ≈ the audio head's 0.61), the
-  chart now PAUSES (rests/1k 1.95→3.9 toward real 5.1) and sits at real density. **By-ear: "it's better! still very
-  linear."** A real improvement, still clearly behind the heavily-tuned audio head.
+## CLOSED THIS SESSION — quality-feature attribution → the driver is BPM (overturned an earlier null)
+*"which audio features drive per-song generator QUALITY under the canonical defaults?"* → **song TEMPO (BPM):
+faster Hard songs → worse generations, r=−0.68, family-wise p=0.004** (`notes/quality_feature_attribution_findings.md`,
+lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]).
+- ⚠️ **This OVERTURNED an earlier committed "three-instrument NULL"** (that null is SUPERSEDED in the findings note).
+  The null was a NOISE-ATTENUATION artifact: a single generation's quality score is ~46% sample noise (ICC=0.54).
+  The fix (user's idea, `probe_quality_variance.py`, n=30 × K=8): the 8-generation MEAN is 0.90-reliable
+  (split-half +0.85) → BPM emerges. Validated: not density (partial −0.75), not outlier, not a critic bias
+  (fast HUMAN charts score fine, bpm↔m_real −0.08 → a GENERATION defect). **METHOD KEEPER: check a target's
+  RELIABILITY/ICC before concluding "no feature explains it" — denoise (average K samples) first.**
+- **Reusable instruments built:** choreography distance-to-real (`trans_KL`+`hold_burst`) AND a GRADED critic
+  (`experiments/realism_critic/train_graded_critic.py` → `checkpoints/realism_critic_graded`, gitignored) — both
+  NON-SATURATING (the deployed critic rails ~94% of Hard gens to "fake"; the graded critic's range is what made the
+  within-song variance visible). Use either over the deployed critic for fixed-difficulty quality questions.
+- **Mechanism: GOVERNOR RULED OUT** (`probe_bpm_governor_ablation.py`, paired governor-on/off, n=30 K=6): the
+  BPM→quality slope did NOT flatten off (ON −0.47/OFF −0.67), paired spearman(bpm, q_off−q_on)=−0.04 p=0.59 → the
+  defect is INTRINSIC to the generator, upstream of the decode governor. **Open next cut (not started):** bin
+  training data by BPM (coverage) + probe the audio-onset head on fast/dense songs (the likely locus). n=30 obs.
+- Probes (import the harness, match deployment): `probe_quality_features.py` (critic; `--critic` swaps the graded
+  checkpoint; holds shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`,
+  `probe_holdburst_dynamics.py`, `probe_quality_variance.py` (the denoiser/ICC), `probe_bpm_governor_ablation.py`
+  (the mechanism ablation; `canonical_gen_typed` gained a `decode_overrides` toggle for the governor-off arm). Docs on branch
+  `docs/quality-feature-attribution` (**PR #55** — verify `gh pr view 55`); the BPM overturn is a later commit on it.
 
-**So the fork is now STRATEGIC, not technical: is the seq-onset path the right investment for THIS stage of the
-project?** It is viable-but-EARLY — undertuned and not fully understood, like the AUDIO decode when it first landed
-(which took many hours of vibe-tuning to blossom). It is NOT dead. **Sharpest UNTESTED lead (user's hypothesis):** the
-head may not have learned to REST — it may lean on a HOLD-RELEASE phantom note to stave off collapse (probe: do the
-"rests" coincide with hold tails?). Other open leads: the per-song density CLIFF (flood↔collapse bimodal); the "still
-linear" gap; a radar-DIRECT / phase-aware conditioned RETRAIN (the faithful fix — inference-time manifold is only a 3%
-echo because the seq head reads `h`, not radar directly).
+## ACTIVE OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
+Full state in lineage `seq-onset-arc.md` + `notes/onset_placement_findings.md`. Short version: 16th placement is a
+chart-PRIOR not in audio (wall CLOSED NEGATIVE 4 ways); the BUILD re-opened cheap (M1a: conv readout on the FROZEN
+decoder's `h` = 0.892 ≡ ceiling); M1b-3 broke the DENSITY drift (scheduled sampling). **THE DECODE SURFACE IS
+HEAD-SPECIFIC** (`conditioning-mechanics` §8): for the causal seq head, tau→per-song ADAPTIVE, the 16th-unlock polarity
+FLIPS to a down-weight, rests need an EXPLICIT valve. A head-appropriate surface (`seqonset_decode.py`) drains the flood
+to a real-aligned backbone that pauses; playtest **"better, still very linear."** The fork is STRATEGIC (right investment
+this stage?), not "is it viable." Sharpest untested lead: the head may lean on a HOLD-RELEASE phantom note instead of
+genuinely resting. **Do NOT re-derive the "BANKED/placement-hollow" bank — the user overturned it twice (valid catches).**
 
-**Deployed model UNCHANGED; conditioning, fatigue, and stamina confirmed INTACT and untouched** — every probe this arc
-was a diagnostic READ on a frozen decoder. The shipped generator is exactly as last played.
+**Deployed model UNCHANGED across both threads; conditioning, fatigue, stamina INTACT** — every probe was a diagnostic
+READ on a frozen decoder. The shipped generator is exactly as last played.
 
 Env: conda `stepmania-chart-gen` — call the interpreter DIRECTLY
 (`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`); **NOT `conda run`** (it buffers child stdout → empty logs
-if killed/polled).
+if killed/polled). Deployed generation ~10 s/chart; the 954-file val PARSE is ~4 min (unavoidable startup); do NOT call
+`val_ds.warm_cache()` (it eagerly extracts the whole val set, ~30 min CPU — use lazy `val_ds[i]`).
 
-**READ-FIRST (in order):** `notes/onset_placement_findings.md` (M1b-4..9 + the CORRECTED VERDICT at the top of the
-correction section) → lineage `.claude/skills/experiment-design/experiment_lineage/seq-onset-arc.md` (the full chain,
-status header = current) → `conditioning-mechanics` §8 (the head-specific decode surface) → `onset_ss_findings.md`
-(M1b-3 density break). Load-bearing skills: **experiment-design** (Rule 7 fair-version / Rule 11 isolate-the-variable —
-this session is the worked example of violating BOTH and the user catching it), **conditioning-mechanics** §8,
-**generation-defaults**.
+**READ-FIRST (in order):** for the ACTIVE thread → `notes/quality_feature_attribution_findings.md` → lineage
+`.claude/skills/experiment-design/experiment_lineage/quality-feature-attribution-arc.md` → `taste-critic-transfer` memory
+(the near-binary caveat + the graded-retrain fork). For the seq-onset thread → `notes/onset_placement_findings.md` →
+`seq-onset-arc.md` → `conditioning-mechanics` §8. Load-bearing skills: **experiment-design** (Rules 11 dynamic-range /
+12 stratify / 7-9 fair-version-before-committing — this thread is a clean worked example: 3 would-be false "drivers"
+each caught), **generation-defaults**, **conditioning-mechanics** §8.
 
 ---
 
@@ -64,7 +72,8 @@ plumbing. The trigger: `scripts/generate.py` (the PUBLIC CLI) had drifted to a *
 
 ## 1. WHERE WE ARE
 Deployed model = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor (canonical
-block below). All seq-onset work is DIAGNOSTIC (no model change). New tooling this session:
+block below). No model change this session (the quality thread was diagnostic; the graded critic is a SEPARATE
+evaluator model, not the generator). The one OPEN thread = seq-onset (§2b); its tooling (unchanged since 2026-06-29):
 - `seqonset_decode.py` — the head-appropriate surface: `build_rest_env` (audio `p_onset` energy envelope = the rest
   valve), `selfcal_tau` (binary-search best-tracking per-song density calibration; defeats the cliff).
 - `probe_seqonset_placement.py` (M1b-4, the AUC bracket + pure-TF ceiling head `cache/seqonset_tfceiling_head.pt`),
@@ -74,7 +83,12 @@ block below). All seq-onset work is DIAGNOSTIC (no model change). New tooling th
 - `probe_seqonset_rollout.py`'s `rollout()` gained opt-in `collect_logits` / `radar` / `phase_pen` / `rest_env`.
 The SS head is saved at `cache/seqonset_ss_head.pt`.
 
-## 2. THE ACTIVE THREAD — the STRATEGIC fork + the technical leads (lineage `seq-onset-arc.md`)
+## 2a. CLOSED — quality-feature attribution + the graded-critic retrain (lineage `quality-feature-attribution-arc.md`)
+Done this session; NULL across three instruments (see the header). The graded critic
+(`checkpoints/realism_critic_graded`, `train_graded_critic.py`) exists as a reusable non-saturating instrument but
+is NOISY per-chart (ladder monotonicity ~0.35). No open action.
+
+## 2b. ACTIVE OPEN THREAD — the seq-onset STRATEGIC fork + technical leads (lineage `seq-onset-arc.md`)
 The binding decision is the user's: **is the seq-onset path the right investment now?** If pursued, the technical
 leads in priority order:
 1. **Test the HOLD-RELEASE hypothesis** — does the seq head genuinely rest, or use hold-release phantom notes to avoid
