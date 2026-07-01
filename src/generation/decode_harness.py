@@ -16,6 +16,8 @@ Palette VALUES live in `decode_defaults.py` (CANONICAL_DECODE); this module is t
 
 from __future__ import annotations
 
+from collections import namedtuple
+
 import numpy as np
 
 from src.generation.decode_defaults import (  # re-exported for convenience (one import for the whole harness)
@@ -24,9 +26,27 @@ from src.generation.decode_defaults import (  # re-exported for convenience (one
 # the deployed 42-dim highres generator (generation-defaults skill §0). The single literal; probes import it.
 DEPLOYED_CHECKPOINT = "checkpoints/gen_motif_full_fixed/best_val.pt"
 
+# the ONE generator architecture (was copy-pasted in 79 probes as `d_model=128, num_layers=4, onset_layers=2`).
+MODEL_ARCH = dict(d_model=128, num_layers=4, onset_layers=2)
+
+# feature-space name -> (AudioFeatureConfig flags | None for base, audio_dim, cache_dir). The deployed model is
+# 'highres' (42-dim). 'stage1'/'base' are the legacy 41/23-dim spaces (generation-defaults skill §0). One table
+# instead of the per-probe `if features == ...` ladder that silently paired the wrong dim/cache with a checkpoint.
+_FEATURE_SPECS = {
+    "highres": (dict(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True, use_highres_onset=True),
+                42, "cache/samples_v3"),
+    "stage1":  (dict(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True), 41, "cache/samples_v2"),
+    "base":    (None, 23, "cache/samples"),
+}
+
+# what make_feature_extractor returns: the extractor (None for base), the audio_dim, and the on-disk cache dir.
+FeatureSpec = namedtuple("FeatureSpec", ["extractor", "audio_dim", "cache_dir"])
+
 __all__ = [
     "CANONICAL_DECODE", "apply_phase_calib", "calib_arg_default", "parse_phase_calib",
-    "DEPLOYED_CHECKPOINT", "conditioned_p_onset", "compute_tau", "phase_shares",
+    "DEPLOYED_CHECKPOINT", "MODEL_ARCH", "FeatureSpec",
+    "conditioned_p_onset", "compute_tau", "phase_shares",
+    "make_feature_extractor", "load_generator",
 ]
 
 
@@ -80,3 +100,35 @@ def phase_shares(onset_frames):
         return 0.0, 0.0, 0.0
     ph = idx % 4
     return float((ph == 0).mean()), float((ph == 2).mean()), float(((ph == 1) | (ph == 3)).mean())
+
+
+def make_feature_extractor(features="highres"):
+    """features name -> FeatureSpec(extractor, audio_dim, cache_dir). Matches the exporter's --features ladder.
+
+    'highres' = the deployed 42-dim space (cache/samples_v3, what gen_motif_full_fixed expects); 'stage1' = 41-dim
+    legacy (samples_v2); 'base' = 23-dim legacy (samples, extractor None). Pairing the WRONG dim/cache with a
+    checkpoint is a top cataloged failure (generation-defaults skill §0) — this table makes them move together.
+    """
+    if features not in _FEATURE_SPECS:
+        raise ValueError(f"unknown features {features!r}; valid: {list(_FEATURE_SPECS)}")
+    flags, audio_dim, cache_dir = _FEATURE_SPECS[features]
+    if flags is None:
+        return FeatureSpec(None, audio_dim, cache_dir)
+    from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig  # lazy: keep module import light
+    return FeatureSpec(AudioFeatureExtractor(AudioFeatureConfig(**flags)), audio_dim, cache_dir)
+
+
+def load_generator(checkpoint, audio_dim, device, *, arch=None, strict=False, eval_mode=True):
+    """Build LayeredTypedChartGenerator(audio_dim, **MODEL_ARCH), load the checkpoint, .eval(). Returns the model.
+
+    `strict=False` by default: legacy checkpoints (gen_radar/gen_layered) predate the style_encoder, so those
+    params stay at init (unused unless --reference) — matches how both deployed scripts load. Pass `arch=` only to
+    deviate from the one canonical architecture (`MODEL_ARCH`).
+    """
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator  # lazy: keep module import light
+    model = LayeredTypedChartGenerator(audio_dim=audio_dim, **(arch or MODEL_ARCH)).to(device)
+    model.load_state_dict(torch.load(checkpoint, map_location=device)["model_state_dict"], strict=strict)
+    if eval_mode:
+        model.eval()
+    return model

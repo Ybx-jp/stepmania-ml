@@ -33,9 +33,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
-from src.generation.typed_model import LayeredTypedChartGenerator, MOTIF_DIM
+from src.generation.typed_model import MOTIF_DIM
 from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
-from src.generation.decode_harness import conditioned_p_onset, compute_tau
+from src.generation.decode_harness import (
+    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator)
 from src.generation.motif_codebook import FIGURE_CLASSES
 from src.generation.typed import symbol_histogram, pair_holds
 from src.generation.sm_writer import charts_to_sm
@@ -305,25 +306,14 @@ def main():
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)['classifier']['max_sequence_length']
     # feature set: base (23-dim) vs stage1 (41-dim musical) vs highres (42-dim, + high-res onset)
-    from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
-    if args.features == 'highres':
-        feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
-                                                            use_metric_phase=True, use_highres_onset=True))
-        audio_dim, cache = 42, 'cache/samples_v3'
-    elif args.features == 'stage1':
-        feat_ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True))
-        audio_dim, cache = 41, 'cache/samples_v2'
-    else:
-        feat_ext, audio_dim, cache = None, 23, 'cache/samples'
+    feat_ext, audio_dim, cache = make_feature_extractor(args.features)  # harness = single source of the feature ladder
     # widen the candidate pool when groove-selecting (parsing is cheap; audio is extracted only for the
     # chosen songs) so the selector has enough songs to find strong-on-axis ones.
     pool = args.num_songs * (40 if args.groove_select != 'none' else 8)
     ds = StepManiaDataset(chart_files=val_files[:pool], audio_dir=args.audio_dir,
                           max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=cache)
 
-    model = LayeredTypedChartGenerator(audio_dim=audio_dim, d_model=128, num_layers=4, onset_layers=2).to(device)
-    # strict=False: gen_radar/gen_layered predate style_encoder; those params stay at init (unused unless --reference)
-    model.load_state_dict(torch.load(args.checkpoint, map_location=device)['model_state_dict'], strict=False); model.eval()
+    model = load_generator(args.checkpoint, audio_dim, device)  # harness: builds + loads (strict=False) + .eval()
     critic = DifficultyCritic(device=device)
 
     # Step 3: optional reference chart -> condition every generated song on its style
