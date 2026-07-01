@@ -17,12 +17,14 @@ lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]).
   (`experiments/realism_critic/train_graded_critic.py` → `checkpoints/realism_critic_graded`, gitignored) — both
   NON-SATURATING (the deployed critic rails ~94% of Hard gens to "fake"; the graded critic's range is what made the
   within-song variance visible). Use either over the deployed critic for fixed-difficulty quality questions.
-- **Open follow-up (not started):** isolate the BPM mechanism — governor BPM-coupling (`frame_hz=bpm·4/60`) vs
-  intrinsic fast-song difficulty vs training coverage. n=30 observational; a governor-off ablation on fast songs is
-  the cheap next cut.
+- **Mechanism: GOVERNOR RULED OUT** (`probe_bpm_governor_ablation.py`, paired governor-on/off, n=30 K=6): the
+  BPM→quality slope did NOT flatten off (ON −0.47/OFF −0.67), paired spearman(bpm, q_off−q_on)=−0.04 p=0.59 → the
+  defect is INTRINSIC to the generator, upstream of the decode governor. **Open next cut (not started):** bin
+  training data by BPM (coverage) + probe the audio-onset head on fast/dense songs (the likely locus). n=30 obs.
 - Probes (import the harness, match deployment): `probe_quality_features.py` (critic; `--critic` swaps the graded
   checkpoint; holds shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`,
-  `probe_holdburst_dynamics.py`, `probe_quality_variance.py` (the denoiser/ICC). Docs on branch
+  `probe_holdburst_dynamics.py`, `probe_quality_variance.py` (the denoiser/ICC), `probe_bpm_governor_ablation.py`
+  (the mechanism ablation; `canonical_gen_typed` gained a `decode_overrides` toggle for the governor-off arm). Docs on branch
   `docs/quality-feature-attribution` (**PR #55** — verify `gh pr view 55`); the BPM overturn is a later commit on it.
 
 ## ACTIVE OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)

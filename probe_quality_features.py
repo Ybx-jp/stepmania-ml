@@ -93,10 +93,14 @@ def canonical_gen(model, s, device):
     return to_binary(canonical_gen_typed(model, s, device))
 
 
-def canonical_gen_typed(model, s, device):
+def canonical_gen_typed(model, s, device, decode_overrides=None):
     """ONE canonical-default generation for song s, TYPED (holds preserved: 1 tap /2 hold-head /3 tail /4 roll).
     Faithful to export_typed_samples.py / generate() (the deployed path): no conditioning, governor on, 16th-unlock,
-    tau from the SAME conditioned+phase-calibrated onset logits. Choreography metrics need the typed chart."""
+    tau from the SAME conditioned+phase-calibrated onset logits. Choreography metrics need the typed chart.
+
+    `decode_overrides` (dict) updates the gen_kwargs AFTER the canonical palette — for a LABELED one-variable
+    ablation only (e.g. {'fatigue_penalty': None, 'stamina_ceiling': None} = governor OFF). Playability is still
+    FORCED on by enforce_playability regardless."""
     phase_calib = CANONICAL_DECODE['onset_phase_calib']           # (0.0, 1.0) the 16th-unlock
     audio = torch.from_numpy(s['audio']).unsqueeze(0).to(device)
     diff = torch.tensor([s['difficulty']], device=device)
@@ -112,6 +116,8 @@ def canonical_gen_typed(model, s, device):
               type_sample=True, pattern_sample=True,
               radar=None, style=None, motif=None, figure=None, guidance_scale=1.0,
               **CANONICAL_DECODE)   # type/pattern temp, fatigue, stamina, onset_phase_calib — the whole palette
+    if decode_overrides:
+        gk.update(decode_overrides)   # labeled one-variable ablation (e.g. governor OFF)
     enforce_playability(gk, None)  # FORCES hold_aware + no_jump/cross_during_hold on
     with torch.no_grad():
         g = model.generate(audio, diff, lengths=torch.tensor([s['T']], device=device), **gk)[0].cpu().numpy()

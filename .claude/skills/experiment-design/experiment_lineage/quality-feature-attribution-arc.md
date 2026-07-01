@@ -5,8 +5,10 @@ the variation in QUALITY among songs applying the canonical defaults?"* Answer: 
 songs → worse generations (r=−0.68, family-wise p=0.004).** ⚠️ This OVERTURNED an earlier committed "three-instrument
 NULL": that null was a NOISE-ATTENUATION artifact (a single generation's quality score is ~46% sample noise, ICC=0.54).
 The user's fix — measure/average K generations/song — revealed the signal (8-gen mean 0.90-reliable). Validated:
-not density (partial −0.75), not outlier, not a critic bias (fast HUMAN charts score fine). No open fork; mechanism
-(governor BPM-coupling vs intrinsic difficulty vs training coverage) is the follow-up.
+not density (partial −0.75), not outlier, not a critic bias (fast HUMAN charts score fine). Mechanism: the
+BPM-coupled GOVERNOR is RULED OUT (paired governor-on/off ablation, flat: spearman(bpm, q_off−q_on)=−0.04 p=0.59) →
+the defect is INTRINSIC to the generator (onset/pattern heads or training coverage). Open next cut = training-BPM
+coverage + the onset head on fast songs.
 
 Primary notes: [`notes/quality_feature_attribution_findings.md`](../../../../notes/quality_feature_attribution_findings.md).
 Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreography), `probe_holdburst_dynamics.py`
@@ -82,6 +84,11 @@ test the committed null had skipped.
 - **Denoised attribution: BPM r=−0.68, family-wise p=0.004.** Overturning checks all pass (density-partial −0.75;
   outlier-robust −0.55 mid-80%; **critic-bias ruled out — bpm↔m_real human-score −0.08 vs bpm↔m_gen −0.68**, so it's
   a GENERATION defect; sign-consistent single-gen −0.15 → 8-gen −0.68). Co-drivers survive partial|bpm.
+- **MECHANISM ablation (`probe_bpm_governor_ablation.py`, n=30, K=6/arm):** paired governor-ON vs governor-OFF
+  (`fatigue_penalty=None, stamina_ceiling=None`; one labeled variable, playability still forced). Within-song paired
+  test spearman(bpm, q_off−q_on) = −0.04 (p=0.59), slope did NOT flatten off (ON −0.47 / OFF −0.67), main effect ~0.
+  → the BPM-coupled governor is NOT the cause; the defect is INTRINSIC (upstream of decode). The within-song PAIRED
+  design was the power win — comparing the two noisy slopes alone (−0.47 vs −0.67) would have been ambiguous.
 - **Attribution correction (the arc's biggest):** a NULL is only meaningful if the TARGET is reliable. I committed a
   three-instrument null without checking the target's ICC — it was ~46% noise. **Rule add: before "no feature
   explains Y", measure reliability(Y)/ICC and denoise.** Mirror image of the earlier lessons (there, POSITIVES were

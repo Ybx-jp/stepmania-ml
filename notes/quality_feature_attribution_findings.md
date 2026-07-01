@@ -155,10 +155,16 @@ spread):
     the earlier POSITIVE binary bpm (+0.04/+0.21) was confirmed noise (those runs were p_fw 0.67).
   - Coherent co-drivers survive partial|bpm: spectral-centroid variability +0.30, perc/harm +0.28, onset-rate +0.23
     ("fast, percussive, spectrally-flat songs are harder to chart").
-- **Mechanism (plausible, not isolated):** the fatigue/stamina governor is BPM-coupled (`frame_hz=bpm·4/60`) and
-  stressed hardest on fast songs; fast songs are also denser-per-second and likely less represented in training.
-  ACTIONABLE — points at fast-song generation / the governor BPM-coupling as the quality bottleneck. Caveat: n=30,
-  observational; which mechanism dominates is a follow-up.
+- **Mechanism — GOVERNOR RULED OUT; the defect is INTRINSIC (`probe_bpm_governor_ablation.py`, n=30, K=6/arm).**
+  Paired governor-ON vs governor-OFF (`fatigue_penalty=None, stamina_ceiling=None`; one labeled variable, playability
+  still forced): the BPM→quality slope did NOT flatten governor-off (ON −0.47, OFF −0.67), the global main effect is
+  ~0 (−0.03), and the powerful within-song paired test is FLAT — **spearman(bpm, q_off−q_on) = −0.04, one-sided
+  p=0.59** (tertile Δ −0.03/+0.05/−0.11). Removing the BPM-coupled governor does NOT rescue fast songs → the
+  degradation lives UPSTREAM of the decode-time governor, in the generator itself. Candidate mechanisms now: the
+  audio-onset head's placement on dense/fast songs, the pattern head's AR quality at high density, and/or training
+  coverage of fast Hard songs. The fix is NOT governor retuning. Caveat: n=30, observational; the graded critic
+  scores taste not fatigue, so it's an imperfect judge of governor effects (but the paired design + neutral main
+  effect are consistent). Open next cut: bin training data by BPM (coverage) + probe the onset head on fast songs.
 - **METHOD LESSON (the keeper):** before concluding "no feature explains Y", check the RELIABILITY (ICC) of Y — a
   null on a target that is mostly sample noise is uninformative. Denoise (average K samples) or measure the ICC
   ceiling FIRST. Artifacts: `probe_quality_variance.py`, `cache/quality_variance_hard.csv`.
