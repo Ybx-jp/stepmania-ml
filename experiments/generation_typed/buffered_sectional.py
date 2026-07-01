@@ -11,14 +11,14 @@ an A/B playtest (groove-validated, Hard songs with real section structure).
 """
 import warnings, os
 warnings.filterwarnings('ignore'); os.environ['AUDIOREAD_LOG_LEVEL'] = 'ERROR'
-import argparse, glob, re, shutil, sys
+import argparse, re, shutil, sys
 from pathlib import Path
 import numpy as np, torch, yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT)); sys.path.insert(0, str(Path(__file__).resolve().parent))
 from src.utils.reproducibility import set_seed
-from src.utils.data_splits import create_data_splits
+from src.utils.data_splits import split_chart_files
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
 from src.data.song_selection import select_by_groove
 from src.generation.decode_harness import (
@@ -106,8 +106,7 @@ def main():
     decode = dict(DECODE)
     if args.governor_off:                              # one labeled change: governor off, all else canonical
         decode.update(fatigue_penalty=None, stamina_ceiling=None, stamina_breathe=0.0)
-    cf = glob.glob("data/**/*.sm", recursive=True) + glob.glob("data/**/*.ssc", recursive=True)
-    _, vf, _ = create_data_splits(cf, random_state=42)
+    _, vf, _ = split_chart_files(random_state=42)  # discover data/ + seeded split (harness)
     msl = yaml.safe_load(open(PROJECT_ROOT / "config/model_config.yaml"))['classifier']['max_sequence_length']
     # 42-dim HIGHRES features (use_highres_onset=True, cache samples_v3) = what gen_motif_full_fixed expects.
     fspec = make_feature_extractor("highres")  # harness = single source of the feature ladder

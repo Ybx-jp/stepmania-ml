@@ -1,7 +1,8 @@
 # HANDOFF — seq-onset fork (A) is ALIVE but UNDERTUNED; the decode surface is HEAD-SPECIFIC; the fork is now STRATEGIC
 
-**Written 2026-06-29 for the next Claude.** Read this whole header — it corrects a conclusion an earlier commit in
-THIS session got wrong. History: the wall is CLOSED NEGATIVE (16th placement is a chart-PRIOR, not in audio — 4 ways);
+**Written 2026-06-29 for the next Claude; §0 + branch state updated 2026-06-30 (single-source decode refactor —
+an infra detour, seq-onset is still THE active ML thread).** Read this whole header — it corrects a conclusion an
+earlier commit got wrong. History: the wall is CLOSED NEGATIVE (16th placement is a chart-PRIOR, not in audio — 4 ways);
 the BUILD re-opened cheap (M1a: a conv readout on the FROZEN decoder's `h` = 0.892 ≡ the note-context ceiling); M1b-3
 broke the DENSITY drift (scheduled sampling). I then measured the free-run head ON THE AUDIO HEAD'S DECODE SURFACE,
 saw a 16th-flood, and **prematurely committed "placement-hollow / BANKED" (M1b-4/5/6). The user overturned that TWICE,
@@ -44,6 +45,22 @@ this session is the worked example of violating BOTH and the user catching it), 
 **generation-defaults**.
 
 ---
+
+## 0. INFRASTRUCTURE LANDED 2026-06-30 (a detour from the seq-onset thread; deployed model UNCHANGED)
+A single-source decode refactor — the seq-onset thread above is still THE active ML thread, this is orthogonal
+plumbing. The trigger: `scripts/generate.py` (the PUBLIC CLI) had drifted to a *different, un-played* regime
+(`pattern_temperature=0.7`, stamina/breathe OFF, no `onset_phase_calib` 16th-unlock). Now:
+- `src/generation/decode_defaults.py` = `CANONICAL_DECODE` palette dict + `apply_phase_calib`/`parse_phase_calib`.
+- `src/generation/decode_harness.py` = `conditioned_p_onset` (the deployed onset→tau path), `compute_tau`,
+  `phase_shares`, `load_generator`, `make_feature_extractor`, `DEPLOYED_CHECKPOINT`, `MODEL_ARCH`.
+- `src/utils/data_splits.py` = `discover_chart_files` + `split_chart_files`.
+- `generate.py` + `export_typed_samples.py` are DOGFOODED through the harness (a NEW probe should import it, not
+  hand-roll the tau pipeline). Also fixed a latent §3 bug in generate.py (tau used a different radar than decode).
+- **Verified end-to-end BYTE-IDENTICAL:** migrated `buffered_sectional.py` produces md5-matched charts vs the
+  pre-refactor version. See memory `decode-harness-single-source` + the `generation-defaults` skill (updated).
+- ⚠️ `--style` now accepts repeated flags AND comma lists (`chaos=high,freeze=low`); but a raw float like
+  `chaos=0.7` still gets manifold-PROJECTED (chaos>~0.47 is OOD for Hard → shrunk, and it drags fixed dims like
+  freeze back toward the mean). Use on-manifold levels/quantiles to make a fixed dim stick.
 
 ## 1. WHERE WE ARE
 Deployed model = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor (canonical
@@ -120,8 +137,11 @@ guidance = 1.0
   DIVERGES on the cliff (collapsed a song to empty).
 
 ## 5. BRANCH / PR STATE
-- This refresh's docs are on **`docs/seq-onset-placement-banked`** (the branch name predates the correction; PR **#51**
-  carries the now-corrected framing). Prior seq-onset work merged via **PR #50** (merge commit `0d30ee2`). **Verify
+- **Infra refactor (§0), 2026-06-30 — a STACKED branch chain (merge bottom-up, or PR each onto its parent):**
+  `refactor/canonical-decode-single-source` → `refactor/harness-tier2-loaders` → `refactor/harness-tier3-evaldata`
+  (this refresh's HANDOFF/docs commit sits on the tier-3 tip). All pushed. **Verify live PR state via `gh pr view`.**
+- Seq-onset ML thread: docs branch **`docs/seq-onset-placement-banked`** (name predates the correction; PR **#51**
+  carries the corrected framing). Prior seq-onset work merged via **PR #50** (merge commit `0d30ee2`). **Verify
   live state: `gh pr view <n>` / `git log origin/main`** (CLAUDE.md Documentation Discipline). `main` protected by `protect-main`.
 - Gitignored (not committed): `cache/seqonset_ss_head.pt`, `cache/seqonset_tfceiling_head.pt`, `cache/seqctx_frozenh_*`,
   `outputs/seqonset_ab*`.
