@@ -60,6 +60,23 @@ rest valve + self-cal tau + inverted lever) drains the flood to a real-aligned b
 playtest "better, still very linear". **The fork is now STRATEGIC (right investment for this stage?), not "is it viable"**
 — viable-but-early, like the audio decode when it first landed. Untested lead: the head may lean on a hold-release
 phantom note instead of genuinely resting.
+
+## Quality-feature attribution (2026-07-01 thread — see the lineage file)
+**UPDATE (2026-07-01):** "which audio features drive per-song generator QUALITY under the canonical defaults?" →
+`quality_feature_attribution_findings.md`. Answer **NULL within a difficulty**, confirmed on TWO independent quality
+instruments and a pre-registered refutation: (1) critic-DEFICIT probe (`probe_quality_features.py`) — the taste critic
+SATURATES (~94% of canonical Hard gens railed to "fake", 0% mid-band) so the deficit is 91% the HUMAN chart's score
+(Rule 11 in the wrong term); pooled, difficulty/density dominates (Rule 12 → stratify). (2) choreography distance-to-
+real (`probe_quality_choreo.py`) — a VALIDATED, NON-SATURATING proxy (`trans_KL`+`hold_burst`); composite/trans_KL =
+noise floor, one target `holdburst_excess` hit p_fw=0.027. (3) that lone lead REFUTED (`probe_holdburst_dynamics.py`) —
+it was a z-score/TRUNCATION artifact; a clean pre-registered test (raw audio on the generator's window, one target/one
+hypothesis) gave composite p=0.685 (wrong sign). **WIN:** choreography distance-to-real = the go-to quality instrument
+for fixed-difficulty questions; a "recalibrated critic" via monotonic rescale is a DEAD END (identical ranks). Full
+chain = `.../experiment_lineage/quality-feature-attribution-arc.md`. NEXT (active) = retrain a GRADED critic.
+- `quality_feature_attribution_findings.md` — the whole thread: two-level answer (across difficulty = difficulty/
+  density; within = audio-feature-flat), the critic-saturation mechanism, the choreography-instrument validation, the
+  refuted lead, and why monotonic recalibration can't help.
+
 - `onset_frozenh_findings.md` — M1a: is the placement signal decodable from the FROZEN decoder's `h`? Conv readout
   hits the full 0.892 ceiling → yes, the cheap frozen-head build is greenlit on representation; DRIFT is the M1b gate.
 - `onset_seqrollout_findings.md` — M1b drift gate: free-run rollout reading `h`. The teacher-forced-trained head

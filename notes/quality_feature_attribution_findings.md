@@ -1,0 +1,129 @@
+# Which audio features drive per-song QUALITY under canonical defaults? — findings
+
+*2026-07-01. Probe: `probe_quality_features.py` (repo root). Question (user): "which audio features influence the
+variation in quality among songs applying the canonical defaults." Quality = taste/realism critic
+`checkpoints/realism_critic`; per-song target = the **generator deficit** `P(real)_human − P(real)_gen` (user's
+choice), generation replicating the DEPLOYED canonical decode via `CANONICAL_DECODE` + `decode_harness`
+(NOT `eval_taste_current.py`'s stale pattern_temp=0.7 / no-16th-unlock block). Features = 42-dim highres input
+aggregates (mean/std) + raw timbre/harmony descriptors recomputed from audio (spectral centroid, flatness,
+chroma entropy, rms) — the raw set recovers the cross-song timbre/harmony that per-song z-scoring in the cache erases.*
+
+## VERDICT (two levels)
+1. **The only axis on which generator quality genuinely varies is chart DIFFICULTY / note DENSITY, not a subtle
+   audio feature.** Across difficulties (n=8 smoke): `Spearman(difficulty, deficit)=+0.90`; the generator scores
+   **near-human on Beginner** (deficit −0.22, i.e. it BEATS the human chart) and is **railed to "fake" on
+   Medium/Hard** (deficit +0.71 / +0.77). `real_density` rides along (r=+0.86) because harder = denser. Every
+   audio feature that merely proxies difficulty (density, onset-rate, tempo) inherits a spurious deficit
+   correlation — the classic Rule-12 pooling trap.
+2. **WITHIN a fixed difficulty (Hard, n=48), NO audio feature explains generator-quality variation above the
+   multiple-testing noise floor.** Best `|Spearman(feature, m_gen)| = 0.342`, but the FAMILY-WISE permutation
+   null of the max over 99 features has mean 0.370 / 95th pct 0.472 → **family-wise p = 0.67**. The top-ranked
+   features (raw_rms_mean −0.34, MFCC/chroma dims ~0.3) are indistinguishable from chance. Neither the 42-dim
+   aggregates nor the raw timbre/harmony descriptors carry within-Hard quality signal.
+
+## WHY within-Hard is null: the taste critic SATURATES on canonical Hard generations (the binding finding)
+- **47/48 (94%) of canonical Hard generations sit on the critic's LOW rail** (P_gen mean 0.036, only 1 escaped
+  >0.1 — "LOVE" at 0.93, a fluke). "gen scores in the discriminating band 0.1–0.9: **0%** (k=3) / 6% (k=1)."
+- Therefore the **deficit is 91% correlated with P_real and 81% of its variance is the HUMAN chart's score** —
+  the user's chosen target measures "which human reference charts the critic likes," NOT where the generator
+  succeeds. (This is a Rule-11 dynamic-range failure at the level that matters: the *deficit* varies, but its
+  variance is in the wrong term.)
+- **The logit-MARGIN rescue does not help a rank metric.** `P(real)=sigmoid(logit_real−logit_fake)` is a strictly
+  monotonic transform of the margin ⇒ identical Spearman ranks ⇒ identical feature correlations (verified: the two
+  ranking tables are byte-identical). The margin confirms the saturation is GENUINE (not float-precision ties),
+  not that hidden signal exists. m_gen sd=1.6 in logit space gives *some* ordering, but it's the same order as the
+  saturated probability and is not audio-feature-explained (the permutation test above).
+
+## Interpretation
+The taste/realism critic, at fixed difficulty, is **not a usable per-song quality instrument** for this question:
+it rates essentially all canonical same-difficulty generations as uniformly "fake," so there is barely any
+generator-quality variation for any audio feature to explain. This corroborates and SHARPENS
+`taste_critic_transfer_findings.md`'s "near-binary separator, not a graded scorer" — on Hard specifically it is
+~100% railed (0% mid-band), worse than the pooled 14–30% mid-band reported there. Attribution (experiment-design
+HARNESS→DATA→MODEL): the null is a **measurement-instrument limitation**, not a demonstrated absence of
+audio-feature effects on quality.
+
+## What would actually answer the question (untested; state-what-would-change-the-conclusion)
+A quality signal with **dynamic range among same-difficulty generations** is the prerequisite:
+- **By-ear ratings** (the project's binding gate) as the target — but tiny N.
+- A **recalibrated / low-end-spread critic** (temperature-rescale; the exact need `taste_critic_transfer` flagged
+  for best-of-N), or a non-saturating proxy (distance-to-real-distribution, choreography metrics).
+- Re-ask ACROSS difficulty with difficulty **partialled out** — but the smoke suggests P_gen variance ≈ difficulty,
+  so partialling likely returns the same railed residual.
+
+## Method notes / reproduction
+- `probe_quality_features.py --data_dir data/ --audio_dir data/ --difficulty 3 --n 48 --k 1` (within-Hard).
+  Drop `--difficulty` for the pooled/across-difficulty view. CSVs: `cache/quality_features_hard{,_margin}.csv`,
+  `cache/quality_features_smoke.csv`.
+- **k=3 → k=1 is safe here:** within-song sampling sd of P_gen = 0.016 (the near-binary critic is stable per song).
+- Gotchas fixed while building (both cost a run): (1) `val_ds.warm_cache()` eagerly extracts the WHOLE val set
+  (~30 min CPU) — dropped; lazy per-song `val_ds[i]` extraction, safe since we index the full val_ds in order
+  (no subset/--match cache aliasing, [[dataset-cache-footgun]]). (2) `librosa.feature.chroma_stft` SEGFAULTS via
+  `estimate_tuning`→`piptrack` numba gufunc — pass `tuning=0.0` (matches `audio_features.py`'s own call).
+- Canonical-decode fidelity confirmed: generation used `gen_motif_full_fixed` (42-dim), pattern_temp 1.0, fatigue
+  2/free 6, stamina 50/breathe 1.2, the (0,1.0) 16th-unlock, tau from the conditioned+phase-calibrated onset
+  logits, playability forced — via `CANONICAL_DECODE`/`decode_harness`, per `generation-defaults`.
+
+## FOLLOW-UP — choreography distance-to-real as a NON-SATURATING quality proxy (2026-07-01)
+*Probe `probe_quality_choreo.py` (Hard, n=64). Swaps the saturated critic for a GRADED choreography
+distance-to-real from the validated battery (`choreography_metrics_findings.md`): trans_KL (panel-transition
+matrix KL to POOLED real Hard), holdburst_excess (the fast one-foot-cross-during-hold rate — the ONE metric shown
+to PREDICT a play-feel complaint, B4U), panel_TV, + a z-summed composite. Generation via the shared canonical
+TYPED helpers in `probe_quality_features.py`.*
+
+**Instrument = SUCCESS (the durable methodological win).** Unlike the critic, the proxy is NON-saturating and
+VALIDATED: composite sd 1.77 (range −3.3→+4.1); it DISCRIMINATES gen from real on trans_KL (gen 0.158 > real 0.120)
+and holdburst (gen 0.064 > real ~0), reproducing "generator footwork ≈ random-shuffle + extra one-foot-during-hold
+bursts." (panel_TV did NOT discriminate — gen 0.050 = real 0.050 — correctly dropped.) **Choreography distance-to-
+real is the right quality instrument for this question; use it over the critic at fixed difficulty.**
+
+**Substantive answer = still essentially NULL, with ONE marginal lead.**
+- `choreo_composite` and `trans_KL`: family-wise permutation p_fw = 0.31 / 0.36 → **noise floor** (no audio feature).
+- `holdburst_excess`: best |r| = 0.437 (d31_std, a chroma-dim time-variability), family-wise p_fw = **0.027 → SIGNAL**
+  — BUT: (a) I tested 3 targets, so ≈0.08 after that correction — MARGINAL; (b) the signal lives ENTIRELY in the
+  `d##_std` block (z-scored spectral/chroma std over the truncated window — a truncation-sensitive, murky quantity);
+  the INTERPRETABLE descriptors (bpm, density, perc/harm, centroid/flatness/rms/chroma-entropy) are FLAT
+  (family-wise p_fw = 0.51, best = real_density +0.25). The hit is robust to density (partial = −0.41) and not
+  outlier-driven (−0.31 after dropping top-10% holdburst), but is not a clean audio property.
+- Direction (if real): more (windowed) spectral/chroma time-variability → LESS hold-burst defect. Speculative.
+
+**Verdict:** no INTERPRETABLE audio feature drives within-Hard generator quality (choreography OR critic axis) above
+the family-wise noise floor. The lone marginal lead is audio spectral/chroma DYNAMICS vs the hold-burst defect —
+a weak hypothesis, not a finding.
+
+**"Recalibrated critic" (the planned fallback) is a DEAD END as a rescale.** Temperature/Platt scaling is MONOTONIC
+→ identical Spearman ranks → identical feature correlations (same invariance already shown for the logit margin,
+§ above). Only a RETRAINED graded critic (ranking loss / graded-corruption targets) could differ — a real training
+effort, and choreography (a validated orthogonal quality axis) already returned near-null, so expect the same.
+
+### The hold-burst lead — REFUTED by a pre-registered clean test (`probe_holdburst_dynamics.py`, n=64)
+The one family-wise-significant hit above (holdburst_excess vs the `d##_std` block, best r=−0.44) was tested
+properly: ONE target (the already-computed `g_holdburst_excess`, reused — no regeneration), ONE directional
+hypothesis ("audio spectral/chroma/timbral DYNAMICS → NEGATIVE → fewer awkward held-note bursts"), a SMALL
+pre-specified interpretable feature set (spectral flux, chroma flux, spectral-contrast temporal std, MFCC flux,
+centroid std) recomputed from RAW audio on the **first-T-frames window the generator actually saw** (de-artifacts
+the z-score/truncation mismatch that made `d##_std` murky).
+- **Primary composite dynamics index: r = +0.059, one-sided (negative) permutation p = 0.685 → does NOT support H**
+  (not even the hypothesized sign). Family-wise over the 6 tests: best |r| = 0.219 (speccontrast_std, WRONG sign
+  vs the artifact), p_fw = 0.29 → not significant.
+- **Conclusion: the d##_std signal was a z-score/TRUNCATION ARTIFACT, not a real audio→choreography relationship.**
+  Cleanly measured, spectral/chroma dynamics do NOT predict the hold-burst defect. The lone lead is dead.
+
+## FINAL VERDICT (whole thread)
+**No interpretable audio feature drives within-Hard generator quality** — confirmed on TWO independent quality
+instruments (the realism critic; the validated choreography distance-to-real) AND by a clean pre-registered
+follow-up that killed the only apparent lead. The single robust axis of generator-quality variation is COARSE
+chart difficulty / note density (across difficulties). Methodological keeper: **choreography distance-to-real is a
+NON-SATURATING, validated quality instrument** — use it, not the near-binary critic, for fixed-difficulty quality
+questions. A "recalibrated critic" via monotonic rescale cannot help (identical ranks); only a retrained GRADED
+critic could, and it would likely reach the same null.
+
+Artifacts: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreography), `probe_holdburst_dynamics.py`
+(the pre-registered refutation); CSVs `cache/quality_{features_hard,features_hard_margin,choreo_hard}.csv`,
+`cache/holdburst_dynamics.csv`. Shared infra factored into `probe_quality_features.py` (`load_val_dataset`,
+`build_songs`, `canonical_gen_typed`).
+
+Cross-refs: `choreography_metrics_findings.md` (the validated battery this reuses — trans_KL + holdburst),
+`taste_critic_transfer_findings.md` (the near-binary caveat this sharpens), `conditioning-mechanics`
+§ + `generation-defaults` (the decode fidelity), experiment-design Rules 1/11/12 (the traps this probe walked
+through and cleared).

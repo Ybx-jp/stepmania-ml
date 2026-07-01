@@ -10,6 +10,7 @@ Status legend: ✅ written · 🟡 stub (notes exist, lineage file pending) · �
 
 | thread | file | status | one-line | primary notes / memory |
 |---|---|---|---|---|
+| **Quality-feature attribution** | [quality-feature-attribution-arc.md](quality-feature-attribution-arc.md) | ✅ | "which audio features drive per-song generator QUALITY under canonical defaults?" → NULL within a difficulty (2 instruments agree; the one lead = a truncation artifact, refuted pre-registered). WIN: choreography distance-to-real = the NON-SATURATING quality instrument (critic rails ~94% of Hard gens); monotonic recalibration is a dead end. Fork: retrain a GRADED critic | quality_feature_attribution_findings · [[quality-feature-attribution]] · depends-on taste-critic |
 | **Onset phrasing & sparse-harm calibrator** | [onset-phrasing-calibrator-arc.md](onset-phrasing-calibrator-arc.md) | ✅ | mis-attributed PATTERN→true ONSET phrasing; diagnostic + sparse-harm calibrator (awaiting ears) | arc_lag / h11_rerun / phrasing_coherence / onset_alloc / cache_index_bug · [[onset-phrase-calibrator]] |
 | Biomechanical governor (foot fatigue / stamina / breathe arc) | _governor-arc.md_ | 🟡 | decode-time per-note foot model + per-region stamina + breathing density arc; SHIPPED PR#41 | foot_fatigue_design / governor_release_region · [[fatigue-governor]] |
 | Jack-heaviness decomposition | _jack-heaviness-arc.md_ | 🟡 | jacks = pattern head (proximate, temp↑) + onset blocky rhythm (contributing) | jack_heaviness_findings / foot_physics_baseline · [[jack-heaviness]] |

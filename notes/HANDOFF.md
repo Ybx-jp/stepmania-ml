@@ -1,48 +1,48 @@
-# HANDOFF — seq-onset fork (A) is ALIVE but UNDERTUNED; the decode surface is HEAD-SPECIFIC; the fork is now STRATEGIC
+# HANDOFF — ACTIVE: retrain a GRADED critic (quality-attribution closed NULL); parallel open: seq-onset fork (strategic)
 
-**Written 2026-06-29 for the next Claude; §0 + branch state updated 2026-06-30 (single-source decode refactor —
-an infra detour, seq-onset is still THE active ML thread).** Read this whole header — it corrects a conclusion an
-earlier commit got wrong. History: the wall is CLOSED NEGATIVE (16th placement is a chart-PRIOR, not in audio — 4 ways);
-the BUILD re-opened cheap (M1a: a conv readout on the FROZEN decoder's `h` = 0.892 ≡ the note-context ceiling); M1b-3
-broke the DENSITY drift (scheduled sampling). I then measured the free-run head ON THE AUDIO HEAD'S DECODE SURFACE,
-saw a 16th-flood, and **prematurely committed "placement-hollow / BANKED" (M1b-4/5/6). The user overturned that TWICE,
-both valid experiment-design catches** — do not re-derive the bank.
+**Written 2026-07-01 for the next Claude.** TWO open threads; the CURRENT one is the graded-critic retrain.
 
-**What's actually true (M1b-7/8/9):**
-- **The bank was one under-tuned config** (Rule 7/11 violation): the 16th-flood is the canonical chaos-smear failure,
-  and the deployed decode palette was co-evolved with the AUDIO head — it does NOT transfer to the seq head.
-- **THE DECODE SURFACE IS HEAD-SPECIFIC** (the durable finding, now in `conditioning-mechanics` §8). For a causal,
-  note-momentum onset head: **tau** (global density quantile → must be per-song ADAPTIVE; the concentrated logits make
-  a fixed tau a flood↔collapse cliff), **onset_phase_calib** (the +1.0 16th-UNLOCK polarity FLIPS to a down-weight —
-  the seq head 16th-OVER-fires), **rests** (the audio head's energy-silences are FREE; the seq head never pauses →
-  needs an EXPLICIT valve sourced from the audio `p_onset` envelope). Per-note fatigue/jack are unaffected, but the
-  pattern head is OOD on the seq onset trajectory.
-- **A head-appropriate surface was BUILT** (`seqonset_decode.py`: rest valve + binary-search self-cal tau + inverted
-  phase lever): it drains the flood to a real-aligned backbone (precision 0.24→0.62 ≈ the audio head's 0.61), the
-  chart now PAUSES (rests/1k 1.95→3.9 toward real 5.1) and sits at real density. **By-ear: "it's better! still very
-  linear."** A real improvement, still clearly behind the heavily-tuned audio head.
+## ACTIVE THREAD — recalibrated (GRADED) critic
+The **quality-feature attribution** thread just CLOSED NEGATIVE (2026-07-01, `notes/quality_feature_attribution_findings.md`,
+lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]): *"which audio features drive per-song
+generator QUALITY under the canonical defaults?"* → **no interpretable audio feature drives within-difficulty quality**,
+confirmed on TWO instruments (realism critic; validated choreography distance-to-real) + a pre-registered refutation of
+the one lead (a z-score/truncation artifact). Only axis = coarse difficulty/density.
+- **WIN (reusable):** choreography distance-to-real (`trans_KL`+`hold_burst`, from `choreography_metrics.py`/
+  `bipedal_metrics.py`) is the **NON-SATURATING quality instrument** — use it, not the near-binary critic, for any
+  fixed-difficulty quality question. The critic rails ~94% of canonical **Hard** generations to "fake" (0% mid-band).
+- **Why the retrain:** a "recalibrated critic" via temperature/Platt is a DEAD END — monotonic → identical Spearman
+  ranks. The genuine fix (user-directed NEXT) = a **retrained GRADED critic** (ranking loss / graded-corruption
+  targets) so it scores quality on a graded scale instead of near-binary real/fake; then re-run feature attribution
+  on the holistic-realism axis. **`/autotune` before the train run.** Likely repeats the null (choreography, an
+  orthogonal validated axis, already did) but reads a different quality dimension. STARTING NOW — nothing built yet.
+- Probes this thread (all import the harness, match deployment): `probe_quality_features.py` (critic; also holds the
+  shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`, `probe_holdburst_dynamics.py`.
 
-**So the fork is now STRATEGIC, not technical: is the seq-onset path the right investment for THIS stage of the
-project?** It is viable-but-EARLY — undertuned and not fully understood, like the AUDIO decode when it first landed
-(which took many hours of vibe-tuning to blossom). It is NOT dead. **Sharpest UNTESTED lead (user's hypothesis):** the
-head may not have learned to REST — it may lean on a HOLD-RELEASE phantom note to stave off collapse (probe: do the
-"rests" coincide with hold tails?). Other open leads: the per-song density CLIFF (flood↔collapse bimodal); the "still
-linear" gap; a radar-DIRECT / phase-aware conditioned RETRAIN (the faithful fix — inference-time manifold is only a 3%
-echo because the seq head reads `h`, not radar directly).
+## PARALLEL OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
+Full state in lineage `seq-onset-arc.md` + `notes/onset_placement_findings.md`. Short version: 16th placement is a
+chart-PRIOR not in audio (wall CLOSED NEGATIVE 4 ways); the BUILD re-opened cheap (M1a: conv readout on the FROZEN
+decoder's `h` = 0.892 ≡ ceiling); M1b-3 broke the DENSITY drift (scheduled sampling). **THE DECODE SURFACE IS
+HEAD-SPECIFIC** (`conditioning-mechanics` §8): for the causal seq head, tau→per-song ADAPTIVE, the 16th-unlock polarity
+FLIPS to a down-weight, rests need an EXPLICIT valve. A head-appropriate surface (`seqonset_decode.py`) drains the flood
+to a real-aligned backbone that pauses; playtest **"better, still very linear."** The fork is STRATEGIC (right investment
+this stage?), not "is it viable." Sharpest untested lead: the head may lean on a HOLD-RELEASE phantom note instead of
+genuinely resting. **Do NOT re-derive the "BANKED/placement-hollow" bank — the user overturned it twice (valid catches).**
 
-**Deployed model UNCHANGED; conditioning, fatigue, and stamina confirmed INTACT and untouched** — every probe this arc
-was a diagnostic READ on a frozen decoder. The shipped generator is exactly as last played.
+**Deployed model UNCHANGED across both threads; conditioning, fatigue, stamina INTACT** — every probe was a diagnostic
+READ on a frozen decoder. The shipped generator is exactly as last played.
 
 Env: conda `stepmania-chart-gen` — call the interpreter DIRECTLY
 (`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`); **NOT `conda run`** (it buffers child stdout → empty logs
-if killed/polled).
+if killed/polled). Deployed generation ~10 s/chart; the 954-file val PARSE is ~4 min (unavoidable startup); do NOT call
+`val_ds.warm_cache()` (it eagerly extracts the whole val set, ~30 min CPU — use lazy `val_ds[i]`).
 
-**READ-FIRST (in order):** `notes/onset_placement_findings.md` (M1b-4..9 + the CORRECTED VERDICT at the top of the
-correction section) → lineage `.claude/skills/experiment-design/experiment_lineage/seq-onset-arc.md` (the full chain,
-status header = current) → `conditioning-mechanics` §8 (the head-specific decode surface) → `onset_ss_findings.md`
-(M1b-3 density break). Load-bearing skills: **experiment-design** (Rule 7 fair-version / Rule 11 isolate-the-variable —
-this session is the worked example of violating BOTH and the user catching it), **conditioning-mechanics** §8,
-**generation-defaults**.
+**READ-FIRST (in order):** for the ACTIVE thread → `notes/quality_feature_attribution_findings.md` → lineage
+`.claude/skills/experiment-design/experiment_lineage/quality-feature-attribution-arc.md` → `taste-critic-transfer` memory
+(the near-binary caveat + the graded-retrain fork). For the seq-onset thread → `notes/onset_placement_findings.md` →
+`seq-onset-arc.md` → `conditioning-mechanics` §8. Load-bearing skills: **experiment-design** (Rules 11 dynamic-range /
+12 stratify / 7-9 fair-version-before-committing — this thread is a clean worked example: 3 would-be false "drivers"
+each caught), **generation-defaults**, **conditioning-mechanics** §8.
 
 ---
 
@@ -64,7 +64,8 @@ plumbing. The trigger: `scripts/generate.py` (the PUBLIC CLI) had drifted to a *
 
 ## 1. WHERE WE ARE
 Deployed model = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor (canonical
-block below). All seq-onset work is DIAGNOSTIC (no model change). New tooling this session:
+block below). BOTH threads are DIAGNOSTIC so far (no model change). The ACTIVE thread (graded-critic retrain) is
+described in the header + §2a; the parallel seq-onset thread's tooling (unchanged since 2026-06-29):
 - `seqonset_decode.py` — the head-appropriate surface: `build_rest_env` (audio `p_onset` energy envelope = the rest
   valve), `selfcal_tau` (binary-search best-tracking per-song density calibration; defeats the cliff).
 - `probe_seqonset_placement.py` (M1b-4, the AUC bracket + pure-TF ceiling head `cache/seqonset_tfceiling_head.pt`),
@@ -74,7 +75,12 @@ block below). All seq-onset work is DIAGNOSTIC (no model change). New tooling th
 - `probe_seqonset_rollout.py`'s `rollout()` gained opt-in `collect_logits` / `radar` / `phase_pen` / `rest_env`.
 The SS head is saved at `cache/seqonset_ss_head.pt`.
 
-## 2. THE ACTIVE THREAD — the STRATEGIC fork + the technical leads (lineage `seq-onset-arc.md`)
+## 2a. ACTIVE THREAD — the GRADED-critic retrain (lineage `quality-feature-attribution-arc.md`)
+See the header. Deployed near-binary critic can't grade same-difficulty generations; the fix = a retrained GRADED
+critic (ranking loss / graded-corruption targets). `/autotune` before the train run; then re-run feature attribution
+(reuse `probe_quality_features.py`'s harness, swap the scorer). Nothing built yet.
+
+## 2b. PARALLEL THREAD — the seq-onset STRATEGIC fork + technical leads (lineage `seq-onset-arc.md`)
 The binding decision is the user's: **is the seq-onset path the right investment now?** If pursued, the technical
 leads in priority order:
 1. **Test the HOLD-RELEASE hypothesis** — does the seq head genuinely rest, or use hold-release phantom notes to avoid
