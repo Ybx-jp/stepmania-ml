@@ -74,7 +74,7 @@ def conditioned_p_onset(model, memory, difficulty, *, radar=None, style=None,
     ol = apply_phase_calib(ol, phase_calib)
     if extra_offset is not None:
         ol = ol + extra_offset
-    return torch.sigmoid(ol).cpu().numpy()
+    return torch.sigmoid(ol).detach().cpu().numpy()  # detach: safe to call outside a no_grad block (probe-friendly)
 
 
 def compute_tau(p_onset, density, default=0.5):
