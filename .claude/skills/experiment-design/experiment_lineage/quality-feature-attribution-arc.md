@@ -9,7 +9,8 @@ not density (partial −0.75), not outlier, not a critic bias (fast HUMAN charts
 BPM-coupled GOVERNOR is RULED OUT (paired governor-on/off ablation, flat: spearman(bpm, q_off−q_on)=−0.04 p=0.59) →
 the defect is INTRINSIC to the generator. Narrowed: NOT training coverage (fast region well-sampled; slowest bin
 fewest charts yet good) and NOT the onset head (n=176: p_onset placement AUC vs BPM flat/better) → BY ELIMINATION the
-PATTERN/TYPE head (which-panel / AR sequence quality) at high density. Confirming cut = an onset_override head-decomp A/B.
+PATTERN/TYPE head (which-panel / AR sequence quality) at high density — CONFIRMED (`probe_bpm_head_decomp.py`,
+onset_override A/B: real perfect onsets STILL slope −0.38 with BPM; controlled paired real-vs-gen delta flat +0.11 p=0.65).
 
 Primary notes: [`notes/quality_feature_attribution_findings.md`](../../../../notes/quality_feature_attribution_findings.md).
 Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreography), `probe_holdburst_dynamics.py`

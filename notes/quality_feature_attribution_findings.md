@@ -177,8 +177,14 @@ spread):
     +0.01; by tertile fast ROC-AUC 0.885 ≥ slow 0.847. The audio-onset head places WHEN-notes fine on fast songs.
   - **→ BY ELIMINATION the locus is the WHICH-PANEL / sequence quality: the PATTERN (+ type) head at high note
     density** (more AR decisions/sec on fast songs). Consistent with the critic scoring TASTE (arrow-choice) and the
-    choreography arc (pattern head ≈ random transitions). **Confirming next cut:** an `onset_override` head-
-    decomposition A/B (real-onset+gen-panel vs gen-onset+real-panel across BPM) to pin the pattern head causally.
+    choreography arc (pattern head ≈ random transitions).
+  - **CONFIRMED — head decomposition (`probe_bpm_head_decomp.py`, n=20, K=3, `onset_override` A/B, denoised):**
+    feeding the REAL chart's PERFECT onsets + generated panels STILL degrades with BPM (slope −0.38; canonical −0.55,
+    gen-onset-override −0.42 — all similar). The controlled paired test (real-onset vs gen-onset, both under override)
+    is FLAT: spearman(bpm, q_real_ov − q_gen_ov) = +0.11, p=0.65 (tertile Δ −0.21/+0.15/−0.08). Perfect onsets do
+    NOT rescue fast songs → **the PATTERN/TYPE head (arrow-choice at high density) is the causal locus.** Caveats:
+    n=20/K=3 (noisier slopes, consistent direction); onset_override is slightly OOD for the pattern head, but the
+    paired real-vs-gen control shares that regime, so the flat delta is clean.
 - **METHOD LESSON (the keeper):** before concluding "no feature explains Y", check the RELIABILITY (ICC) of Y — a
   null on a target that is mostly sample noise is uninformative. Denoise (average K samples) or measure the ICC
   ceiling FIRST. Artifacts: `probe_quality_variance.py`, `cache/quality_variance_hard.csv`.
