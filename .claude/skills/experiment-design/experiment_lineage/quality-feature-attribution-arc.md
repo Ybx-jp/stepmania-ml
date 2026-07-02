@@ -7,8 +7,9 @@ NULL": that null was a NOISE-ATTENUATION artifact (a single generation's quality
 The user's fix — measure/average K generations/song — revealed the signal (8-gen mean 0.90-reliable). Validated:
 not density (partial −0.75), not outlier, not a critic bias (fast HUMAN charts score fine). Mechanism: the
 BPM-coupled GOVERNOR is RULED OUT (paired governor-on/off ablation, flat: spearman(bpm, q_off−q_on)=−0.04 p=0.59) →
-the defect is INTRINSIC to the generator (onset/pattern heads or training coverage). Open next cut = training-BPM
-coverage + the onset head on fast songs.
+the defect is INTRINSIC to the generator. Narrowed: NOT training coverage (fast region well-sampled; slowest bin
+fewest charts yet good) and NOT the onset head (n=176: p_onset placement AUC vs BPM flat/better) → BY ELIMINATION the
+PATTERN/TYPE head (which-panel / AR sequence quality) at high density. Confirming cut = an onset_override head-decomp A/B.
 
 Primary notes: [`notes/quality_feature_attribution_findings.md`](../../../../notes/quality_feature_attribution_findings.md).
 Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreography), `probe_holdburst_dynamics.py`
