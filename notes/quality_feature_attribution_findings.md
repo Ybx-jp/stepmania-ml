@@ -164,7 +164,21 @@ spread):
   audio-onset head's placement on dense/fast songs, the pattern head's AR quality at high density, and/or training
   coverage of fast Hard songs. The fix is NOT governor retuning. Caveat: n=30, observational; the graded critic
   scores taste not fatigue, so it's an imperfect judge of governor effects (but the paired design + neutral main
-  effect are consistent). Open next cut: bin training data by BPM (coverage) + probe the onset head on fast songs.
+  effect are consistent).
+- **Mechanism narrowed — NOT coverage, NOT the onset head → the PATTERN/TYPE head at high density.**
+  - **TRAINING COVERAGE not the primary cause** (`probe_train_bpm_coverage.py`, no generation): the fast region is
+    WELL-sampled (25.8% of the 910 train Hard charts are >165 BPM); at ~equal coverage the extremes DIVERGE — the
+    slowest bin (0–120, 133 train charts) generates WELL (q −1.61) while the fastest (180+, 144 train charts, MORE
+    data) generates WORST (q −2.70). Song-level: bpm stays strong net of coverage (partial −0.56); coverage shows an
+    apparent +0.44 partial|bpm but that is confounded by the NON-LINEAR (hump-shaped) bpm↔coverage relationship (a
+    rank-partial can't remove it). → coverage = uncertain WEAK secondary, not the driver.
+  - **ONSET HEAD ruled out** (`probe_onset_head_bpm.py`, n=176 Hard, no generation): the deployed conditioned
+    `p_onset`'s fidelity to real onset frames does NOT drop with BPM — spearman(bpm, PR-AUC)=+0.04, partial|density
+    +0.01; by tertile fast ROC-AUC 0.885 ≥ slow 0.847. The audio-onset head places WHEN-notes fine on fast songs.
+  - **→ BY ELIMINATION the locus is the WHICH-PANEL / sequence quality: the PATTERN (+ type) head at high note
+    density** (more AR decisions/sec on fast songs). Consistent with the critic scoring TASTE (arrow-choice) and the
+    choreography arc (pattern head ≈ random transitions). **Confirming next cut:** an `onset_override` head-
+    decomposition A/B (real-onset+gen-panel vs gen-onset+real-panel across BPM) to pin the pattern head causally.
 - **METHOD LESSON (the keeper):** before concluding "no feature explains Y", check the RELIABILITY (ICC) of Y — a
   null on a target that is mostly sample noise is uninformative. Denoise (average K samples) or measure the ICC
   ceiling FIRST. Artifacts: `probe_quality_variance.py`, `cache/quality_variance_hard.csv`.
