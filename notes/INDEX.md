@@ -69,18 +69,20 @@ graded-critic score is ~46% sample noise, ICC=0.54; the 8-gen MEAN is 0.90-relia
 `probe_quality_variance.py`). Validated: not density (partial −0.75), not outlier, not a critic bias (fast HUMAN charts
 score fine → a GENERATION defect). **Method keeper: check a target's RELIABILITY/ICC before concluding "no feature
 explains it" — denoise first.** The now-superseded null had been (mis)confirmed on TWO instruments + a pre-registered
-refutation: (1) critic-DEFICIT probe (`probe_quality_features.py`) — the taste critic
-SATURATES (~94% of canonical Hard gens railed to "fake", 0% mid-band) so the deficit is 91% the HUMAN chart's score
-(Rule 11 in the wrong term); pooled, difficulty/density dominates (Rule 12 → stratify). (2) choreography distance-to-
-real (`probe_quality_choreo.py`) — a VALIDATED, NON-SATURATING proxy (`trans_KL`+`hold_burst`); composite/trans_KL =
-noise floor, one target `holdburst_excess` hit p_fw=0.027. (3) that lone lead REFUTED (`probe_holdburst_dynamics.py`) —
-it was a z-score/TRUNCATION artifact; a clean pre-registered test (raw audio on the generator's window, one target/one
-hypothesis) gave composite p=0.685 (wrong sign). **WIN:** choreography distance-to-real = the go-to quality instrument
-for fixed-difficulty questions; a "recalibrated critic" via monotonic rescale is a DEAD END (identical ranks). Full
-chain = `.../experiment_lineage/quality-feature-attribution-arc.md`. NEXT (active) = retrain a GRADED critic.
-- `quality_feature_attribution_findings.md` — the whole thread: two-level answer (across difficulty = difficulty/
-  density; within = audio-feature-flat), the critic-saturation mechanism, the choreography-instrument validation, the
-  refuted lead, and why monotonic recalibration can't help.
+refutation: critic-DEFICIT (`probe_quality_features.py`, saturates ~94% railed) + choreography distance-to-real
+(`probe_quality_choreo.py`, non-saturating; one lead p_fw=0.027) + a purpose-built GRADED critic
+(`train_graded_critic.py`, non-saturating retrain, gen band 0%→44%); the one lead REFUTED pre-registered
+(`probe_holdburst_dynamics.py`, truncation artifact). **MECHANISM PINNED (5 probes):** BPM defect is NOT the governor
+(`probe_bpm_governor_ablation.py`, paired flat p=0.59), NOT training coverage (`probe_train_bpm_coverage.py`, fast
+region well-sampled), NOT the onset head's timing (`probe_onset_head_bpm.py`, n=176 AUC flat) → **the PATTERN/TYPE head
+at high note density** (`probe_bpm_head_decomp.py`, onset_override A/B: perfect onsets STILL slope −0.38, paired
+real-vs-gen flat +0.11 p=0.65). **WINS:** choreography distance-to-real + the graded critic = two NON-SATURATING
+quality instruments; a "recalibrated critic" via monotonic rescale is a DEAD END (identical ranks). Full chain =
+`.../experiment_lineage/quality-feature-attribution-arc.md`. Thread CLOSED; actionable fix target = the pattern head
+at high density (model/training lever, not a decode knob).
+- `quality_feature_attribution_findings.md` — the whole thread: NULL→overturned-to-BPM (denoising/ICC), the
+  critic-saturation mechanism + graded-critic retrain, the choreography instrument, the refuted lead, and the 5-probe
+  mechanism decomposition pinning the pattern/type head.
 
 - `onset_frozenh_findings.md` — M1a: is the placement signal decodable from the FROZEN decoder's `h`? Conv readout
   hits the full 0.892 ceiling → yes, the cheap frozen-head build is greenlit on representation; DRIFT is the M1b gate.

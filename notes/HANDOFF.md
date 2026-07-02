@@ -31,8 +31,8 @@ lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]).
   `probe_holdburst_dynamics.py`, `probe_quality_variance.py` (the denoiser/ICC), `probe_bpm_governor_ablation.py`
   (the mechanism ablation; `canonical_gen_typed` gained a `decode_overrides` toggle for the governor-off arm),
   `probe_train_bpm_coverage.py` (coverage, no-gen), `probe_onset_head_bpm.py` (onset-head fidelity vs BPM, no-gen),
-  `probe_bpm_head_decomp.py` (the onset_override head decomposition). Docs on branch
-  `docs/quality-feature-attribution` (**PR #55** — verify `gh pr view 55`); the BPM overturn is a later commit on it.
+  `probe_bpm_head_decomp.py` (the onset_override head decomposition). Docs across **PR #55** (merged) + **PR #56**
+  (mechanism-narrowing); see §5 for branch/PR state.
 
 ## ACTIVE OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
 Full state in lineage `seq-onset-arc.md` + `notes/onset_placement_findings.md`. Short version: 16th placement is a
@@ -157,15 +157,15 @@ guidance = 1.0
 - **Self-cal tau must be a BINARY SEARCH best-tracking realized density** — a quantile-of-realized-logits iteration
   DIVERGES on the cliff (collapsed a song to empty).
 
-## 5. BRANCH / PR STATE
-- **Infra refactor (§0), 2026-06-30 — a STACKED branch chain (merge bottom-up, or PR each onto its parent):**
-  `refactor/canonical-decode-single-source` → `refactor/harness-tier2-loaders` → `refactor/harness-tier3-evaldata`
-  (this refresh's HANDOFF/docs commit sits on the tier-3 tip). All pushed. **Verify live PR state via `gh pr view`.**
-- Seq-onset ML thread: docs branch **`docs/seq-onset-placement-banked`** (name predates the correction; PR **#51**
-  carries the corrected framing). Prior seq-onset work merged via **PR #50** (merge commit `0d30ee2`). **Verify
-  live state: `gh pr view <n>` / `git log origin/main`** (CLAUDE.md Documentation Discipline). `main` protected by `protect-main`.
-- Gitignored (not committed): `cache/seqonset_ss_head.pt`, `cache/seqonset_tfceiling_head.pt`, `cache/seqctx_frozenh_*`,
-  `outputs/seqonset_ab*`.
+## 5. BRANCH / PR STATE  (verify ALL live state via `gh pr view <n>` / `git log origin/main` — Documentation Discipline)
+- **Quality-feature attribution (this arc):** PR **#55** merged (merge commit `0ef5eab`: refresh + graded critic +
+  BPM overturn + governor ablation). Mechanism-narrowing docs (coverage / onset-head / head-decomposition) on branch
+  **`docs/bpm-mechanism-decomp`** → PR **#56**. Gitignored (reproducible via the scripts): the graded critic
+  `checkpoints/realism_critic_graded` (`train_graded_critic.py`) + the quality CSVs `cache/quality_*`,
+  `cache/bpm_*`, `cache/onset_head_bpm.csv`.
+- **Infra refactor (§0):** merged — PRs **#52 / #53 / #54** (canonical-decode-single-source → tier2 → tier3).
+- **Seq-onset ML thread:** merged via PRs **#50 / #51**. Gitignored: `cache/seqonset_*`, `cache/seqctx_frozenh_*`,
+  `outputs/seqonset_ab*`. `main` protected by ruleset `protect-main`.
 
 ## 6. INFRA / PERF NOTES
 - Deployed generation ~10 s/chart (B=1 AR, RTX 3060); the seq rollout is lighter. The dataset re-parse (4452 files) is
