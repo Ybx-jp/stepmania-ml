@@ -17,14 +17,21 @@ lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]).
   (`experiments/realism_critic/train_graded_critic.py` → `checkpoints/realism_critic_graded`, gitignored) — both
   NON-SATURATING (the deployed critic rails ~94% of Hard gens to "fake"; the graded critic's range is what made the
   within-song variance visible). Use either over the deployed critic for fixed-difficulty quality questions.
-- **Mechanism: GOVERNOR RULED OUT** (`probe_bpm_governor_ablation.py`, paired governor-on/off, n=30 K=6): the
-  BPM→quality slope did NOT flatten off (ON −0.47/OFF −0.67), paired spearman(bpm, q_off−q_on)=−0.04 p=0.59 → the
-  defect is INTRINSIC to the generator, upstream of the decode governor. **Open next cut (not started):** bin
-  training data by BPM (coverage) + probe the audio-onset head on fast/dense songs (the likely locus). n=30 obs.
+- **Mechanism narrowed to the PATTERN/TYPE head.** GOVERNOR RULED OUT (`probe_bpm_governor_ablation.py`, paired,
+  n=30 K=6: slope didn't flatten off, paired spearman(bpm, q_off−q_on)=−0.04 p=0.59). TRAINING COVERAGE not primary
+  (`probe_train_bpm_coverage.py`: fast region 25.8% of train Hard; slowest bin fewest charts yet good; weak
+  nonlinearity-confounded secondary). ONSET HEAD ruled out (`probe_onset_head_bpm.py`, n=176: p_onset placement AUC
+  vs BPM FLAT/better). → **BY ELIMINATION the locus = the pattern/type head (which-panel / AR sequence quality) at
+  high note density** — CONFIRMED (`probe_bpm_head_decomp.py`, n=20 K=3, `onset_override` A/B): the REAL chart's
+  PERFECT onsets + gen panels STILL slope −0.38 with BPM (canon −0.55), and the controlled paired test
+  spearman(bpm, q_real_ov − q_gen_ov)=+0.11 p=0.65 (flat) → perfect onsets don't rescue fast songs; the pattern
+  head owns it. **Actionable fix target = the pattern head's arrow-choice at high note density.** n=20/30 obs.
 - Probes (import the harness, match deployment): `probe_quality_features.py` (critic; `--critic` swaps the graded
   checkpoint; holds shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`,
   `probe_holdburst_dynamics.py`, `probe_quality_variance.py` (the denoiser/ICC), `probe_bpm_governor_ablation.py`
-  (the mechanism ablation; `canonical_gen_typed` gained a `decode_overrides` toggle for the governor-off arm). Docs on branch
+  (the mechanism ablation; `canonical_gen_typed` gained a `decode_overrides` toggle for the governor-off arm),
+  `probe_train_bpm_coverage.py` (coverage, no-gen), `probe_onset_head_bpm.py` (onset-head fidelity vs BPM, no-gen),
+  `probe_bpm_head_decomp.py` (the onset_override head decomposition). Docs on branch
   `docs/quality-feature-attribution` (**PR #55** — verify `gh pr view 55`); the BPM overturn is a later commit on it.
 
 ## ACTIVE OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
