@@ -22,13 +22,16 @@ lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]).
   (`probe_train_bpm_coverage.py`: fast region 25.8% of train Hard; slowest bin fewest charts yet good; weak
   nonlinearity-confounded secondary). ONSET HEAD ruled out (`probe_onset_head_bpm.py`, n=176: p_onset placement AUC
   vs BPM FLAT/better). → **BY ELIMINATION the locus = the pattern/type head (which-panel / AR sequence quality) at
-  high note density.** **Open confirming cut (not started):** an `onset_override` head-decomposition A/B
-  (real-onset+gen-panel vs gen-onset+real-panel, across BPM) to pin the pattern head causally. n=30 obs.
+  high note density** — CONFIRMED (`probe_bpm_head_decomp.py`, n=20 K=3, `onset_override` A/B): the REAL chart's
+  PERFECT onsets + gen panels STILL slope −0.38 with BPM (canon −0.55), and the controlled paired test
+  spearman(bpm, q_real_ov − q_gen_ov)=+0.11 p=0.65 (flat) → perfect onsets don't rescue fast songs; the pattern
+  head owns it. **Actionable fix target = the pattern head's arrow-choice at high note density.** n=20/30 obs.
 - Probes (import the harness, match deployment): `probe_quality_features.py` (critic; `--critic` swaps the graded
   checkpoint; holds shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`,
   `probe_holdburst_dynamics.py`, `probe_quality_variance.py` (the denoiser/ICC), `probe_bpm_governor_ablation.py`
   (the mechanism ablation; `canonical_gen_typed` gained a `decode_overrides` toggle for the governor-off arm),
-  `probe_train_bpm_coverage.py` (coverage, no-gen), `probe_onset_head_bpm.py` (onset-head fidelity vs BPM, no-gen). Docs on branch
+  `probe_train_bpm_coverage.py` (coverage, no-gen), `probe_onset_head_bpm.py` (onset-head fidelity vs BPM, no-gen),
+  `probe_bpm_head_decomp.py` (the onset_override head decomposition). Docs on branch
   `docs/quality-feature-attribution` (**PR #55** — verify `gh pr view 55`); the BPM overturn is a later commit on it.
 
 ## ACTIVE OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
