@@ -31,7 +31,8 @@ mechanism; **this skill is the config VALUES.**
 > edit the dict in that module — never a script's literal.** This replaced the old failure mode where
 > `scripts/generate.py` drifted stale (`pattern_temperature=0.7`, stamina/breathe off, no 16th-unlock) while the
 > exporter moved on. Current canonical values: `pattern_temperature=1.0`, `type_temperature=0.4`,
-> `fatigue_penalty=2`/`fatigue_free=6`, `stamina_ceiling=50`/`breathe=1.2`, **`onset_phase_calib=(0.0,1.0)` the
+> `fatigue_penalty=2`/`fatigue_free=6`, `stamina_ceiling=50`/`breathe=1.2`, **`hold_stream_penalty=8`/`floor=0.45`
+> (holds-in-streams fix) + `footswitch=False` (2026-07-02, playtest-validated)**, **`onset_phase_calib=(0.0,1.0)` the
 > 16th-unlock** (offset also baked into `tau`).
 >
 > **PROBES: don't hand-roll the tau pipeline — import `src/generation/decode_harness.py`.** It exports
@@ -66,6 +67,8 @@ DECODE = dict(
     fatigue_penalty=2.0, fatigue_free=6.0,             # per-NOTE foot governor (§8b). exporter free=6; generate() default 12 — both in vouched 6–12
     stamina_ceiling=50.0, stamina_tau=8.0, stamina_scale=15.0, stamina_breathe=1.2,  # per-REGION stamina+arc (§8c)
     onset_phase_calib=(0.0, 1.0),                      # ★ THE 16th-UNLOCK — un-buries 16th-offbeats so they fire where audio affords; b8=0, b16≈1.0
+    hold_stream_penalty=8.0, hold_stream_floor=0.45, hold_stream_win=16,  # HOLD-IN-STREAM fix (2026-07-02): suppress holds in dense streams; floor protects sparse holds
+    footswitch=False,                                  # (2026-07-02) forbid footswitch footing -> model ALTERNATES same-panel runs (playtest "sooooo much better")
 )
 # generate() supplies the rest of the governor internals — DO NOT hand-set unless retuning:
 #   stamina_breathe_floor=0.4 (outro-collapse fix), stamina_max_bump=0.45, stamina_breathe_win=96,

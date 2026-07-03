@@ -387,9 +387,10 @@ class LayeredTypedChartGenerator(nn.Module):
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, max_jack_run=None,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
-                 footswitch_pen=4.0, fatigue_cap=30.0,
+                 footswitch_pen=4.0, fatigue_cap=30.0, footswitch=True,
                  stamina_ceiling=None, stamina_tau=8.0, stamina_scale=15.0, stamina_max_bump=0.45,
-                 stamina_breathe=0.0, stamina_breathe_win=96, stamina_breathe_floor=0.4):
+                 stamina_breathe=0.0, stamina_breathe_win=96, stamina_breathe_floor=0.4,
+                 hold_stream_penalty=0.0, hold_stream_win=16, hold_stream_floor=0.25):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -533,6 +534,21 @@ class LayeredTypedChartGenerator(nn.Module):
         # precompute which-panel bit table for the 15 patterns: (15,4)
         states_tab = torch.arange(1, NUM_PATTERNS + 1, device=device)
         panel_bits = ((states_tab.unsqueeze(-1) >> torch.arange(NUM_PANELS, device=device)) & 1)  # (15,4)
+
+        # HOLD-IN-STREAM suppression (type-head lever; decoupled from onset/tau -> changes tap-vs-hold ONLY, never
+        # WHERE/HOW-MANY notes). The type head opens hold-heads in dense STREAM sections a human keeps hold-free
+        # (probe_stream_holdjack.py: gen hold-rate 18% vs real ~0% in real-stream frames); the pinned foot then
+        # forces jacks (no_cross_during_hold + fatigue). Real charts RESERVE holds for SPARSE sections, so gate the
+        # penalty on LOCAL ONSET DENSITY (streams are dense) -- precomputable since onset is audio-driven/non-causal.
+        # The gate is relu(density - hold_stream_floor): ZERO below stream density, so SPARSE-section holds (the
+        # musical ones) are untouched BY CONSTRUCTION; only genuine dense streams are suppressed.
+        stream_gate = None
+        if hold_stream_penalty:
+            win = max(1, int(hold_stream_win))
+            of = onset.float().unsqueeze(1)                                      # (B,1,T)
+            sg = torch.nn.functional.avg_pool1d(of, win, stride=1, padding=win // 2, count_include_pad=False)
+            dens = sg.squeeze(1)[:, :T]                                          # (B,T) local onset fraction in [0,1]
+            stream_gate = (dens - hold_stream_floor).clamp(min=0.0)             # 0 in sparse, ramps up in streams
 
         caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
         cond_emb = self._cond(difficulty, radar, style, motif, figure)  # (B,1,d) | (B,T,d) if motif/figure is a per-frame schedule
@@ -704,9 +720,15 @@ class LayeredTypedChartGenerator(nn.Module):
                 # holds; graded by the prospective same-panel run length sp_run+1. (One-foot jack is always the
                 # alternative, governed by the climbing per-foot E. Crossovers — other foot NOT on tgt — stay cheap.)
                 runp = sp_run + 1                                                             # run length if repeated now
-                fs_add = torch.where(runp >= 4, torch.full((B,), 1e4, device=device),         # 4-note: hard cap
-                          torch.where(runp == 3, torch.full((B,), float(footswitch_pen), device=device),  # 3-note: penalize
-                                      torch.zeros(B, device=device)))                         # <=2-note: free (just travel)
+                if footswitch:
+                    fs_add = torch.where(runp >= 4, torch.full((B,), 1e4, device=device),         # 4-note: hard cap
+                              torch.where(runp == 3, torch.full((B,), float(footswitch_pen), device=device),  # 3-note: penalize
+                                          torch.zeros(B, device=device)))                         # <=2-note: free (just travel)
+                else:  # footswitch OFF (diagnostic): forbid the OTHER foot taking the panel -> a same-panel run MUST
+                    # be a one-foot JACK (costed by the climbing per-foot E + max_jack_run cap), never a footswitch.
+                    # Toggling this vs ON disambiguates the model's strategy: runs that VANISH depended on footswitch
+                    # relief; runs that PERSIST are intrinsic jacks (excessive voltage). See notes/playtest_log.md.
+                    fs_add = torch.full((B,), 1e4, device=device)                              # any footswitch = ∞ cost
                 cost = cost + fs_add.view(B, 1, 1) * fswitch.float()
                 # NOTE: HOLD-PINNING (route taps to the free foot during a hold) was attempted here and REVERTED
                 # 2026-06-25 — it regressed NON-MONOTONICALLY (more penalty -> MORE jacks, maxJackRun 4->14;
@@ -752,6 +774,8 @@ class LayeredTypedChartGenerator(nn.Module):
                 pat = torch.multinomial(torch.softmax(lg, dim=-1), 1).squeeze(-1)
             else:
                 pat = pat_logits.argmax(-1)
+            if stream_gate is not None:  # suppress HOLD-HEAD (type idx 1) in dense/stream frames; sparse frames untouched
+                typ_logits[:, :, 1] = typ_logits[:, :, 1] - hold_stream_penalty * stream_gate[:, t].unsqueeze(-1)
             # type (per panel): sample if requested (lets rare holds surface), else greedy
             if type_sample or not greedy:
                 tt = type_temperature if type_sample else temperature

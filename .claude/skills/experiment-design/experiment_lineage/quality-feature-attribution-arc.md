@@ -68,6 +68,10 @@ Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreog
   segfaults via `estimate_tuning`→`piptrack` numba → `tuning=0.0`. k=3→k=1 safe (within-song critic sd 0.016).
 
 ## Corroborates / depends-on
+- **SPUN OFF →** [`hold-in-stream-arc.md`](hold-in-stream-arc.md) / [[hold-in-stream-fix]] — this arc pinned the
+  fast-song defect to the pattern/type head but pessimistically called it "not a decode knob (a model/training
+  lever)." The spinoff localized WHERE inside the head (holds-in-streams) and DECODE-fixed it (`hold_stream_penalty`
+  + `footswitch=False`, shipped 2026-07-02) — overturning the "not a decode knob" framing.
 - **depends-on** the taste-critic thread (🟡 lineage stub, INDEX) / [[taste-critic-transfer]] — this thread is the
   quantitative sharpening of its "near-binary separator, not a graded scorer" caveat; the retrained-graded-critic
   fork is the shared next step.

@@ -15,6 +15,71 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-07-02 — hold-fix v2 (floor 0.5): IMPROVED but floor slightly high; + 16th-jack & footswitch-knob asks
+**Played:** `~/sm-generated/holdstream_ab_v2`, Hard — japa1 / HSL / OH WORLD. Both arms = canonical + hold fix;
+**Challenge**=baseline (penalty 0), **Edit**=`hold_stream_penalty=8, floor=0.5`. Shared-RNG A/B (arms byte-identical
+except where the penalty bites): OH WORLD & HSL 100% identical (all holds < 0.5 density → fix is a NO-OP there);
+japa1 96.75% identical (only the high-density grind edited, 15→12 holds). Floor grounded on the density-at-holds
+distribution: expressive holds sit ≤0.5, japa1's pathological grind reaches 0.69 (the only song with holds >0.6).
+
+**Raw feedback (user):** "the floor is an improvement, i think it is slightly too high. also, the 1/16th jack penalty
+is too low — it's a brutal voltage pattern that needs tasteful application (this observation is not new/causal from
+this fix). i think a footswitch on/off knob would help disambiguate the model's pattern strategy and help diagnose a
+footswitch from excessive voltage."
+
+**Commentary / hypothesis:**
+- **H-holdstream (floor):** floor 0.5 CONFIRMED the severity-targeting works (expressive holds untouched by
+  construction, japa1 grind caught) — a clean improvement over the blunt v1. "Slightly too high" = some pathological
+  holds sit in 0.42–0.5 and slip through → lower the floor a notch (~0.45). Still a density PROXY (can't tell a dense
+  EXPRESSIVE hold from a dense jack-forcing one) — the free-foot-overload gate is the eventual robustness fix.
+- **H-voltage (NEW, pre-existing / orthogonal to the hold fix):** 16th jacks (same-panel repeats at 16th spacing —
+  the highest-voltage jack) are UNDER-penalized → the model deploys them where they aren't musically earned. Levers:
+  `fatigue_penalty` (rate-scaled, so 16th costs most already — evidently not enough), `max_jack_run` (hard cap, =2),
+  a 16th-specific penalty. DIAGNOSE before tuning.
+- **H-footswitch (NEW, the diagnostic to run first):** a same-panel run in the CHART is footing-AMBIGUOUS — it can be
+  played as a footswitch (alternating feet, sustainable) or a one-foot jack (brutal voltage). The generator's fatigue
+  governor ALREADY allows footswitch relief (§8b fs_add: free ≤2, pen@3, cap@4). A `footswitch` on/off knob (built
+  2026-07-02, `typed_model.generate(footswitch=)`; forces same-panel runs to be one-foot jacks when OFF) lets us A/B:
+  runs that VANISH with footswitch OFF depended on footswitch relief (playable); runs that PERSIST are intrinsic jacks
+  the model insists on (the excessive voltage). This disambiguates H-voltage before we tune the 16th penalty.
+
+**Action / next:**
+- [ ] FOOTSWITCH DIAGNOSTIC A/B (this session): both arms = hold fix floor 0.45 / pen 8; Challenge=footswitch ON,
+      Edit=footswitch OFF; shared-RNG; japa1/HSL/OH WORLD. Read which same-panel runs are footswitch-dependent vs jacks.
+- [ ] Then, informed by it, tune the 16th-jack penalty (max_jack_run and/or a 16th-specific fatigue term) — TASTEFUL,
+      not a blanket kill (real charts have justified 2-note 16th jacks; H13 / foot_fatigue_design.md).
+- [ ] Floor: 0.5 → ~0.45 (applied to the hold fix in the diagnostic set).
+- [ ] Free-foot-overload gate remains the queued robustness upgrade for the hold fix (density proxy → jack-outcome).
+
+## 2026-07-02 — `hold_stream_penalty=3` A/B (hold-in-stream fix): DIRECTIONALLY RIGHT but TOO BLUNT
+**Played:** `~/sm-generated/holdstream_ab`, Hard — japa1 (突撃ガラスのニーソ姫), High School Love, OH WORLD. Each folder:
+**Challenge**=baseline (penalty 0), **Edit**=fix (`hold_stream_penalty=3, floor=0.25, win=16`), **Hard slot**=real chart.
+Hold counts Challenge→Edit (real): OH WORLD 13→9 (14), HSL 39→**1** (12), japa1 13→4 (21).
+
+**Raw feedback (user):** "high school love and oh world were slightly worse with the fix — it limited the model's
+expressiveness too much. the fix saved japa1 from one totally unplayable section. we are headed in the right
+direction, but our current intervention is too blunt."
+
+**Commentary / hypothesis — H-holdstream:** the intervention is correct in KIND (it removed the exact unplayable
+hold+jack the probe predicted — japa1's saved section confirms the mechanism by ear) but its SELECTION signal is too
+coarse. It suppresses hold-heads on LOCAL ONSET DENSITY alone, so it fires on *expressive* dense-section holds (which
+the free foot can still handle) as readily as on the *pathological* ones (where the hold forces a one-foot jack). HSL
+39→1 is the tell: the density gate nuked holds real charts DO place (real 12), stripping expressiveness. Density is a
+PROXY for "a would-be two-foot stream a hold converts to a one-foot jack"; the proxy over-includes. The true target is
+the JACK OUTCOME / free-foot overload, not density per se. Corroborates the probe chain (root = mis-placed hold; the
+`no_cross_during_hold`+fatigue chain forces the jack) — the fix works on the root, but needs to discriminate the bad
+holds from the good ones. Connects to the standing theme: **the biggest wins are decode-time, and this one needs a
+SHARPER decode signal, not a retrain.**
+
+**Action / next:**
+- [ ] Sharpen the gate from raw density to a FORCED-JACK / free-foot-overload signal (recent-alternating-stream context
+      and/or free-foot workload), so expressive dense holds survive while the japa1-type pathological hold is caught.
+- [ ] Cheap first check: softer dose (penalty ~2, floor ~0.30) — recovers HSL/OH WORLD expressiveness? does japa1 stay saved?
+- [ ] Re-A/B the same three songs (japa1 = the keeper positive; HSL = the over-suppression canary; OH WORLD = gentle case).
+- [ ] `hold_stream_penalty` is now a first-class exporter flag (`--hold_stream_penalty` / `--ab_hold_stream`); tuning is cheap.
+
+---
+
 ## 2026-06-28 — BY-EAR GATE verdict: harm_calib (sparse-harm-in-quiet) A/B — SPLIT (japa1 ✅, HSL ❌ gate-targeting)
 
 The binding by-ear gate from HANDOFF §3: `~/sm-generated/harmcalib_{OFF,ON}`, ON = `--harm_calib 10`,

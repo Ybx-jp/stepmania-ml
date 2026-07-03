@@ -141,6 +141,14 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
 the FINAL playable symbols, NOT the pre-automaton pattern (a fix written against the pattern leaks because
 `hold_aware` remaps it). Any new export/probe the user PLAYS must call `enforce_playability(gen_kwargs)`. The
 graded escalation across spacings is the soft FOOT GOVERNORS (§8).
+**★ `hold_stream_penalty` (SHIPPED DEFAULT 8, floor 0.45, win 16; 2026-07-02, `notes/hold_in_stream_findings.md`):**
+suppresses HOLD-HEADS (type idx 1) in dense STREAM sections — subtracts `penalty · relu(local_onset_density − floor)`
+from the hold-head logit. The type head opens holds where a human streams (gen 18% of stream frames vs real ~0%); the
+pinned foot then FORCES a jack (via `no_cross_during_hold` + fatigue) — the fix removes the mis-placed hold so the
+section stays a two-foot stream. DECOUPLED from onset/tau (changes tap-vs-hold ONLY, never WHERE/HOW-MANY notes). The
+`relu(·−floor)` gate is 0 below stream density → SPARSE musical holds untouched by construction (a raw-density gate
+over-cut them — the v1 "too blunt" playtest). Floor grounded on the density-at-holds distribution (expressive holds
+≤0.5, pathological grind 0.69). It's a density PROXY — a free-foot-overload gate (queued) is the robust successor.
 **`pattern_temperature` revisited (06-27, notes/jack_heaviness_findings.md):** the H2 0.6–0.85 cap (above which
 arrows "over-randomize") PREDATES the fatigue governor. At the shipped 0.7 the pattern head is jack-HEAVY (len3
 ~2× real, len≥4 ~3–4×) because it's greedy → repeats the previous panel; raising temp REDUCES jacks AND raises
@@ -231,6 +239,11 @@ r_f = frame_hz / max(t-t_f, 1)           per-foot press rate
 unit_f(p) = jack_weight  if pos_f==p (stay/jack)  else  travel_weight·d(pos_f,p)  (move)   [jack_weight 1.0 > travel_weight 0.6]
 cost_f(p) = r_f·unit_f(p)·1[pos_f≠∅]  +  fs_add·1[other foot holds p]   (footswitch)
 fs_add: runp=sp_run+1 → 0 (runp≤2, free) | footswitch_pen=4 (runp==3) | ∞ (runp≥4, hard cap)
+        ★ `footswitch=False` (the 2026-07-02 SHIPPED DEFAULT) sets fs_add=∞ ALWAYS → a same-panel run can NEVER be
+        footed as a footswitch, only as a one-foot JACK (costed by per-foot E + max_jack_run). Playtest-validated
+        OFF: the model ALTERNATES same-panel runs instead (japa1 "sooooo much better"; forbidding footswitch made it
+        MORE creative). Diagnostic use: footswitch ON vs OFF disambiguates footswitch-dependent runs (VANISH, ~81–85%
+        on HSL/japa1) from intrinsic jacks (PERSIST = the real excessive voltage). `notes/hold_in_stream_findings.md`.
 fatigue(P) = min over the ≤2 footings of  max(Ẽ_L+cost_L, Ẽ_R+cost_R)    (player foots it the EASY way; crossovers when cheaper, NO surcharge)
 pat_logits[P] -= ∞                                       if fatigue(P) ≥ fatigue_cap (30, unplayable)
               -= fatigue_penalty · relu(fatigue(P) − fatigue_free)   else   (fatigue_free=12 set HIGH → BARRIER/ceiling, NOT a downward pull)

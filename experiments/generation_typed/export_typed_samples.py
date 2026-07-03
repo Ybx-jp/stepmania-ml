@@ -196,6 +196,27 @@ def parse_args():
                    help='[DEFAULT 1.2 = arc ON] STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high '
                         'at climaxes -> keep the spicy notes, low in verses -> rest) = a difficulty arc. Needs '
                         '--stamina_ceiling (inert without it). 0 = flat (no arc). notes/foot_fatigue_design.md "STAGE 3".')
+    p.add_argument('--hold_stream_penalty', type=float, default=CANONICAL_DECODE['hold_stream_penalty'],
+                   help='[HOLD-IN-STREAM fix, DEFAULT 8 = ON] suppress hold-heads in dense STREAM sections. The type '
+                        'head opens holds where a human streams (probe_stream_holdjack.py); the pinned foot then '
+                        'forces jacks (no_cross_during_hold + fatigue). Gated on local onset density so SPARSE '
+                        'musical holds stay. 0=off. notes/hold_in_stream_findings.md.')
+    p.add_argument('--hold_stream_floor', type=float, default=CANONICAL_DECODE['hold_stream_floor'],
+                   help='local onset density below which --hold_stream_penalty is exactly 0 (protects sparse holds).')
+    p.add_argument('--hold_stream_win', type=int, default=CANONICAL_DECODE['hold_stream_win'],
+                   help='frames for the --hold_stream_penalty density gate.')
+    p.add_argument('--ab_hold_stream', type=float, default=0.0,
+                   help='A/B: ALSO emit a second "Edit" chart with hold_stream_penalty=this value, so a folder holds '
+                        'baseline "Challenge" (--hold_stream_penalty, default 0) vs the fix "Edit" vs the "original" '
+                        'for a by-ear baseline-vs-fix comparison. 0 = single-arm (no A/B).')
+    p.add_argument('--footswitch', action=argparse.BooleanOptionalAction, default=CANONICAL_DECODE['footswitch'],
+                   help='[DEFAULT OFF, playtest-validated] whether the fatigue governor may foot a same-panel run as '
+                        'a FOOTSWITCH (alternating feet). OFF forces one-foot jacks -> the model ALTERNATES instead '
+                        '(more creative, less brutal voltage; japa1 "sooooo much better"). --footswitch re-enables.')
+    p.add_argument('--ab_footswitch', action='store_true',
+                   help='A/B: emit the "Edit" arm with footswitch FLIPPED vs the default, for a shared-RNG '
+                        'footswitch on/off diagnostic — runs that VANISH depended on footswitch relief; runs that '
+                        'PERSIST are intrinsic jacks (excessive voltage).')
     p.add_argument('--harm_calib', type=float, default=0.0,
                    help='[STEP-1 phrase calibrator] sparse-harm-in-quiet onset logit boost (gain·quiet_gate·harm) '
                         'so the head allocates for a sparse melodic/harmonic event in a quiet phrase (the HSL '
@@ -490,6 +511,9 @@ def main():
                           stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),  # Stage-2 per-region density relief (needs fatigue_penalty); <=0 = off
                           stamina_tau=args.stamina_tau, stamina_scale=args.stamina_scale,
                           stamina_breathe=args.stamina_breathe,  # Stage-3 ARC: ceiling breathes with audio energy
+                          hold_stream_penalty=args.hold_stream_penalty,  # suppress holds in dense streams (0=off)
+                          hold_stream_floor=args.hold_stream_floor, hold_stream_win=args.hold_stream_win,
+                          footswitch=args.footswitch,  # DEFAULT False = forbid footswitch footing (force one-foot jacks)
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
@@ -503,6 +527,11 @@ def main():
             gen_kwargs.update(hold_aware=True, no_jump_during_hold=args.no_jump_during_hold,
                               no_cross_during_hold=args.no_cross_during_hold)
         enforce_playability(gen_kwargs, args.override_playability)  # MANDATORY pad-playability (forces them on)
+        # For a clean --ab_hold_stream A/B, SHARE the RNG state across both arms (variance reduction): the two
+        # generations then draw identical randoms and stay byte-identical until the penalty first changes a hold
+        # decision, so any A/B difference is attributable to the KNOB, not sampling noise (experiment-design Rule 11).
+        _ab_rng = torch.get_rng_state()
+        _ab_cuda = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
         gen = pair_holds(model.generate(audio, diff, lengths=torch.tensor([T], device=device),
                                         **gen_kwargs)[0].cpu().numpy())
 
@@ -518,11 +547,28 @@ def main():
                 shutil.copy2(meta['audio_file'], folder / music)
             except Exception:
                 pass
+        ab_charts = [
+            {"chart": gen, "difficulty_name": "Challenge", "difficulty_value": nd.difficulty_value, "author": "generated"},
+        ]
+        ab_overrides = {}                                      # the Edit arm = baseline gen_kwargs + these overrides
+        if args.ab_hold_stream and args.ab_hold_stream > 0:
+            ab_overrides['hold_stream_penalty'] = args.ab_hold_stream
+        if args.ab_footswitch:
+            ab_overrides['footswitch'] = not args.footswitch   # Edit arm = the opposite of the (default OFF) baseline
+        if ab_overrides:  # A/B: second "Edit" arm, shared-RNG with Challenge (only the override differs)
+            ab_kwargs = dict(gen_kwargs); ab_kwargs.update(ab_overrides)
+            torch.set_rng_state(_ab_rng)                       # restore -> same draws as the baseline arm
+            if _ab_cuda is not None:
+                torch.cuda.set_rng_state_all(_ab_cuda)
+            gen_fix = pair_holds(model.generate(audio, diff, lengths=torch.tensor([T], device=device),
+                                                **ab_kwargs)[0].cpu().numpy())
+            label = ", ".join(f"{k}={v}" for k, v in ab_overrides.items())
+            ab_charts.append({"chart": gen_fix, "difficulty_name": "Edit", "difficulty_value": nd.difficulty_value,
+                              "author": f"fix {label}"})
+        ab_charts.append({"chart": orig_typed, "difficulty_name": dname, "difficulty_value": nd.difficulty_value,
+                          "author": "original"})
         sm = charts_to_sm(
-            charts=[
-                {"chart": gen, "difficulty_name": "Challenge", "difficulty_value": nd.difficulty_value, "author": "generated"},
-                {"chart": orig_typed, "difficulty_name": dname, "difficulty_value": nd.difficulty_value, "author": "original"},
-            ],
+            charts=ab_charts,
             bpm=bpm, title=f"{title} (gen)", artist=chart_obj.artist or "",
             music=music, offset=float(chart_obj.offset), typed=True,
         )

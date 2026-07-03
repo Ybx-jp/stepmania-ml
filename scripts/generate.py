@@ -197,6 +197,9 @@ def main():
         stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),
         stamina_tau=CANONICAL_DECODE["stamina_tau"], stamina_scale=CANONICAL_DECODE["stamina_scale"],
         stamina_breathe=args.stamina_breathe,
+        hold_stream_penalty=CANONICAL_DECODE["hold_stream_penalty"],  # suppress holds in dense streams (2026-07-02)
+        hold_stream_floor=CANONICAL_DECODE["hold_stream_floor"], hold_stream_win=CANONICAL_DECODE["hold_stream_win"],
+        footswitch=CANONICAL_DECODE["footswitch"],  # DEFAULT False: force one-foot jacks, model alternates (2026-07-02)
         bpm=bpm, radar=radar_arg,  # SAME radar tau was computed from (conditioning-mechanics §3)
         style=None, guidance_scale=(args.guidance if style_spec else 1.0),
     )

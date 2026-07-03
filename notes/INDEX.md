@@ -84,6 +84,23 @@ at high density (model/training lever, not a decode knob).
   critic-saturation mechanism + graded-critic retrain, the choreography instrument, the refuted lead, and the 5-probe
   mechanism decomposition pinning the pattern/type head.
 
+## Hold-in-stream defect + footswitch finding (2026-07-02 — SPUN OFF the quality thread; see the lineage file)
+**UPDATE (2026-07-02):** the "pattern/type head at high density" fix target above turned out to be **DECODE-fixable**
+(the prior "not a decode knob" was too pessimistic). User by-ear seed: "the model does a HOLD with a JACK where a
+human charts a STREAM." → `hold_in_stream_findings.md`. **Localized in 3 probes:** `probe_bpm_hold_decomp.py`
+(hold-SPAN metrics NULL vs BPM at n=90 — the tail-length +0.49 was a pooled-vs-paired confound; holdrate +0.31@n40
+regressed to +0.09@n90) → `probe_stream_holdjack.py` (CONFIRMED: type head opens holds in dense streams, gen 18% vs
+real ~0%; the hold TRIGGERS the free-foot jack, +11pp p=0.008) → `probe_holdstream_fix.py` (the A/B). **SHIPPED two
+decode defaults:** `hold_stream_penalty=8`/`floor=0.45` (suppress holds in dense streams, `relu(density−floor)` gate
+protects sparse holds) + **`footswitch=False`** — a new footswitch on/off knob revealed the "brutal voltage" is a
+FOOTSWITCH STRATEGY not intrinsic jacks (forbidding it collapses same-panel runs 81–85%); playtest "sooooo much
+better", forbidding footswitch made the model ALTERNATE (more creative). Method keepers: pooled-vs-PAIRED baseline for
+a defect-vs-X slope; confirm a marginal lead at higher n; SHARED-RNG A/B (common random numbers) to isolate a decode
+knob from sampling noise. **OPEN:** free-foot-overload gate (robust successor to the density proxy); tasteful 16th-jack
+penalty on the intrinsic residue; graded footswitch policy. Lineage `.../experiment_lineage/hold-in-stream-arc.md`.
+- `hold_in_stream_findings.md` — the whole thread: the 3-probe localization, the mechanism (root=mis-placed hold,
+  chain=no_cross+fatigue→jack), the floor-tuning playtest arc, the footswitch diagnostic, and the shipped defaults.
+
 - `onset_frozenh_findings.md` — M1a: is the placement signal decodable from the FROZEN decoder's `h`? Conv readout
   hits the full 0.892 ceiling → yes, the cheap frozen-head build is greenlit on representation; DRIFT is the M1b gate.
 - `onset_seqrollout_findings.md` — M1b drift gate: free-run rollout reading `h`. The teacher-forced-trained head

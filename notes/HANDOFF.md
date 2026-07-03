@@ -1,125 +1,61 @@
-# HANDOFF — ACTIVE OPEN: seq-onset fork (strategic); quality-attribution thread CLOSED NULL (3 instruments)
+# HANDOFF — ACTIVE: hold-in-stream fix SHIPPED (2 decode defaults); open forks below. seq-onset fork still parked.
 
-**Written 2026-07-01 for the next Claude.** The quality-feature-attribution thread (incl. its graded-critic
-follow-up) is now fully CLOSED; the ONE open ML thread is the seq-onset fork.
+**Written 2026-07-02 for the next Claude.** This session localized the fast-song pattern/type-head defect to
+HOLDS-IN-STREAMS and DECODE-FIXED it — shipping TWO new canonical decode defaults. The quality-feature-attribution
+thread (which pointed here) stays closed; the seq-onset fork stays parked (§ below).
 
-## CLOSED THIS SESSION — quality-feature attribution → the driver is BPM (overturned an earlier null)
-*"which audio features drive per-song generator QUALITY under the canonical defaults?"* → **song TEMPO (BPM):
-faster Hard songs → worse generations, r=−0.68, family-wise p=0.004** (`notes/quality_feature_attribution_findings.md`,
-lineage `quality-feature-attribution-arc.md`, [[quality-feature-attribution]]).
-- ⚠️ **This OVERTURNED an earlier committed "three-instrument NULL"** (that null is SUPERSEDED in the findings note).
-  The null was a NOISE-ATTENUATION artifact: a single generation's quality score is ~46% sample noise (ICC=0.54).
-  The fix (user's idea, `probe_quality_variance.py`, n=30 × K=8): the 8-generation MEAN is 0.90-reliable
-  (split-half +0.85) → BPM emerges. Validated: not density (partial −0.75), not outlier, not a critic bias
-  (fast HUMAN charts score fine, bpm↔m_real −0.08 → a GENERATION defect). **METHOD KEEPER: check a target's
-  RELIABILITY/ICC before concluding "no feature explains it" — denoise (average K samples) first.**
-- **Reusable instruments built:** choreography distance-to-real (`trans_KL`+`hold_burst`) AND a GRADED critic
-  (`experiments/realism_critic/train_graded_critic.py` → `checkpoints/realism_critic_graded`, gitignored) — both
-  NON-SATURATING (the deployed critic rails ~94% of Hard gens to "fake"; the graded critic's range is what made the
-  within-song variance visible). Use either over the deployed critic for fixed-difficulty quality questions.
-- **Mechanism narrowed to the PATTERN/TYPE head.** GOVERNOR RULED OUT (`probe_bpm_governor_ablation.py`, paired,
-  n=30 K=6: slope didn't flatten off, paired spearman(bpm, q_off−q_on)=−0.04 p=0.59). TRAINING COVERAGE not primary
-  (`probe_train_bpm_coverage.py`: fast region 25.8% of train Hard; slowest bin fewest charts yet good; weak
-  nonlinearity-confounded secondary). ONSET HEAD ruled out (`probe_onset_head_bpm.py`, n=176: p_onset placement AUC
-  vs BPM FLAT/better). → **BY ELIMINATION the locus = the pattern/type head (which-panel / AR sequence quality) at
-  high note density** — CONFIRMED (`probe_bpm_head_decomp.py`, n=20 K=3, `onset_override` A/B): the REAL chart's
-  PERFECT onsets + gen panels STILL slope −0.38 with BPM (canon −0.55), and the controlled paired test
-  spearman(bpm, q_real_ov − q_gen_ov)=+0.11 p=0.65 (flat) → perfect onsets don't rescue fast songs; the pattern
-  head owns it. **Actionable fix target = the pattern head's arrow-choice at high note density.** n=20/30 obs.
-- Probes (import the harness, match deployment): `probe_quality_features.py` (critic; `--critic` swaps the graded
-  checkpoint; holds shared `load_val_dataset`/`build_songs`/`canonical_gen_typed`), `probe_quality_choreo.py`,
-  `probe_holdburst_dynamics.py`, `probe_quality_variance.py` (the denoiser/ICC), `probe_bpm_governor_ablation.py`
-  (the mechanism ablation; `canonical_gen_typed` gained a `decode_overrides` toggle for the governor-off arm),
-  `probe_train_bpm_coverage.py` (coverage, no-gen), `probe_onset_head_bpm.py` (onset-head fidelity vs BPM, no-gen),
-  `probe_bpm_head_decomp.py` (the onset_override head decomposition). Docs across **PR #55** (merged) + **PR #56**
-  (mechanism-narrowing); see §5 for branch/PR state.
+## WHERE WE ARE
+Deployed model UNCHANGED = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres). Both new levers are
+DECODE-time (no retrain). **Two canonical decode defaults shipped this session** (in `decode_defaults.CANONICAL_DECODE`,
+both entry points, the canonical block below, generation-defaults §1):
+- **`hold_stream_penalty=8, hold_stream_floor=0.45, hold_stream_win=16`** — suppress hold-heads in dense STREAM
+  sections. The type head opens holds where a human streams (gen 18% of stream frames vs real ~0%); the pinned foot
+  then forces a jack (`no_cross_during_hold` + fatigue). `relu(density−floor)` gate → SPARSE musical holds untouched.
+- **`footswitch=False`** — forbid footswitch footing → same-panel runs must be one-foot jacks, so the model
+  ALTERNATES instead. Playtest: **"sooooo much better", forbidding footswitch made the model MORE creative.** The
+  new footswitch on/off knob also revealed the "brutal 16th voltage" is a FOOTSWITCH STRATEGY, not intrinsic jacks.
 
-## ACTIVE OPEN THREAD — seq-onset fork (A): ALIVE but UNDERTUNED, now STRATEGIC (unchanged since 2026-06-29)
-Full state in lineage `seq-onset-arc.md` + `notes/onset_placement_findings.md`. Short version: 16th placement is a
-chart-PRIOR not in audio (wall CLOSED NEGATIVE 4 ways); the BUILD re-opened cheap (M1a: conv readout on the FROZEN
-decoder's `h` = 0.892 ≡ ceiling); M1b-3 broke the DENSITY drift (scheduled sampling). **THE DECODE SURFACE IS
-HEAD-SPECIFIC** (`conditioning-mechanics` §8): for the causal seq head, tau→per-song ADAPTIVE, the 16th-unlock polarity
-FLIPS to a down-weight, rests need an EXPLICIT valve. A head-appropriate surface (`seqonset_decode.py`) drains the flood
-to a real-aligned backbone that pauses; playtest **"better, still very linear."** The fork is STRATEGIC (right investment
-this stage?), not "is it viable." Sharpest untested lead: the head may lean on a HOLD-RELEASE phantom note instead of
-genuinely resting. **Do NOT re-derive the "BANKED/placement-hollow" bank — the user overturned it twice (valid catches).**
+Full record: `notes/hold_in_stream_findings.md`; lineage
+`.claude/skills/experiment-design/experiment_lineage/hold-in-stream-arc.md`; memory [[hold-in-stream-fix]];
+playtests `notes/playtest_log.md` (2026-07-02). Probes (import the shared canonical helpers in
+`probe_quality_features.py`): `probe_bpm_hold_decomp.py`, `probe_stream_holdjack.py`, `probe_holdstream_fix.py`.
 
-**Deployed model UNCHANGED across both threads; conditioning, fatigue, stamina INTACT** — every probe was a diagnostic
-READ on a frozen decoder. The shipped generator is exactly as last played.
+## THE ACTIVE THREAD — hold-in-stream fix (SHIPPED) + its open forks (lineage `hold-in-stream-arc.md`)
+The fix shipped and played as a total success. Open forks, in priority order (all DECODE-time, no retrain):
+1. **FREE-FOOT-OVERLOAD gate** — the robust successor to the density-PROXY hold gate. `hold_stream_penalty` gates on
+   local onset density, which can't tell a dense EXPRESSIVE hold from a dense jack-forcing one (floor 0.45 works only
+   because japa1's pathological hold happens to be the densest). A gate on the predicted free-foot workload /
+   forced-jack would generalize. **User's stated next lever.**
+2. **16th-jack penalty, tastefully** — reframed by the footswitch finding: the residual intrinsic voltage (runs that
+   PERSIST footswitch-off, esp. OH WORLD) is the real target; do NOT blanket-kill (real charts have justified 2-note
+   16th jacks — H13 / `foot_fatigue_design.md`).
+3. **GRADED footswitch policy** — the hard ban (`footswitch=False`) shipped well, but a graded penalty (allow SOME
+   footswitch where musical) may be better; revisit.
+
+## AWAITING USER
+Nothing pending — the last playtest (`~/sm-generated/footswitch_ab`, footswitch on/off) came back a "total success"
+and the defaults are shipped. The next work is the user's call among the three forks above (they named the free-foot
+gate as next). No installed set awaiting a verdict.
+
+## PARKED — seq-onset fork (strategic, unchanged since 2026-06-29; lineage `seq-onset-arc.md`)
+16th placement is a chart-PRIOR not in audio (wall CLOSED NEGATIVE 4 ways); the cheap frozen-`h` build is ALIVE but
+UNDERTUNED. THE DECODE SURFACE IS HEAD-SPECIFIC (`conditioning-mechanics` §8). Playtested "better, still very linear."
+Strategic (right investment now?), not "is it viable." Untested lead: hold-release phantom-rest. Not this session.
 
 Env: conda `stepmania-chart-gen` — call the interpreter DIRECTLY
-(`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`); **NOT `conda run`** (it buffers child stdout → empty logs
-if killed/polled). Deployed generation ~10 s/chart; the 954-file val PARSE is ~4 min (unavoidable startup); do NOT call
-`val_ds.warm_cache()` (it eagerly extracts the whole val set, ~30 min CPU — use lazy `val_ds[i]`).
+(`/home/ybx/miniconda3/envs/stepmania-chart-gen/bin/python`); NOT `conda run`. Deployed generation ~10 s/chart; the
+954-file val PARSE is ~4 min (unavoidable startup); do NOT `warm_cache()` (eager, ~30 min — use lazy `val_ds[i]`).
 
-**READ-FIRST (in order):** for the ACTIVE thread → `notes/quality_feature_attribution_findings.md` → lineage
-`.claude/skills/experiment-design/experiment_lineage/quality-feature-attribution-arc.md` → `taste-critic-transfer` memory
-(the near-binary caveat + the graded-retrain fork). For the seq-onset thread → `notes/onset_placement_findings.md` →
-`seq-onset-arc.md` → `conditioning-mechanics` §8. Load-bearing skills: **experiment-design** (Rules 11 dynamic-range /
-12 stratify / 7-9 fair-version-before-committing — this thread is a clean worked example: 3 would-be false "drivers"
-each caught), **generation-defaults**, **conditioning-mechanics** §8.
-
----
-
-## 0. INFRASTRUCTURE LANDED 2026-06-30 (a detour from the seq-onset thread; deployed model UNCHANGED)
-A single-source decode refactor — the seq-onset thread above is still THE active ML thread, this is orthogonal
-plumbing. The trigger: `scripts/generate.py` (the PUBLIC CLI) had drifted to a *different, un-played* regime
-(`pattern_temperature=0.7`, stamina/breathe OFF, no `onset_phase_calib` 16th-unlock). Now:
-- `src/generation/decode_defaults.py` = `CANONICAL_DECODE` palette dict + `apply_phase_calib`/`parse_phase_calib`.
-- `src/generation/decode_harness.py` = `conditioned_p_onset` (the deployed onset→tau path), `compute_tau`,
-  `phase_shares`, `load_generator`, `make_feature_extractor`, `DEPLOYED_CHECKPOINT`, `MODEL_ARCH`.
-- `src/utils/data_splits.py` = `discover_chart_files` + `split_chart_files`.
-- `generate.py` + `export_typed_samples.py` are DOGFOODED through the harness (a NEW probe should import it, not
-  hand-roll the tau pipeline). Also fixed a latent §3 bug in generate.py (tau used a different radar than decode).
-- **Verified end-to-end BYTE-IDENTICAL:** migrated `buffered_sectional.py` produces md5-matched charts vs the
-  pre-refactor version. See memory `decode-harness-single-source` + the `generation-defaults` skill (updated).
-- ⚠️ `--style` now accepts repeated flags AND comma lists (`chaos=high,freeze=low`); but a raw float like
-  `chaos=0.7` still gets manifold-PROJECTED (chaos>~0.47 is OOD for Hard → shrunk, and it drags fixed dims like
-  freeze back toward the mean). Use on-manifold levels/quantiles to make a fixed dim stick.
-
-## 1. WHERE WE ARE
-Deployed model = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres) + the shipped governor (canonical
-block below). No model change this session (the quality thread was diagnostic; the graded critic is a SEPARATE
-evaluator model, not the generator). The one OPEN thread = seq-onset (§2b); its tooling (unchanged since 2026-06-29):
-- `seqonset_decode.py` — the head-appropriate surface: `build_rest_env` (audio `p_onset` energy envelope = the rest
-  valve), `selfcal_tau` (binary-search best-tracking per-song density calibration; defeats the cliff).
-- `probe_seqonset_placement.py` (M1b-4, the AUC bracket + pure-TF ceiling head `cache/seqonset_tfceiling_head.pt`),
-  `probe_seqonset_critic.py` (M1b-5, density-matched `onset_override` taste-critic A/B), `probe_seqonset_phase.py`
-  (M1b-6, phase shares), `probe_seqonset_cond.py` (M1b-7, manifold conditioning), `probe_seqonset_phasepen.py` (M1b-8,
-  phase-rebalance), `probe_seqonset_rest.py` (M1b-9, rest structure), `export_seqonset_ab.py` (the by-ear A/B export).
-- `probe_seqonset_rollout.py`'s `rollout()` gained opt-in `collect_logits` / `radar` / `phase_pen` / `rest_env`.
-The SS head is saved at `cache/seqonset_ss_head.pt`.
-
-## 2a. CLOSED — quality-feature attribution + the graded-critic retrain (lineage `quality-feature-attribution-arc.md`)
-Done this session; NULL across three instruments (see the header). The graded critic
-(`checkpoints/realism_critic_graded`, `train_graded_critic.py`) exists as a reusable non-saturating instrument but
-is NOISY per-chart (ladder monotonicity ~0.35). No open action.
-
-## 2b. ACTIVE OPEN THREAD — the seq-onset STRATEGIC fork + technical leads (lineage `seq-onset-arc.md`)
-The binding decision is the user's: **is the seq-onset path the right investment now?** If pursued, the technical
-leads in priority order:
-1. **Test the HOLD-RELEASE hypothesis** — does the seq head genuinely rest, or use hold-release phantom notes to avoid
-   collapse? (Cheap diagnostic: correlate the rests with hold tails.) This decides whether the rest valve is real.
-2. **A radar-DIRECT / phase-aware conditioned RETRAIN** — the faithful version of the user's manifold fix (feed groove
-   to the seq head as a DIRECT input + train phase-aware so it stops over-firing 16ths at the source). `/autotune`
-   first. This is the path to the better-than-audio 16th advantage (M1a 0.89) that free-run doesn't yet reach.
-3. **Finer rest texture** (the rests are currently too long/clustered vs real) + tame the density cliff.
-
-**Also-open, INDEPENDENT nearest-shippable** (no longer a fork-A fallback — they stand on their own, governor stack
-verified intact): (1) perc-gate `harm_calib` re-A/B (gate on `perc_onset` dim-35 absence, not dim-0 energy — fixes the
-HSL piano-solo gate-targeting); (2) 1/16-jack OOD — measure japa1 1/16-jack run-length (`calib_foot_fatigue.py`) BEFORE
-a `fatigue_penalty` 2→3 A/B.
-
-## 3. AWAITING USER
-The fair-surface A/B is installed at `~/sm-generated/seqonset_ab_fair` (Challenge=audio, Edit=seq fair-surface, +
-original). The user PLAYED it: "it's better! still very linear" + the hold-release hypothesis. No open by-ear gate;
-the pending decision is the STRATEGIC fork (pursue seq-onset now vs the nearest-shippable vs something else).
+**READ-FIRST (in order):** ACTIVE → `notes/hold_in_stream_findings.md` → lineage `hold-in-stream-arc.md` →
+`notes/playtest_log.md` (2026-07-02). Load-bearing skills: **experiment-design** (this thread is a clean worked
+example — pooled-vs-paired baseline, small-n regression, shared-RNG A/B, by-ear gate), **conditioning-mechanics** §7
+(`hold_stream_penalty`) + §8b (`footswitch`), **generation-defaults** §1 (the shipped values).
 
 ## CANONICAL EXPORT DEFAULTS (the deployed config — VALIDATED by `/refresh`)
 The bare `export_typed_samples.py` run reproduces what the user plays. These values MUST equal the script's argparse
 defaults — `tools/check_export_defaults.py` parses the block below and FAILS the refresh if they drift. Durable mirror
 of `generation-defaults` §1; update both (and re-run the validator) on any deliberate change. **This section is
-permanent — keep it in every HANDOFF rewrite.** (Unchanged this session.)
+permanent — keep it in every HANDOFF rewrite.**
 
 <!-- CANONICAL-EXPORT-DEFAULTS:START (do NOT hand-edit values; re-run tools/check_export_defaults.py after a change) -->
 ```
@@ -137,47 +73,40 @@ stamina_tau = 8.0
 stamina_scale = 15.0
 stamina_breathe = 1.2
 onset_phase_calib = 0.0,1.0
+hold_stream_penalty = 8.0
+hold_stream_floor = 0.45
+hold_stream_win = 16
+footswitch = False
 harm_calib = 0.0
 harm_quiet_q = 40.0
 guidance = 1.0
 ```
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
-## 4. RESOLVED THIS SESSION (don't re-derive)
-- **The decode surface is HEAD-SPECIFIC** — never test a new onset head on the deployed (audio-tuned) palette: tau,
-  the 16th-unlock, and rests all break/invert (§ header + conditioning-mechanics §8). This is the session's keeper.
-- **The "BANKED / placement-hollow" conclusion was PREMATURE** — three metrics on ONE under-tuned config is not
-  robustness (Rule 11), and I skipped the fair version (Rule 7). The user caught it. The path is alive + undertuned.
-- **The 16th-flood is NOT chaos conditioning** — `radar=None` throughout (verified). It's the head's free-run fixpoint.
-- **Inference-time manifold conditioning is a ~3% echo on the seq head** (it reads `h`, not radar directly) — the
-  faithful fix is a radar-DIRECT head, not a decode knob.
-- **`onset_override` A/B + `enforce_playability`** is the Rule-14-clean way to compare onset sources (skips stamina for
-  both arms = controlled). **`install_to_stepmania` rmtrees a same-named group** — build under `outputs/...`, NOT under
-  `~/sm-generated`.
-- **Self-cal tau must be a BINARY SEARCH best-tracking realized density** — a quantile-of-realized-logits iteration
-  DIVERGES on the cliff (collapsed a song to empty).
+## RESOLVED THIS SESSION (don't re-derive)
+- **The fast-song pattern/type-head defect IS decode-fixable** (the quality arc's "not a decode knob" was too
+  pessimistic) — the sub-locus is holds-in-streams, removed by `hold_stream_penalty`.
+- **POOLED-vs-PAIRED baseline:** a "defect-vs-X" slope must use the song's OWN real as the baseline, not a pooled
+  constant (the tail-run-long r=+0.49 was a pooled artifact; paired −0.07). Pooled is only right for distance-to-manifold.
+- **Confirm a marginal lead at higher n** — holdrate +0.31@n40 (p=.026) → +0.09@n90. A boundary p at small n is where
+  a true effect and an artifact are indistinguishable.
+- **A global RATE hides a POSITIONAL defect** — needed a co-occurrence metric aligned to real streams.
+- **hold_burst ≠ hold+jack** — hold_burst counts free-foot CROSSES (dist≥1.4); a jack is dist-0, invisible to it.
+- **SHARED-RNG A/B** (common random numbers): the exporter restores the RNG before the Edit arm so a decode-knob A/B
+  isolates the knob from sampling noise. `--ab_hold_stream` / `--ab_footswitch` use it.
+- **The voltage is a FOOTSWITCH strategy** — forbidding footswitch collapses same-panel runs 81–85% (HSL/japa1).
 
-## 5. BRANCH / PR STATE  (verify ALL live state via `gh pr view <n>` / `git log origin/main` — Documentation Discipline)
-- **Quality-feature attribution (this arc):** PR **#55** merged (merge commit `0ef5eab`: refresh + graded critic +
-  BPM overturn + governor ablation). Mechanism-narrowing docs (coverage / onset-head / head-decomposition) on branch
-  **`docs/bpm-mechanism-decomp`** → PR **#56**. Gitignored (reproducible via the scripts): the graded critic
-  `checkpoints/realism_critic_graded` (`train_graded_critic.py`) + the quality CSVs `cache/quality_*`,
-  `cache/bpm_*`, `cache/onset_head_bpm.csv`.
-- **Infra refactor (§0):** merged — PRs **#52 / #53 / #54** (canonical-decode-single-source → tier2 → tier3).
-- **Seq-onset ML thread:** merged via PRs **#50 / #51**. Gitignored: `cache/seqonset_*`, `cache/seqctx_frozenh_*`,
-  `outputs/seqonset_ab*`. `main` protected by ruleset `protect-main`.
+## BRANCH / PR STATE  (verify ALL live state via `gh pr view <n>` / `git log origin/main` — Documentation Discipline)
+- **This refresh (hold-in-stream fix):** docs + the 2 shipped decode defaults + the 3 probes — on branch
+  **`docs/hold-in-stream-fix`** → PR (see `gh pr list`). Code changed: `typed_model.generate` (hold_stream_*,
+  footswitch), `decode_defaults.CANONICAL_DECODE`, `export_typed_samples.py` (flags + shared-RNG A/B),
+  `scripts/generate.py`. Gitignored (reproducible): `cache/bpm_hold_*`, `cache/stream_holdjack.csv`,
+  `cache/holdstream_fix.csv`, `outputs/holdstream_ab*`, `outputs/footswitch_ab`.
+- **Prior (quality-feature attribution):** PR #55 merged; mechanism-narrowing on `docs/bpm-mechanism-decomp` → PR #56.
+- **Infra refactor:** PRs #52/#53/#54 merged. **Seq-onset:** PRs #50/#51 merged. `main` protected by `protect-main`.
 
-## 6. INFRA / PERF NOTES
-- Deployed generation ~10 s/chart (B=1 AR, RTX 3060); the seq rollout is lighter. The dataset re-parse (4452 files) is
-  the slow part of `probe_seqonset_critic`/`export_seqonset_ab` (~min); the cache-based probes skip it.
-- `cache/samples_v3` = the deployed highres feature cache; the `seqctx_frozenh_*` caches are a FIXED split (re-extract
-  for a fresh subset — [[dataset-cache-footgun]]).
-- `/autotune` (never run) — the right tool BEFORE any seq-onset retrain (batch/AMP/bucketing/Optuna).
-
-## 7. DISCIPLINE (this session is the cautionary tale)
-- **Rule 7 (run the fair version before blaming the model) + Rule 11 (isolate the variable / confirm dynamic range):**
-  I committed "placement-hollow" from ONE under-tuned config; the fair version (head-appropriate decode surface) showed
-  the path is alive. The user caught both. When a result indicts a NEW component, suspect YOUR setup first (HARNESS→DATA→MODEL).
-- **By-ear is the binding gate** (Rule 8) — it named the flood AND the "still linear"/hold-release leads the metrics missed.
-- **Match the verb to the evidence** ([[claim-precision]]): "alive + undertuned" ≠ "viable/shippable"; "audio-parity
-  backbone" ≠ "good". One change at a time; `playtest_log.md` = subjective only; quantitative → `notes/*_findings.md`.
+## DISCIPLINE (this session's worked examples)
+- **Rule 0** (check notes first) + **experiment-design pooled-vs-paired / small-n / shared-RNG** — each caught a
+  would-be false conclusion here. **By-ear is the binding gate** (Rule 8) — it named the defect AND every fix verdict
+  (blunt v1, floor tune, the footswitch success). **Match the verb to the evidence** ([[claim-precision]]).
+  One change at a time; `playtest_log.md` = subjective only; quantitative → `notes/*_findings.md`.
