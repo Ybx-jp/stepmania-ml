@@ -32,6 +32,16 @@ CANONICAL_DECODE: dict = {
     "stamina_scale": 15.0,          # excess-workload scale for the tau bump
     "stamina_breathe": 1.2,         # Stage-3 ARC: ceiling breathes with audio energy; 0 = flat
     "onset_phase_calib": (0.0, 1.0),  # ★ the 16th-UNLOCK (b8, b16); MUST also be applied to tau (see below)
+    # HOLD-IN-STREAM fix (2026-07-02, playtest-validated): suppress hold-heads in dense STREAM sections (the type
+    # head opens holds where a human streams; the pinned foot then forces jacks). Gated on local onset density with
+    # a floor so SPARSE musical holds stay. floor 0.45 / penalty 8 = the by-ear sweet spot (japa1 "just right").
+    "hold_stream_penalty": 8.0,     # 0 = off; the density-gated hold-head logit suppression
+    "hold_stream_floor": 0.45,      # local onset density below which the penalty is exactly 0 (protects sparse holds)
+    "hold_stream_win": 16,          # frames for the local-density gate
+    # FOOTSWITCH policy (2026-07-02, playtest-validated): False = forbid footswitch footing -> same-panel runs must
+    # be one-foot jacks. Playtest: OFF forced the model to ALTERNATE (more creative, less brutal voltage); japa1
+    # "sooooo much better". Set the DEPLOYED default OFF for now; revisit a graded footswitch policy later.
+    "footswitch": False,
 }
 
 
