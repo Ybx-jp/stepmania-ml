@@ -4,6 +4,53 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Versioning is semantic; `0.x` is pre-1.0,
 so interfaces may still change.
 
+## [0.2.0] — 2026-07-02
+
+Decode-quality release. The default generated chart changes materially (and for the better) on
+the same model weights: same song + seed now produces different, more human footwork. Two new
+decode-time controllability knobs ship, both validated by playtest **and** an independent metric.
+No retrain — `checkpoints/gen_motif_full_fixed` is unchanged; every change is in the decode path.
+
+### Added
+- **`footswitch` decode knob** (default **off**) — forbids footswitch footing, so same-panel runs
+  must be one-foot jacks and the model **alternates** instead. A diagnostic A/B (`--ab_footswitch`)
+  first revealed that the "brutal 16th voltage" was dominantly a *footswitch strategy*, not intrinsic
+  jacks (forbidding it collapses same-panel runs 81–85%); forbidding it played "much better, more
+  creative." Now the canonical default.
+- **`hold_stream_penalty` family** (`hold_stream_penalty=8`, `hold_stream_floor=0.45`,
+  `hold_stream_win=16`) — suppresses hold-heads in dense *stream* sections (where the type head
+  otherwise opens a hold whose pinned foot forces a jack), gated on local onset density so sparse
+  musical holds are untouched. Playtest-tuned ("just right" on japa1).
+- **Graded realism critic** (`checkpoints/realism_critic_graded`, `train_graded_critic.py`) — a
+  non-saturating taste instrument (graded corrupted-real ladders + within-song margin-ranking loss)
+  that fixes the deployed binary critic's ~94%-railed saturation on Hard generations. Reusable
+  evaluation asset.
+- Shared-RNG (common-random-number) A/B paths in the exporter (`--ab_hold_stream`, `--ab_footswitch`)
+  that isolate a decode-knob's effect from sampling noise.
+
+### Changed
+- **Default decode behavior** — `footswitch=False` + the `hold_stream_penalty` defaults are now part
+  of the canonical palette (`decode_defaults.CANONICAL_DECODE`), so a bare `generate` / export
+  produces alternating (not footswitched) same-panel runs and no holds-in-streams. This is the
+  user-visible headline of the release.
+- **Decode config single-source** — the canonical palette, tau pipeline, and model/feature loaders
+  now live in one place (`decode_defaults.py` + `decode_harness.py`); both entry points and all probes
+  import them, so `scripts/generate.py` can no longer silently drift from the exporter.
+
+### Fixed
+- **The fast-song quality defect.** Faster Hard songs generated materially worse charts (BPM→quality
+  Spearman −0.68, family-wise p 0.004). The two new decode defaults resolve it: rerunning the denoised
+  BPM→quality probe flattens the slope to +0.11 (n.s.) with all songs improved. Decomposition attributes
+  the critic-measurable win to `footswitch=False`; `hold_stream_penalty`'s win is by-ear (it is
+  presence-blind to the realism critic by construction). Full record in
+  `notes/hold_in_stream_findings.md` / `notes/quality_feature_attribution_findings.md`.
+
+### Diagnostics / internal
+- BPM→quality attribution thread: localized the defect to the pattern/type head at high density
+  (governor, training-coverage, and onset-head all ruled out); established the reliability/ICC-first
+  method (a single generation's quality score is ~46% sample noise — denoise before attributing).
+- Choreography distance-to-real quality instrument and the harness-loader refactor tiers.
+
 ## [0.1.0] — 2026-06-29
 
 First tagged release. An audio-conditioned, autoregressive StepMania chart generator with a
