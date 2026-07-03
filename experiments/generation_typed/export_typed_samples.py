@@ -45,6 +45,50 @@ from src.generation.evaluation import DifficultyCritic
 
 DEFAULT_BPM = 150.0
 
+
+# ── cold-cache prefetch ──────────────────────────────────────────────────────────────────────
+# Audio feature extraction (MFCC / chroma / HPSS / highres-onset) is single-threaded CPU work and, on a
+# COLD cache, DOMINATES wall time: it runs inline before each song while the GPU sits ~idle between decodes
+# (the AR decode is kernel-launch-bound, not compute-bound). We overlap the two by extracting UPCOMING songs'
+# features in worker processes while the GPU decodes the current one — a classic prefetching DataLoader.
+# Values are unchanged (same `ds[i]`, same per-index on-disk cache, just warmed in parallel) → BYTE-IDENTICAL
+# charts; only the SCHEDULE changes. `--prefetch_workers 0` restores the old synchronous path.
+class _OrderedView(torch.utils.data.Dataset):
+    """Maps a decode position -> (dataset_index, sample) following the selected `order`."""
+    def __init__(self, ds, order):
+        self.ds, self.order = ds, list(order)
+
+    def __len__(self):
+        return len(self.order)
+
+    def __getitem__(self, pos):
+        idx = self.order[pos]
+        return idx, self.ds[idx]
+
+
+def _first(batch):
+    return batch[0]   # batch_size=1 -> hand back the (idx, sample) tuple unbatched
+
+
+def _prefetch_samples(ds, order, workers):
+    """Yield (idx, sample) for each idx in `order`, in order; prefetch ahead when workers >= 1."""
+    if not workers or workers < 1:                       # synchronous fallback == the old behavior exactly
+        for idx in order:
+            yield idx, ds[idx]
+        return
+    from torch.utils.data import DataLoader
+    loader = DataLoader(
+        _OrderedView(ds, order), batch_size=1, shuffle=False, num_workers=workers,
+        collate_fn=_first, prefetch_factor=2, persistent_workers=False, pin_memory=False,
+    )
+    it = iter(loader)
+    try:
+        for item in it:
+            yield item
+    finally:
+        del it, loader                                   # tear workers down promptly if the consumer breaks
+
+
 # Sparse-harm-in-quiet phrase calibrator (Step 1 mechanism, notes/phrasing_coherence_findings.md). MUST match
 # probe_phrasing_coherence.py:sparse_harm_offset exactly (boxsmooth win 16, norm01, highres dims energy=0 harm=36).
 def _sparse_harm_offset(audio_np, gain, quiet_q):
@@ -127,6 +171,10 @@ def parse_args():
                         'stage1=41-dim (cache/samples_v2, legacy gen_stage1); base=23-dim (cache/samples, gen_style).')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
+    p.add_argument('--prefetch_workers', type=int, default=min(4, os.cpu_count() or 1),
+                   help='worker processes that pre-extract UPCOMING songs\' audio features while the GPU '
+                        'decodes the current song (overlaps CPU extraction with GPU decode -> big win on a '
+                        'COLD feature cache). 0 = synchronous (old inline behavior). Output is byte-identical.')
     p.add_argument('--reference', type=str, default=None,
                    help='path to a reference .sm/.ssc chart: generate every song IN THE STYLE OF this chart (Step 3)')
     p.add_argument('--reference_difficulty', type=str, default=None,
@@ -433,13 +481,13 @@ def main():
     print("-" * 80)
 
     exported, seen = 0, set()
-    for i in order:
+    for i, sample in _prefetch_samples(ds, order, args.prefetch_workers):
         if exported >= args.num_songs:
             break
         meta = ds.valid_samples[i]
         if meta['chart_file'] in seen:
             continue
-        sample = ds[i]; T = min(int(sample['mask'].sum().item()), args.max_len)
+        T = min(int(sample['mask'].sum().item()), args.max_len)
         nd = next((n for n in meta['chart'].note_data if n.difficulty_name == meta['difficulty_name']
                    and n.difficulty_value == meta['difficulty_value']), None)
         if nd is None:
