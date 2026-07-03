@@ -1,8 +1,12 @@
 # HANDOFF — ACTIVE: hold-in-stream fix SHIPPED (2 decode defaults); open forks below. seq-onset fork still parked.
 
-**Written 2026-07-02 for the next Claude.** This session localized the fast-song pattern/type-head defect to
-HOLDS-IN-STREAMS and DECODE-FIXED it — shipping TWO new canonical decode defaults. The quality-feature-attribution
-thread (which pointed here) stays closed; the seq-onset fork stays parked (§ below).
+**Written 2026-07-02 for the next Claude.** A prior session this day localized the fast-song pattern/type-head defect to
+HOLDS-IN-STREAMS and DECODE-FIXED it — shipping TWO new canonical decode defaults (playtest-validated). THIS session
+ran the **METRICS HALF**: rerunning the BPM→quality probe under the new defaults **confirmed the fix quantitatively**
+(BPM→quality slope −0.68 → +0.11, 30/30 songs up) and a decomposition showed **`footswitch=False` owns the entire
+critic-measurable effect** (`hold_stream_penalty` is presence-blind to the binary critic → ear-validated only). No model
+or default change this session — a diagnostic confirmation. The quality-feature-attribution thread stays closed
+(now with its defect RESOLVED); the seq-onset fork stays parked (§ below).
 
 ## WHERE WE ARE
 Deployed model UNCHANGED = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres). Both new levers are
@@ -15,10 +19,11 @@ both entry points, the canonical block below, generation-defaults §1):
   ALTERNATES instead. Playtest: **"sooooo much better", forbidding footswitch made the model MORE creative.** The
   new footswitch on/off knob also revealed the "brutal 16th voltage" is a FOOTSWITCH STRATEGY, not intrinsic jacks.
 
-Full record: `notes/hold_in_stream_findings.md`; lineage
+Full record: `notes/hold_in_stream_findings.md` (incl. the § "THE METRICS-HALF CONFIRMATION"); lineage
 `.claude/skills/experiment-design/experiment_lineage/hold-in-stream-arc.md`; memory [[hold-in-stream-fix]];
 playtests `notes/playtest_log.md` (2026-07-02). Probes (import the shared canonical helpers in
-`probe_quality_features.py`): `probe_bpm_hold_decomp.py`, `probe_stream_holdjack.py`, `probe_holdstream_fix.py`.
+`probe_quality_features.py`): `probe_bpm_hold_decomp.py`, `probe_stream_holdjack.py`, `probe_holdstream_fix.py`, and
+this session's `probe_quality_variance.py` (rerun) + `probe_bpm_holdfix_decomp.py` (the single-knob decomposition).
 
 ## THE ACTIVE THREAD — hold-in-stream fix (SHIPPED) + its open forks (lineage `hold-in-stream-arc.md`)
 The fix shipped and played as a total success. Open forks, in priority order (all DECODE-time, no retrain):
@@ -83,7 +88,16 @@ guidance = 1.0
 ```
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
-## RESOLVED THIS SESSION (don't re-derive)
+## RESOLVED (don't re-derive)
+- **METRICS-HALF CONFIRMATION of the ship (this session):** rerunning `probe_quality_variance.py` under the new
+  `CANONICAL_DECODE` (same 30 songs/seed/K=8/graded critic) shows the BPM→quality defect (r=−0.68) is **FULLY resolved
+  → +0.11** (perm p 0.56), quality −2.07 → +1.48, 30/30 up. Clean 1-var: critic `m_real` byte-identical (Δ=0),
+  `generate()` diff = only the 2 gated knobs. A defect-BLIND realism critic converged on the ears = triangulation.
+- **Which-knob decomposition (`probe_bpm_holdfix_decomp.py`):** **`footswitch=False` owns the ENTIRE critic-measurable
+  effect** (slope +0.145, level +3.31; lifts fast songs most → flattens the slope) → the BPM defect was footswitch-jack
+  voltage on fast songs. **`hold_stream_penalty` is metric-null (slope −0.705)** — presence-blind to the binary-grid
+  critic BY CONSTRUCTION (it changes tap-vs-hold; the critic reads presence). Its win is BY-EAR, not a critic demerit.
+  Rule-16 catch: I predicted hold_stream flattens the slope; the arms credited footswitch — validate before committing.
 - **The fast-song pattern/type-head defect IS decode-fixable** (the quality arc's "not a decode knob" was too
   pessimistic) — the sub-locus is holds-in-streams, removed by `hold_stream_penalty`.
 - **POOLED-vs-PAIRED baseline:** a "defect-vs-X" slope must use the song's OWN real as the baseline, not a pooled

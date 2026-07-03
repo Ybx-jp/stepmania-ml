@@ -74,6 +74,60 @@ HOLD with a JACK sequence where a human would chart a regular STREAM." Ended wit
 - **Playtest: OFF is "sooooo much better", "forbidding footswitches forced the model to be more creative, not less."**
   Shipped `footswitch=False` as the default; revisit a GRADED footswitch policy (vs a hard ban) later.
 
+## THE METRICS-HALF CONFIRMATION + which-knob decomposition (2026-07-02, after the ship)
+*The ship followed a SUCCESSFUL PLAYTEST (the primary/binding validation — "sooooo much better", japa1 "just
+right"). This is the confirmatory METRICS HALF: an independent instrument that never saw the playtest, re-run to
+see whether it converges on the ears' verdict. It does — strongly — and a decomposition attributes the effect to
+the right knob. Probes: rerun `probe_quality_variance.py` (new `CANONICAL_DECODE`) + `probe_bpm_holdfix_decomp.py`.*
+
+**The BPM→quality defect (`quality_feature_attribution_findings.md`, r=−0.68) is FULLY resolved on the critic axis.**
+Rerun `probe_quality_variance.py` — same 30 Hard songs, seed 42, K=8, graded critic — with the ONLY change being the
+two new defaults now live in `CANONICAL_DECODE` (the probe splats `**CANONICAL_DECODE`, so it auto-picks them up):
+
+| metric | baseline (old defaults) | new (shipped defaults) |
+|---|---|---|
+| `spearman(bpm, m_gen)` | **−0.682** (p_fw 0.004) | **+0.111** (perm p 0.56 = noise) |
+| mean quality (graded margin) | −2.07 (railed "fake") | +1.48 (near-real) |
+| songs improved | — | **30/30** (mean Δ +3.54) |
+| ICC / 8-gen reliability | 0.54 / 0.90 | 0.71 / 0.95 |
+
+Confounds ruled out (clean one-variable comparison, not merely correlated-with-the-ship): (a) **critic identical** —
+its checkpoint predates the baseline CSV and `m_real` (critic on the unchanged human charts) is byte-identical,
+max|Δ|=0.0000; (b) **no hidden generation drift** — `git diff` of `typed_model.generate` since the baseline commit
+contains ONLY the two gated knobs + plumbing, so at off-values the code is identical → the baseline CSV is a valid
+knobs-OFF arm.
+
+**Which-knob decomposition (`probe_bpm_holdfix_decomp.py`, single-knob one-variable arms) — footswitch owns it ALL:**
+| arm | slope r(bpm,q) | mean q | Δlevel vs base | Δlevel SLOW/MID/FAST |
+|---|---|---|---|---|
+| baseline (both off) | −0.682 | −2.07 | — | — |
+| **hold_stream only** (footswitch reverted) | **−0.705** | −2.01 | **+0.06** | +0.03 / +0.06 / +0.09 |
+| **footswitch only** (hold_stream=0) | **+0.145** | +1.25 | **+3.31** | +2.45 / +3.48 / +4.00 |
+| full fix (both) | +0.111 | +1.48 | +3.54 | +2.64 / +3.82 / +4.17 |
+
+- **`footswitch=False` does BOTH the slope-flatten AND the level-lift.** It lifts fast songs MOST (FAST +4.0 > SLOW
+  +2.45); that differential lift IS what flattens the BPM slope. So the BPM defect was, mechanistically, **footswitch-
+  jack voltage concentrated on fast songs** — fast Hard songs packed more/longer same-panel jack runs; forbidding the
+  footswitch footing collapsed them (81–85%), and more so on fast songs. Closes the loop with the footswitch finding
+  ("the brutal voltage is a footswitch strategy") and the pattern/type-head localization (it's a FOOTWORK defect).
+- **`hold_stream_penalty` is ~invisible to THIS critic — expected, not a demerit.** The realism critic reads the
+  BINARY note-PRESENCE grid (`to_binary` collapses tap/hold/tail/roll → "present"); `hold_stream_penalty` changes
+  tap-vs-HOLD type + removes a downstream forced jack (a same-panel REPEAT = still a present note), so it barely
+  perturbs the grid the critic sees. It is **presence-blind to hold-type by construction.** hold_stream's validation
+  therefore rightly rests on the EARS (japa1 "just right"); demanding this metric corroborate it is a category error.
+
+**Attribution correction (experiment-design Rule 16 — caught in-session):** I HYPOTHESIZED hold_stream flattens the
+slope and footswitch lifts the level. The decomposition OVERTURNED that — footswitch owns both; hold_stream is
+metric-null here. Had I committed the headline "the hold-in-stream fix resolved the BPM defect" without the single-
+knob arms, I'd have credited the wrong lever. The honest statement: **`footswitch=False` resolved the critic-
+measurable BPM defect; `hold_stream_penalty` was blessed by ear and is presence-blind to the critic.**
+
+**The two-instrument convergence is the load-bearing point:** a defect-blind realism critic (trained only on panel-
+scramble corruptions, no knowledge of holds/footswitch/play-feel) independently lifted these exact charts from
+"railed fake" to "near-real" — triangulating the by-ear ship, not merely repeating it. It also partly ANSWERS the
+earlier critic-blindness worry: footswitch-jacks DO have a measurable scramble-like statistical signature.
+Artifacts: `probe_bpm_holdfix_decomp.py`; CSVs `cache/quality_variance_hard{,_holdfix,_hsonly,_fsonly}.csv`.
+
 ## OPEN / next
 - **Free-foot-overload gate** (queued): the hold fix's density gate is a PROXY — it can't tell a dense EXPRESSIVE
   hold from a dense jack-forcing one. A gate on the predicted free-foot workload / forced-jack would be robust across

@@ -135,6 +135,25 @@ interpretable-only best (real_density −0.365) → **p_fw=0.157**. Nothing clea
 instruments is `real_density` (−0.37, denser Hard → worse gen quality) — but n.s. AND it is the within-Hard shadow
 of the difficulty/density axis (the macro driver), not a new audio feature.
 
+## ✅ RESOLVED 2026-07-02 — the BPM defect is DECODE-FIXED (metrics half confirms the hold-in-stream/footswitch ship)
+*The BPM→quality defect this thread discovered was fixed by the spun-off `hold-in-stream` thread's two shipped decode
+defaults. This is the METRICS-HALF confirmation (the primary validation was a successful playtest); full record in
+`notes/hold_in_stream_findings.md` § "THE METRICS-HALF CONFIRMATION".*
+- **Rerun `probe_quality_variance.py` under the new `CANONICAL_DECODE` (same 30 songs / seed / K=8 / graded critic):
+  the −0.68 slope is GONE → +0.111 (perm p 0.56), quality −2.07 → +1.48, 30/30 songs up.** Confounds ruled out: critic
+  byte-identical (`m_real` max|Δ|=0.0000, checkpoint predates baseline); `generate()` diff = ONLY the two gated knobs.
+- **Which-knob (`probe_bpm_holdfix_decomp.py`): `footswitch=False` owns the ENTIRE critic-measurable effect** (slope
+  +0.145, level +3.31); `hold_stream_penalty` alone is metric-null (slope −0.705, level +0.06). Mechanism: the critic
+  reads the BINARY presence grid, so it is presence-blind to hold-type (hold_stream's win is by-ear only), while
+  footswitch collapses same-panel jack runs MORE on fast songs → the differential lift flattens the BPM slope. So the
+  BPM defect was mechanistically **footswitch-jack voltage concentrated on fast songs** — consistent with the "pattern/
+  type head at high density" locus below (it's the FOOTWORK sub-part).
+- **Corrects the pessimism below:** the mechanism section calls the fix "NOT governor retuning" and the defect
+  "INTRINSIC / upstream" — TRUE (it's not the governor), but it turned out **decode-fixable after all** via the
+  footswitch-footing policy (a per-note governor cost knob), without a retrain. "Not a decode knob" was too pessimistic.
+- **Attribution correction (Rule 16):** I predicted hold_stream would flatten the slope; the single-knob arms showed
+  footswitch owns it. Credit the right lever — see `hold_in_stream_findings.md`.
+
 ## ⚠️ OVERTURNED 2026-07-01 — the "null" was NOISE ATTENUATION; the driver is BPM (`probe_quality_variance.py`)
 **The three-instrument "null" below is WRONG — corrected here.** It assumed one generation per song = the song's
 quality. But generation is STOCHASTIC, so a single score is mostly sample noise. Measuring it (user's idea: K

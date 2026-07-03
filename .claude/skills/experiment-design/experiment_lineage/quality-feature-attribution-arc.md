@@ -1,5 +1,13 @@
 # Quality-feature attribution — lineage
 
+**Status (2026-07-02): DRIVER = BPM (found 07-01) → ✅ DEFECT DECODE-RESOLVED (07-02).** The spun-off
+[`hold-in-stream-arc.md`](hold-in-stream-arc.md) fixed it: rerunning `probe_quality_variance.py` under the shipped
+`footswitch=False` + `hold_stream_penalty` defaults flattens the BPM→quality slope **−0.68 → +0.11** (perm p 0.56),
+quality −2.07 → +1.48, 30/30 songs up. Decomposition (`probe_bpm_holdfix_decomp.py`): **`footswitch=False` owns the
+entire critic-measurable effect**; `hold_stream_penalty` is presence-blind to the binary-grid critic (ear-validated).
+So the "pattern/type head at high density" locus below is really its FOOTWORK sub-part = **footswitch-jack voltage on
+fast songs**, and the "not a decode knob / intrinsic" read was too pessimistic re: the fix path (decode-fixed, no retrain).
+
 **Status (2026-07-01): RESOLVED POSITIVE — the driver is BPM.** Question (user): *"which audio features influence
 the variation in QUALITY among songs applying the canonical defaults?"* Answer: **song TEMPO (BPM) — faster Hard
 songs → worse generations (r=−0.68, family-wise p=0.004).** ⚠️ This OVERTURNED an earlier committed "three-instrument
@@ -71,7 +79,9 @@ Probes: `probe_quality_features.py` (critic), `probe_quality_choreo.py` (choreog
 - **SPUN OFF →** [`hold-in-stream-arc.md`](hold-in-stream-arc.md) / [[hold-in-stream-fix]] — this arc pinned the
   fast-song defect to the pattern/type head but pessimistically called it "not a decode knob (a model/training
   lever)." The spinoff localized WHERE inside the head (holds-in-streams) and DECODE-fixed it (`hold_stream_penalty`
-  + `footswitch=False`, shipped 2026-07-02) — overturning the "not a decode knob" framing.
+  + `footswitch=False`, shipped 2026-07-02) — overturning the "not a decode knob" framing. **The metrics-half rerun
+  of THIS arc's `probe_quality_variance.py` is what CONFIRMED the fix (slope −0.68 → +0.11); the decomposition credits
+  `footswitch=False` (the BPM defect = footswitch-jack voltage on fast songs).**
 - **depends-on** the taste-critic thread (🟡 lineage stub, INDEX) / [[taste-critic-transfer]] — this thread is the
   quantitative sharpening of its "near-binary separator, not a graded scorer" caveat; the retrained-graded-critic
   fork is the shared next step.

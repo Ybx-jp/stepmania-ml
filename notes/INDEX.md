@@ -82,7 +82,8 @@ quality instruments; a "recalibrated critic" via monotonic rescale is a DEAD END
 at high density (model/training lever, not a decode knob).
 - `quality_feature_attribution_findings.md` — the whole thread: NULL→overturned-to-BPM (denoising/ICC), the
   critic-saturation mechanism + graded-critic retrain, the choreography instrument, the refuted lead, and the 5-probe
-  mechanism decomposition pinning the pattern/type head.
+  mechanism decomposition pinning the pattern/type head. **✅ RESOLVED 2026-07-02: the BPM defect is decode-fixed by
+  the spun-off `footswitch=False` default (metrics-half rerun: slope −0.68 → +0.11) — see the hold-in-stream section below.**
 
 ## Hold-in-stream defect + footswitch finding (2026-07-02 — SPUN OFF the quality thread; see the lineage file)
 **UPDATE (2026-07-02):** the "pattern/type head at high density" fix target above turned out to be **DECODE-fixable**
@@ -98,8 +99,17 @@ better", forbidding footswitch made the model ALTERNATE (more creative). Method 
 a defect-vs-X slope; confirm a marginal lead at higher n; SHARED-RNG A/B (common random numbers) to isolate a decode
 knob from sampling noise. **OPEN:** free-foot-overload gate (robust successor to the density proxy); tasteful 16th-jack
 penalty on the intrinsic residue; graded footswitch policy. Lineage `.../experiment_lineage/hold-in-stream-arc.md`.
+**METRICS-HALF CONFIRMATION (2026-07-02, after the ship — playtest was PRIMARY):** rerunning `probe_quality_variance.py`
+under the new `CANONICAL_DECODE` shows the BPM→quality defect (r=−0.68) is **FULLY resolved → +0.11** (perm p 0.56),
+quality −2.07 → +1.48, 30/30 songs up — a defect-blind realism critic converged on the ears (clean 1-var: critic
+`m_real` Δ=0, `generate()` diff = only the 2 gated knobs). Decomposition (`probe_bpm_holdfix_decomp.py`, single-knob
+arms): **`footswitch=False` owns the ENTIRE critic-measurable effect** (slope +0.145, level +3.31; lifts fast songs most
+→ flattens the slope); **`hold_stream_penalty` is metric-null (slope −0.705) — presence-blind to the binary-grid critic
+BY CONSTRUCTION** (ear-validated only, not a demerit). So the BPM defect was footswitch-jack voltage on fast songs.
+Rule-16 catch: I predicted hold_stream flattens the slope; the decomposition credited footswitch.
 - `hold_in_stream_findings.md` — the whole thread: the 3-probe localization, the mechanism (root=mis-placed hold,
-  chain=no_cross+fatigue→jack), the floor-tuning playtest arc, the footswitch diagnostic, and the shipped defaults.
+  chain=no_cross+fatigue→jack), the floor-tuning playtest arc, the footswitch diagnostic, the shipped defaults, and the
+  metrics-half confirmation + which-knob decomposition (`probe_bpm_holdfix_decomp.py`).
 
 - `onset_frozenh_findings.md` — M1a: is the placement signal decodable from the FROZEN decoder's `h`? Conv readout
   hits the full 0.892 ceiling → yes, the cheap frozen-head build is greenlit on representation; DRIFT is the M1b gate.

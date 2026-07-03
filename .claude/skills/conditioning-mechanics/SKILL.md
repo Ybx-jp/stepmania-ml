@@ -149,6 +149,12 @@ section stays a two-foot stream. DECOUPLED from onset/tau (changes tap-vs-hold O
 `relu(·−floor)` gate is 0 below stream density → SPARSE musical holds untouched by construction (a raw-density gate
 over-cut them — the v1 "too blunt" playtest). Floor grounded on the density-at-holds distribution (expressive holds
 ≤0.5, pathological grind 0.69). It's a density PROXY — a free-foot-overload gate (queued) is the robust successor.
+**Metric caveat (2026-07-02):** the realism critic reads the BINARY note-PRESENCE grid (tap/hold/tail/roll all →
+"present"), so this knob is PRESENCE-BLIND to it — it changes tap-vs-hold type + a downstream same-panel-repeat jack,
+neither of which moves the grid much. Do NOT validate `hold_stream_penalty` on the presence critic (a rerun of
+`probe_quality_variance.py` showed it metric-null, slope −0.705, while it was BY-EAR "just right"); use the ears or a
+hold-type-aware metric. By contrast `footswitch=False` (§8b) DOES move the critic strongly — it owned the entire
+BPM→quality slope-flattening (−0.68 → +0.11; `probe_bpm_holdfix_decomp.py`, `notes/hold_in_stream_findings.md`).
 **`pattern_temperature` revisited (06-27, notes/jack_heaviness_findings.md):** the H2 0.6–0.85 cap (above which
 arrows "over-randomize") PREDATES the fatigue governor. At the shipped 0.7 the pattern head is jack-HEAVY (len3
 ~2× real, len≥4 ~3–4×) because it's greedy → repeats the previous panel; raising temp REDUCES jacks AND raises
