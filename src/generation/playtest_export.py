@@ -22,8 +22,6 @@ MANDATORY_PLAYABILITY = {
 # the default is the PER-FOOT FATIGUE model (generate(fatigue_penalty=2, bpm=...), exporter default), which
 # generalizes the old jack_penalty=1.5 and is required for the stamina/arc layers. H13 history h13_exertion_findings.md.
 MANDATORY_JACK_CAP = 2
-# soft (warn, not fail): the arrow-coherence sweet spot (H2: greedy collapses, 1.0 over-randomizes)
-PATTERN_TEMP_RANGE = (0.6, 0.85)
 
 _WHY = {
     "hold_aware": "coherent holds / no orphans",
@@ -38,7 +36,6 @@ def enforce_playability(gen_kwargs: dict, override_reason: str | None = None) ->
     - missing key -> set to its required value (the safe default).
     - present & WRONG -> raise SystemExit (refuse to ship unplayable), unless `override_reason` given,
       in which case print a prominent warning and KEEP the caller's value (deliberate, user-approved).
-    - pattern_temperature outside the coherence range -> warn only.
     """
     violations = []
     for k, v in MANDATORY_PLAYABILITY.items():
@@ -63,8 +60,4 @@ def enforce_playability(gen_kwargs: dict, override_reason: str | None = None) ->
                 + "\n  ".join(violations)
                 + "\nThese are MANDATORY for anything the user plays (see .claude/skills/playtest/SKILL.md)."
                   "\nTo deviate deliberately, pass override_reason (requires EXPLICIT user approval).")
-    pt = gen_kwargs.get("pattern_temperature")
-    if pt is not None and not (PATTERN_TEMP_RANGE[0] <= pt <= PATTERN_TEMP_RANGE[1]):
-        print(f"⚠️  pattern_temperature {pt} outside the coherence range {PATTERN_TEMP_RANGE} (H2: "
-              f"greedy collapses, >1.0 over-randomizes)", flush=True)
     return gen_kwargs

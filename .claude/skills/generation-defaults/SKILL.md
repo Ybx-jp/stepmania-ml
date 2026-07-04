@@ -131,6 +131,12 @@ the output/findings, and keep everything else canonical. Examples: a governor-OF
 governor's contribution to a metric; a `pattern_temperature` sweep; an `onset_phase_calib` b16 sweep for a 16th
 probe. Never deviate by accident (a stale default is not a deviation, it's a bug).
 
+**Perf-only, decode-neutral:** `export_typed_samples.py --prefetch_workers N` (default `min(4, cpu_count)`; `0` =
+old synchronous path) overlaps CPU audio-feature extraction with GPU decode via worker processes — a big win on a
+COLD feature cache, ~neutral warm. It touches NOTHING in the decode palette: output is byte-identical to the
+synchronous path (verified warm + cold, `w0`≡`w4`), because extraction is deterministic and consumes no global RNG.
+So it's NOT a "deviation" in the experiment-design sense — never treat a `--prefetch_workers` change as a variable.
+
 ## PRE-FLIGHT CHECKLIST (run before any generate/probe/export)
 1. **Model:** `gen_motif_full_fixed`, `audio_dim=42`? (NOT gen_style/gen_stage1.)
 2. **Features:** `highres` config (4 flags on) + `cache/samples_v3`? (NOT samples_v2/samples.)
