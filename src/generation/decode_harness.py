@@ -102,6 +102,44 @@ def phase_shares(onset_frames):
     return float((ph == 0).mean()), float((ph == 2).mean()), float(((ph == 1) | (ph == 3)).mean())
 
 
+def chaos_onset_gate_offset(audio_np, gain, chaos=1.0, desmear=False):
+    """The chaos×onset GATE (scope: notes/chaos_onset_gate_scope.md) as a per-frame onset-logit offset (T,).
+
+    Two variants (the flat 16th-unlock is a GLOBAL additive bias CFG smears uniformly — H4/referee):
+
+    ADD (default): REPLACE the unlock with a LOCAL audio-keyed off-beat LIFT — raise an off-beat logit in
+    proportion to local saliency, so high chaos ADDS off-beats where audio affords them and NONE in silence.
+        Δlogit[t] = +gain · chaos · offbeat[t] · saliency[t]           (pair with onset_phase_calib=(0,0))
+      Caveat (measured, gain=3): with the unlock OFF this OVER-corrects good songs to on-grid (strips the
+      loved 16ths) because the audio off-beat cue is weak (AUC ~0.66) — can't PLACE expressive off-beats.
+
+    DESMEAR (`desmear=True`): KEEP the unlock ON, and only SUBTRACT off-beat logits where saliency is LOW —
+    the silent-intro / generic-pad smear — leaving high-saliency (musical) off-beats untouched.
+        Δlogit[t] = −gain · offbeat[t] · (1 − saliency[t])            (pair with the deployed unlock (0,1.0))
+      Rationale: removing off-beats in dead zones is a much easier ask of a weak cue than placing them, and
+      the overload smear is UNIFORM (fires even in silence → a big low-saliency population), whereas good
+      syncopation clusters on transients (high saliency → survives). No chaos scale (a fixed dead-zone guard).
+
+    - saliency[t] = per-song norm01 of max(highres_onset dim41, perc_onset dim35) — the H4 local off-beat cue.
+    - offbeat[t] = 0 quarter (t%4==0), 0.5 8th (t%4==2), 1.0 16th-offbeat (t%4∈{1,3}).
+
+    Needs highres 42-dim audio. Caller MUST feed the result to BOTH tau (conditioned_p_onset extra_offset=)
+    AND generate(onset_logit_offset=) — same tau-coupling as onset_phase_calib/harm_calib (cond-mechanics §6).
+    Single-sourced here so the exporter flag and probe_chaos_onset_gate.py share IDENTICAL math.
+    """
+    import numpy as _np
+    a = _np.asarray(audio_np)
+    if a.shape[1] < 42:
+        raise ValueError(f"chaos_onset_gate needs 42-dim highres audio (dims 41/35), got {a.shape[1]}")
+    sal = _np.maximum(a[:, 41], a[:, 35]).astype(_np.float64)
+    sal = (sal - sal.min()) / (_np.ptp(sal) + 1e-9)                 # per-song norm01 (silence -> ~0)
+    ph = _np.arange(len(sal)) % 4
+    offbeat = _np.where(ph == 0, 0.0, _np.where(ph == 2, 0.5, 1.0))  # on-beat 0, 8th 0.5, 16th 1.0
+    if desmear:
+        return (-float(gain) * offbeat * (1.0 - sal)).astype(_np.float32)   # subtract in LOW-saliency off-beats
+    return (float(gain) * float(chaos) * offbeat * sal).astype(_np.float32)  # add in HIGH-saliency off-beats
+
+
 def make_feature_extractor(features="highres"):
     """features name -> FeatureSpec(extractor, audio_dim, cache_dir). Matches the exporter's --features ladder.
 

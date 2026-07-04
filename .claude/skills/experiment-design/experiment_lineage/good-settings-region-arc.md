@@ -73,10 +73,37 @@ map-the-region ancestor). DEPENDS-ON the chaos-conditioning arc (H4/H14) and [[q
 - **Clean one-variable governor ablation** (FULL≡GOV_OFF) decisively exonerated the user's first hypothesis.
 - **User-as-ear-referee (Rule 8)** caught all three misreads — the value of a ground-truth oracle in the loop.
 
+## 2026-07-04 — the GATE fork investigated: decode EXHAUSTED → note-context retrain de-risked GREEN → PARKED
+The referee named the ceiling-raiser (chaos×onset gate). This session ran it to a go/no-go. Full plan
+`notes/chaos_onset_gate_scope.md`.
+- **Believed:** tie off-beat placement to LOCAL AUDIO (perc/onset dim35/41) so high chaos ADDS anchored off-beats.
+- **Phase-0 decode probe (`probe_chaos_onset_gate.py`) — DECODE EXHAUSTED.** Built the gate as a per-frame
+  `onset_logit_offset` (the `--harm_calib` path; single-sourced `decode_harness.chaos_onset_gate_offset`). Three
+  arms, EACH one change vs canonical (unlock kept ON): ADD (additive) WORSENED the smear; DESMEAR (subtract in
+  low-saliency zones) un-smeared the overload (HSL anchor .08→1.0) **but crushed the GOOD songs' loved 16ths
+  IDENTICALLY** (GC s16 .44→.01 == HSL .95→.01). ⇒ **off-beat placement is NOT in audio** (H4 at the decode surface):
+  audio saliency can't separate an expressive 16th from a smear 16th.
+  - **ATTRIBUTION CATCH (Rule 11, user-caught):** my FIRST arm set turned the canonical unlock OFF + added the gate
+    = TWO changes → I misread the good-song collapse as "the gate over-corrects" when it was the unlock removal.
+    Corrected to one-change arms; the corrected run is the decisive one. A canonical-defaults + one-change violation
+    — the 5th ear/user catch on this thread. **KEEP THE CANONICAL PALETTE FIXED; change one lever.**
+- **PIVOT:** placement is in NOTE-CONTEXT, not audio → the retrain is the **seq-onset head revived with chaos** (not
+  FiLM-on-audio). **Stage-1 de-risk GREEN (`probe_seqcontext_chaos.py`):** on HIGH-chaos Hard charts the frozen
+  decoder's `h` predicts 16th placement at conv-readout AUC **0.862 ≈ ceiling 0.858 ≫ audio 0.618** (recovers 102%
+  of the note-context gap; positive control fired; STRONGER than tame charts 0.771). A learned note-context gate CAN
+  place high-chaos off-beats. Binding risk = free-run DRIFT (Stage-2, scheduled sampling; not settled — teacher-forced).
+- **State: PARKED by user** ("not the right direction now"); plan docs intact. **Active reverts to the FORMULA
+  derivation** (scale the ρ≈−0.37 density lead: more songs + partial correlations).
+- **Method keeper:** de-risk a retrain CHEAPLY first (Rule 6) — the frozen-`h` chaos-stratified probe gave a clean
+  go/no-go in minutes, vs H4's two BLIND feature retrains that burned cycles.
+
 ## Cross-arc corroboration
 - **DEPENDS-ON chaos-conditioning arc (H4/H14, `conditioning-mechanics` §2/§6):** the parent phenomenon (chaos =
   global off-grid shift; guidance floods off-beats). This arc's NEW piece is the real-envelope anchoring metric +
   the governor exoneration; the deeper fix (chaos×onset gate) is H4's conclusion, not decode tuning.
+- **CONNECTS-TO / REVIVES seq-onset-arc.md:** the gate's need for a placement signal is answered by the seq-onset
+  arc's frozen-`h` finding (note-context predicts placement). Phase-0 (decode) + Stage-1 (frozen-`h` chaos-stratified
+  0.862) merge the two threads; the parked seq-onset build is the gate's Stage-2 substrate. Reciprocal link added there.
 - **DEPENDS-ON [[quality-feature-attribution]]:** reused its graded critic, its best-of-N/ICC reliability method,
   and its feature-regression approach; its "check target reliability before concluding no-signal" applies here.
 - **Corroborates [[taste-critic-transfer]]:** the critic's OOD-flooring (why it scores the loved corner 0.018)
@@ -90,4 +117,8 @@ metric) · `playtest` (the `taste_grid` by-ear referee).
 ## Tooling
 `probe_goodregion_sweep.py` (critic smoke) · `probe_backbone_phase.py` (governor ablation) ·
 `probe_real_phase_reference.py` (Rule-5 real anchor) · `probe_backbone_tolerance.py` (real-anchored per-song sweep).
-Notes: `backbone_phase_findings.md`, `real_phase_reference_findings.md`. Data `cache/backbone_{phase,tolerance}.csv`.
+GATE fork (07-04): `probe_chaos_onset_gate.py` (decode gate, ADD/DESMEAR arms) · `probe_seqcontext_chaos.py`
+(frozen-`h` chaos-stratified de-risk) · `decode_harness.chaos_onset_gate_offset` + `--chaos_onset_gate` flag.
+Formula tooling: `probe_song_similarity.py` + `cache/{audio_fingerprints_highres,song_bpms}.npz` (per-song audio
+feature table). Notes: `backbone_phase_findings.md`, `real_phase_reference_findings.md`, `chaos_onset_gate_scope.md`.
+Data `cache/backbone_{phase,tolerance}.csv`, `cache/chaos_onset_gate_v2.log`, `cache/seqcontext_chaos.log`.
