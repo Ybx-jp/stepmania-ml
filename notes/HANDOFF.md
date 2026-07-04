@@ -22,19 +22,27 @@ Goal: discover the **matrix of influential song features × their interactions w
   0.41→0.73). → **tolerance = distance from THIS envelope** (on-grid ~0.85, anchoring ~0.73; both →0 in the smear).
   **Anchoring names the H4 defect:** real=anchored coherent runs, generated=unanchored global shift.
 
-### OPEN FORK / binding question
-1. **Real-anchored tolerance sweep RUNNING** (`probe_backbone_tolerance.py`, n=40, on_grid/anchoring vs real → feature
-   Spearman): does tolerance vary across songs and is it FEATURE-predictable (the "formula")? Report stratified, not
-   pooled. Data → `cache/backbone_tolerance.csv`.
-2. **The graded critic FAILED as a taste stick** — it measures REALISM and floors on OOD-forced styles (the documented
-   H14 limitation; cf [[taste-critic-transfer]]). Do NOT use it to score "good" at the expressive corner.
-3. Deeper fix for real-like chaos is the KNOWN conditioning-mechanism (a chaos×onset gate), not decode tuning (H4 §6).
+### REFEREED (taste_grid, `notes/goodregion_findings.md`) — the metric's role is now settled
+- **The anchoring metric is a validated OVERLOAD DETECTOR, NOT a quality ranker.** Measured on the EXACT rated charts:
+  the 2 cells the user called "conditioning overload, dumped into 1/16s" are the 2 lowest-anchoring (0.17 vs rest 0.89,
+  clean) — BUT Spearman(metric,rating)≈0 and the PEAK (rated 6.5) has only MEDIUM anchoring 0.52. Inverted-U: it
+  locates the failure BOUNDARY; expressiveness (unmeasured) ranks the good ones. **Tolerance = crank where anchoring<~0.3.**
+- **ACTIONABLE good-settings rule: crank CHAOS, keep GUIDANCE gentle** (peak=chaos0.9/g1.5; overload=chaos0.9/g3.0 →
+  guidance is the OVERLOAD lever, not the vibe lever; H14 ear-confirmed). Song-dependent (milestone songs tolerate g3.0).
+- **Feature lead (n=40 sweep):** denser songs = lower tolerance (`real_density` ρ≈−0.37, p≈0.02, all 3 metrics) — but
+  marginal/uncorrected + collinear with onset-busyness. A LEAD toward the formula, not the formula.
+- The graded critic FAILED as a taste stick (realism / floors on OOD-forced styles; H14; cf [[taste-critic-transfer]]).
+
+### OPEN FORK / binding question — the CEILING-RAISER (the user's "harness it completely")
+The overload breakdown = CFG-amplified GLOBAL chaos shift (root H4: the model has NO local off-beat audio signal, so
+chaos is a global scalar CFG can only smear). **Fix = a chaos×onset GATE** (conditioning-mechanism: tie off-beat
+placement to LOCAL perc/onset transients so high chaos ADDS anchored off-beats instead of smearing). Retrain/architecture,
+NOT a decode knob (2 decode-only chaos retrains already failed, H4 §6). This is the next thread; scope it.
+Secondary: scale the tolerance sweep (more songs + partial correlations) to disentangle density from busyness.
 
 ## AWAITING USER
-**By-ear ratings of `~/sm-generated/taste_grid`** — 6 cells (chaos {0.2,0.5,0.9} × guidance {1.5,3.0}) × 2 songs
-(NIGHT IN MOTION, Grand Chariot), everything else at the milestone spec. **Question: rate each cell 1–5 for
-"fun/would-share".** These REFEREE whether the offline metric (on-grid/anchoring, "backbone retained") actually tracks
-liking — the whole thread rests on it. Log to a new `notes/goodregion_findings.md` (subjective play-feel → `playtest_log.md`).
+Nothing pending — the taste_grid referee is IN and logged. Next work is the user's call (the chaos×onset gate is the
+named ceiling-raiser; the crank-chaos/gentle-guidance rule is shippable as guidance now).
 
 ## ⚠️ DISCIPLINE — this thread is a CAUTIONARY case study (read before continuing it)
 Three metric MISREADS + a pooled claim, each caught by the user's ear (lineage file details):
@@ -54,7 +62,8 @@ Env: conda `stepmania-chart-gen` — call the interpreter DIRECTLY
 954-file val PARSE is ~2–4 min (unavoidable startup); do NOT `warm_cache()` (eager, ~30 min — use lazy `val_ds[i]`).
 Note: redirected probe stdout BLOCK-BUFFERS (per-song prints don't appear live) — check GPU util, not the log, for liveness.
 
-**READ-FIRST (in order):** ACTIVE → lineage `good-settings-region-arc.md` → `notes/backbone_phase_findings.md`
+**READ-FIRST (in order):** ACTIVE → lineage `good-settings-region-arc.md` → `notes/goodregion_findings.md` (the
+referee verdict + the crank-chaos/gentle-guidance rule + the chaos×onset-gate fork) → `notes/backbone_phase_findings.md`
 (read its UPDATE block) + `notes/real_phase_reference_findings.md` → `notes/h4_offbeat_signal_findings.md` +
 `notes/h14_guidance_sweep_findings.md` (the parent phenomenon). Load-bearing skills: **experiment-design** (this thread
 is its cautionary case study), **conditioning-mechanics** §2/§6 (manifold `--style`, CFG on the onset path),

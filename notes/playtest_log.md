@@ -15,6 +15,39 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-07-03 — taste_grid referee: chaos×guidance on 2 songs (crank CHAOS, keep GUIDANCE gentle)
+**Played:** `~/sm-generated/ch{0.2,0.5,0.9}_g{1.5,3.0}` — Grand Chariot (GC) + NIGHT IN MOTION (NIM), milestone spec
+(voltage=0.7,air=0.5,freeze=0.5), varying chaos × guidance. Ratings (x/5):
+
+| cell | GC | NIM |
+|---|---|---|
+| chaos0.2 g1.5 | 4 | 3 |
+| chaos0.5 g1.5 | 5 | 4.5 |
+| **chaos0.9 g1.5** | **6.5 "HOLY… LOCK IN"** | **5** |
+| chaos0.2 g3.0 | 5 ("freeze came through more expressively than 0.2 g1.5, which forced it") | 3 |
+| chaos0.5 g3.0 | 5 "incredible" | 4.5 |
+| chaos0.9 g3.0 | 2.5 "conditioning overload, dumped into 1/16s" | 2 "conditioning overload" |
+
+**Raw (user):** "except for the overload group, the model faithfully delivered what was requested… all believable for
+their setting. For the overconditioned ones we need to understand why they break down — decode constraints or OOD
+miscomprehension or something else — I believe the model can soar to even higher heights if harnessed completely."
+
+**Commentary / hypothesis (details + the metric referee → `notes/goodregion_findings.md`):**
+- **Peak = high chaos + GENTLE guidance** (0.9/g1.5). **Overload = high chaos + HIGH guidance** (0.9/g3.0). So
+  **guidance is the OVERLOAD lever, not the vibe lever** — H14 offline, now ear-confirmed. Crank chaos, keep g≈1.5.
+- **The offline anchoring metric is a validated OVERLOAD DETECTOR but NOT a quality ranker** (the two overload cells
+  are the two lowest-anchoring charts, 0.17 vs 0.89; but Spearman vs rating ≈0, and the PEAK has only MEDIUM
+  anchoring 0.52). Inverted-U: it locates the failure BOUNDARY; expressiveness (unmeasured) ranks the good ones.
+- **Song-dependence re-confirmed:** chaos0.9/g3.0 was "fantastic" on the milestone songs, OVERLOADS GC & NIM.
+- **Why they break down:** CFG-amplified global chaos shift (attributed, `backbone_phase`), root = H4 no-local-off-beat
+  signal → the fix is a chaos×onset GATE (conditioning mechanism), the ceiling-raising next thread.
+
+**Action / next:**
+- [ ] Ship a good-settings guidance: high chaos, g≈1.5 (the peak); reserve g3.0 for low/mid chaos.
+- [ ] Scope the **chaos×onset gate** (conditioning-mechanism thread) — the "harness it completely" unlock.
+
+---
+
 ## 2026-07-03 — ★ MILESTONE: shareable quality; chaos=0.9 g=3.0 "exactly what I wanted"
 **Played:** (1) `~/sm-generated/v020_defaults` — 20 rich Hard songs on the canonical v0.2.0 defaults
 (`footswitch=False` + `hold_stream_penalty=8`/floor 0.45 + governor + 16th-unlock). (2) A user-built set with

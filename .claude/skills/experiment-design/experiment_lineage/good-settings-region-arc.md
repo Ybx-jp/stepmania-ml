@@ -5,8 +5,9 @@
 **tolerance** = how far a song can be cranked before it leaves the REAL high-chaos phase envelope. This arc is a
 CASE STUDY in exp-design LOSSES: three metric misreads + one pooled-OOD claim, each caught by the user's ear.
 
-**Status:** ACTIVE. Real-anchored tolerance sweep RUNNING (`probe_backbone_tolerance.py`, n=40, on_grid/anchoring
-vs real targets → feature Spearman). Pending: `~/sm-generated/taste_grid` by-ear ratings to referee the metric.
+**Status:** ACTIVE. Metric REFEREED by ear (taste_grid): anchoring = an OVERLOAD DETECTOR, not a quality ranker;
+tolerance = the anchoring<~0.3 cliff. Actionable rule: crank CHAOS, keep GUIDANCE gentle. **Open fork = the
+chaos×onset GATE (conditioning-mechanism ceiling-raiser).** Feature lead: denser songs = lower tolerance (marginal).
 
 **Memory:** roots in the 2026-07-03 milestone (`notes/playtest_log.md`) + `geometry_feasible_region.md` (the
 map-the-region ancestor). DEPENDS-ON the chaos-conditioning arc (H4/H14) and [[quality-feature-attribution]]
@@ -43,9 +44,22 @@ map-the-region ancestor). DEPENDS-ON the chaos-conditioning arc (H4/H14) and [[q
    from **n=2 songs** (Deja loin collapsed) — POOLED a song-STRATIFIED phenomenon and CONTRADICTED the user's ear
    ground truth (they've played several songs there that were "fantastic"). Corrected in-place: it is SONG-DEPENDENT,
    and that dependence IS the subject. *The very claim broke the discipline I'd just invoked.*
-9. **Current:** real-anchored sweep in flight → does tolerance (on_grid/anchoring vs real) vary across songs and is
-   it FEATURE-predictable (the "formula")? Referee = the pending by-ear `taste_grid` ratings (does the metric track
-   liking?).
+9. **Real-anchored sweep (`probe_backbone_tolerance.py`, n=40):** the metrics DISCRIMINATE (anchoring 0.14–0.82,
+   where the flawed n=24 quarter-rep gave nothing). First feature signal: **denser songs = lower tolerance**
+   (`real_density` ρ≈−0.37, p≈0.02 on all 3 real-anchored metrics) — but marginal (uncorrected across ~30 tests) +
+   collinear with onset-busyness. A LEAD, not the formula.
+10. **The by-ear REFEREE (taste_grid, `notes/goodregion_findings.md`) — the metric's true role, nailed:** measured
+    on_grid/anchoring on the EXACT rated charts (Rule 8). **Anchoring is a validated OVERLOAD DETECTOR, NOT a quality
+    ranker** — the 2 cells the user called "overload" are the 2 lowest-anchoring (0.17 vs 0.89, clean), BUT
+    Spearman(metric,rating)≈0 and the PEAK (rated 6.5) has only MEDIUM anchoring 0.52. **Inverted-U:** it locates the
+    failure BOUNDARY; expressiveness (unmeasured) ranks the good ones ("necessary-not-sufficient", ear-confirmed).
+    **Actionable: crank CHAOS, keep GUIDANCE gentle** (peak=chaos0.9/g1.5, overload=chaos0.9/g3.0 → guidance is the
+    OVERLOAD lever, H14 ear-confirmed). *Methodology win: don't force a boundary-detector to be a ranker — measure
+    what it's FOR (the cliff), let ears own the quality gradient.*
+11. **OPEN FORK (ceiling-raiser):** the overload = CFG-amplified GLOBAL chaos shift (root H4: no local off-beat
+    signal). Fix = a **chaos×onset GATE** (conditioning-mechanism, tie off-beats to LOCAL perc/onset transients) so
+    high chaos ADDS anchored off-beats instead of smearing — retrain/architecture, NOT decode (2 decode retrains
+    failed, H4 §6). = the user's "harness it completely". Next thread.
 
 ## Methodology LOSSES to learn from (this arc is the cautionary case)
 - **Rule 1 (metric must SEE the property) — failed 3×:** quarter-share, then ±1-window quarter-rep, both blind to a
