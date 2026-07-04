@@ -278,6 +278,10 @@ Read roughly in this order:
   motif subspace, audio as a constraint); the geometric-DL / map-the-region thread, parked for v2.
 
 ## Good-settings region — tolerance(song)=f(features) (ACTIVE, 2026-07-03)
+**UPDATE 2026-07-04:** FORMULA DERIVED + EAR-CONFIRMED — audio `env_strongbeat_frac` predicts per-song tolerance AND
+the flip guidance `g₀≈0.77+1.62·SB` (±0.28), prospectively confirmed 3/3 by ear (`tolerance_formula_findings.md` +
+`playtest_log.md`). Second-factor hunt → label-noise-limited (features tapped on k=2/n=40); expanded k4 run launched.
+The chaos×onset GATE fork is PARKED (`chaos_onset_gate_scope.md`).
 - `backbone_phase_findings.md` — the 1/4→1/16 backbone flip under cranked chaos+guidance is CFG-amplified chaos
   (~70%) + 16th-unlock calib (~30%), **NOT the governor** (0%). Confirms/decomposes H4/H14 (see UPDATE block —
   the whole `chaos=0.9,g=3.0` regime is OOD; metrics reconciled to the real-anchored ones).
@@ -288,9 +292,19 @@ Read roughly in this order:
   DETECTOR but NOT a quality ranker (inverted-U: the PEAK has only medium anchoring 0.52; Spearman vs rating ≈0).
   Tolerance = crank where anchoring<~0.3. **Actionable: crank CHAOS, keep GUIDANCE gentle** (guidance = the overload
   lever, H14 ear-confirmed). Feature lead: denser songs = lower tolerance (ρ≈−0.37, marginal). Open fork = the
-  **chaos×onset gate** (conditioning-mechanism ceiling-raiser).
+  **chaos×onset gate** (conditioning-mechanism ceiling-raiser, now PARKED — see `chaos_onset_gate_scope.md`).
+- `tolerance_formula_findings.md` — **THE FORMULA (2026-07-04) + EAR-CONFIRMED.** The audio-derivable
+  `env_strongbeat_frac` (onset-envelope mass on strong-beat 16ths) predicts per-song tolerance (ρ≈+0.63, R²≈0.33) and
+  SUBSUMES the density lead (density needed a reference chart; SB is audio-only). Predicts the per-song FLIP GUIDANCE
+  `g₀≈0.77+1.62·SB` to ±0.28 (logistic-cliff fit on a dense guidance×k4 sweep, ρ+0.72 R²0.44). **PROSPECTIVELY
+  EAR-CONFIRMED 3/3** (`playtest_log.md`) — the FIRST ear result on this thread to AGREE with the offline metric.
+  **Second-factor hunt: label-noise-limited, NOT feature-limited** — density/bpm/onset_rate OVERFIT (fail LOO-CV),
+  d22_std metric-inconsistent, no better SB variant (coarse env beats highres-onset). Lever = denoise labels (k↑)/more
+  songs; an expanded k4 flip run (`flip_point_v2.csv`, 32 songs SB 0.07–0.84) launched to re-hunt on clean labels.
 - Tooling: `probe_backbone_phase.py` (ablation), `probe_real_phase_reference.py` (real ref),
-  `probe_backbone_tolerance.py` (real-anchored per-song tolerance sweep → feature regression).
+  `probe_backbone_tolerance.py` (real-anchored per-song tolerance sweep), `probe_tolerance_audio_density.py` (the
+  deployable audio predictor), `probe_flip_point.py` (dense sweep + logistic-cliff g₀), `probe_sb_variants.py` (SB
+  feature-variant CV comparison).
 
 ## Roadmaps / standing plans
 - `augmentation_roadmap.md` — on-the-fly augmentation ideas (mirror, etc.).

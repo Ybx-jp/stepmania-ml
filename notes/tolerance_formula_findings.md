@@ -99,6 +99,25 @@ g₀. So **g₀ is a per-song SAFETY CEILING; the recommended setting sits below
 `goodregion_findings.md`). Caveat: n=3 by ear. This is the FIRST ear result on this thread that AGREED with the offline
 metric (the prior 5 were misreads the ear overturned).
 
+## 2026-07-04 (cont.) — SECOND-FACTOR HUNT + fit optimization: the ceiling is LABEL NOISE, not features
+User: "chase the second factor SB misses, optimize the fit." Cheap analysis on the n=40 scalar-tolerance CSV,
+judged by **LOO cross-validated R²** (in-sample R² just fits the k=2 label noise).
+- **The SB-residual outliers look like DENSITY** (flip-later songs all low-density 0.28–0.36, flip-earlier all
+  0.32–0.38; resid vs real_density ρ=−0.31 p=0.06, same direction as its original lead). **BUT density FAILS CV:**
+  SB+real_density raises in-sample R² 0.33→0.37 yet LOWERS LOO-CV 0.260→0.243. bpm/onset_rate/env_abs_rate likewise
+  flat-to-worse. The mechanistic candidate OVERFITS — the residual correlation was in-sample noise-fitting.
+- **Only `d22_std` improved CV, and only inconsistently** — nested-CV (feature picked INSIDE each fold) selects it
+  37/37 folds and HELPS ongrid_tol (+0.06) but HURTS anch_tol (−0.05). Metric-inconsistent + mechanistically opaque
+  (a mid-block harmonic channel, chroma/spectral region; 7-dim accounting gap → exact channel uncertain). NOT trusted.
+- **No better SB variant** (`probe_sb_variants.py`): the deployed env_frac (onset_env dim13) beats strong-beat
+  CONTRAST, quarter-only combs, and — notably — the **highres_onset (dim34) strong-beat frac is NULL** (ρ≈−0.09,
+  CV<0). The COARSE smoothed envelope is the right signal (it tracks sustained rhythmic WEIGHT, which chaos smears);
+  the sharp-transient channel doesn't. The smoothing IS the feature.
+- **VERDICT: label-noise-limited, not feature-limited.** SB sits at the CV ceiling (~0.26) for k=2/n=40 labels; every
+  added feature overfits. The PROVEN lever is DENOISING: the flip-point g₀ run (k=4 + dense grid) already hit R²=0.44
+  vs the coarse k=2 scalar's 0.25. → to optimize the fit, get CLEAN g₀ labels on MORE songs (higher k, more n), then
+  re-hunt the second factor on labels clean enough for a real one to surface. (Feature engineering is tapped on n=40/k2.)
+
 ## Tooling
 `probe_tolerance_audio_density.py` (base p_onset + env strong-beat/occupancy features; merges with the tolerance
 CSV) → `cache/tolerance_audio_density.csv`. `probe_flip_point.py` (dense guidance sweep + logistic-cliff fit →
