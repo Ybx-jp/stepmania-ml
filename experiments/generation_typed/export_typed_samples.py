@@ -171,6 +171,11 @@ def parse_args():
                         'stage1=41-dim (cache/samples_v2, legacy gen_stage1); base=23-dim (cache/samples, gen_style).')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
+    p.add_argument('--hardest', action='store_true',
+                   help="for each selected song, generate its HARDEST available difficulty instead of the "
+                        "first-in-dataset-order (which is usually Beginner -- too sparse to reveal decode/groove "
+                        "subtleties). Keeps ALL songs (unlike --difficulty_select Hard, which drops songs lacking "
+                        "a Hard chart). Applies on the non-groove path.")
     p.add_argument('--prefetch_workers', type=int, default=min(4, os.cpu_count() or 1),
                    help='worker processes that pre-extract UPCOMING songs\' audio features while the GPU '
                         'decodes the current song (overlaps CPU extraction with GPU decode -> big win on a '
@@ -476,6 +481,11 @@ def main():
         dcls = ['Beginner', 'Easy', 'Medium', 'Hard'].index(args.difficulty_select)
         order = [i for i in order if ds.valid_samples[i]['difficulty_class'] == dcls]
         print(f"DIFFICULTY-FILTERED to {args.difficulty_select}: {len(order)} sample(s).")
+    # --hardest: stable-sort so each song's HARDEST difficulty comes first -> the per-song dedup (which keeps
+    # the first occurrence of each chart_file) then picks the hardest available, keeping every song.
+    if args.hardest:
+        order = sorted(order, key=lambda i: -ds.valid_samples[i]['difficulty_class'])
+        print(f"HARDEST-per-song ordering applied ({len(order)} samples).")
 
     print(f"\n{'song':<34} {'diff':<8} {'gen_dens':>8} {'ref_dens':>8} {'holds':>6} {'critic':>9}")
     print("-" * 80)
