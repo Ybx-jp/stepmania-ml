@@ -15,6 +15,81 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-07-03 — taste_grid referee: chaos×guidance on 2 songs (crank CHAOS, keep GUIDANCE gentle)
+**Played:** `~/sm-generated/ch{0.2,0.5,0.9}_g{1.5,3.0}` — Grand Chariot (GC) + NIGHT IN MOTION (NIM), milestone spec
+(voltage=0.7,air=0.5,freeze=0.5), varying chaos × guidance. Ratings (x/5):
+
+| cell | GC | NIM |
+|---|---|---|
+| chaos0.2 g1.5 | 4 | 3 |
+| chaos0.5 g1.5 | 5 | 4.5 |
+| **chaos0.9 g1.5** | **6.5 "HOLY… LOCK IN"** | **5** |
+| chaos0.2 g3.0 | 5 ("freeze came through more expressively than 0.2 g1.5, which forced it") | 3 |
+| chaos0.5 g3.0 | 5 "incredible" | 4.5 |
+| chaos0.9 g3.0 | 2.5 "conditioning overload, dumped into 1/16s" | 2 "conditioning overload" |
+
+**Raw (user):** "except for the overload group, the model faithfully delivered what was requested… all believable for
+their setting. For the overconditioned ones we need to understand why they break down — decode constraints or OOD
+miscomprehension or something else — I believe the model can soar to even higher heights if harnessed completely."
+
+**Commentary / hypothesis (details + the metric referee → `notes/goodregion_findings.md`):**
+- **Peak = high chaos + GENTLE guidance** (0.9/g1.5). **Overload = high chaos + HIGH guidance** (0.9/g3.0). So
+  **guidance is the OVERLOAD lever, not the vibe lever** — H14 offline, now ear-confirmed. Crank chaos, keep g≈1.5.
+- **The offline anchoring metric is a validated OVERLOAD DETECTOR but NOT a quality ranker** (the two overload cells
+  are the two lowest-anchoring charts, 0.17 vs 0.89; but Spearman vs rating ≈0, and the PEAK has only MEDIUM
+  anchoring 0.52). Inverted-U: it locates the failure BOUNDARY; expressiveness (unmeasured) ranks the good ones.
+- **Song-dependence re-confirmed:** chaos0.9/g3.0 was "fantastic" on the milestone songs, OVERLOADS GC & NIM.
+- **Why they break down:** CFG-amplified global chaos shift (attributed, `backbone_phase`), root = H4 no-local-off-beat
+  signal → the fix is a chaos×onset GATE (conditioning mechanism), the ceiling-raising next thread.
+
+**Action / next:**
+- [ ] Ship a good-settings guidance: high chaos, g≈1.5 (the peak); reserve g3.0 for low/mid chaos.
+- [ ] Scope the **chaos×onset gate** (conditioning-mechanism thread) — the "harness it completely" unlock.
+
+---
+
+## 2026-07-03 — ★ MILESTONE: shareable quality; chaos=0.9 g=3.0 "exactly what I wanted"
+**Played:** (1) `~/sm-generated/v020_defaults` — 20 rich Hard songs on the canonical v0.2.0 defaults
+(`footswitch=False` + `hold_stream_penalty=8`/floor 0.45 + governor + 16th-unlock). (2) A user-built set with
+`--style "chaos=0.9,voltage=0.7,air=0.5" --guidance 3.0` (MANIFOLD snap — conditional-fill + ellipsoid
+projection; NOT the disabled `--radar` mean-pin, which errors without `--radar_ood`).
+
+**Raw feedback (user):** "wow, it gave me exactly what I wanted. the model and decode are in really good shape now,
+pretty robust, very expressive, the charts were fun to play! I felt like I wanted to share them with others, it's
+gotten to that point."
+
+**Commentary / hypothesis:**
+- **★ Quality bar CROSSED.** "Wanted to share with others" is the subjective threshold the whole project has been
+  climbing toward — the first unprompted, unqualified play-feel win (contrast every prior entry, which confirmed a
+  *specific fix* but still listed a "but…"). This is the primary-signal payoff of the decode arc
+  (governor → jack-heaviness → hold-in-stream → footswitch=False). Feeds the marketing-track "evaluation for
+  hard-to-measure quality" thesis: the thing we couldn't measure, the user's hands just validated.
+- **H-chaos-REVISITED (notable, NOT yet a conclusion):** chaos=0.9 at g=3.0 producing "exactly what I wanted" is
+  striking because chaos was historically **the broken knob** (H4: mean-pin chaos = degenerate global-grid smear,
+  unplayable at g=2–3). Attribution is cleaner than first thought: the set used **`--style` (manifold snap)**, exactly
+  the conditioning REDESIGN that H4 concluded was the fix — so this is direct evidence that (a) the manifold path +
+  16th-unlock + governor genuinely rehabilitated high-chaos/high-guidance (H4's predicted fix, now play-confirmed),
+  NOT an artifact of the old mean-pin `--radar` path (which is disabled here). The expressive high-guidance corner is
+  now *good*, not just *playable*. Still worth a deliberate A/B to quantify, but the mechanism ambiguity is resolved.
+- **Robustness:** "pretty robust" across a 20-song rich-Hard sweep AND an aggressive off-default corner (g=3.0) with
+  no unplayable blowups = the governor + playability constraints are holding across a wide knob range, not just at
+  the center. This is the precondition the user names for the next thread (a good-*settings*-region exploration only
+  makes sense once the model is robust enough that "good" varies smoothly with song, not dominated by breakage).
+
+**Action / next:**
+- [ ] Open the **song-features → good-settings-region** thread (user's proposal, this session). Scope before building
+      (measurement-first vs GDL model; descriptive-science vs auto-settings recommender) — see the scoping decision.
+- [ ] Deliberate A/B to attribute the chaos=0.9 g=3.0 success: is H4 decode-resolved, or is it the conditioning path?
+      (connects [[quality-feature-attribution]] + the chaos/H4 history.)
+- [ ] (shareability) the "want to share" energy implies a distribution/UX beat for the marketing track.
+
+**Connecting thread:** the biggest wins remained *decode-time* right to the finish line (footswitch=False was the last
+one), consistent with the standing pattern that the base model was under-served by its default decode. The project has
+now walked the full defect hierarchy (timing → local choreo → global structure → decode polish) to a *shareable*
+result. The frontier moves from "make it good" to "understand WHY it's good per song" — the proposed feature→region map.
+
+---
+
 ## 2026-07-02 — hold-fix v2 (floor 0.5): IMPROVED but floor slightly high; + 16th-jack & footswitch-knob asks
 **Played:** `~/sm-generated/holdstream_ab_v2`, Hard — japa1 / HSL / OH WORLD. Both arms = canonical + hold fix;
 **Challenge**=baseline (penalty 0), **Edit**=`hold_stream_penalty=8, floor=0.5`. Shared-RNG A/B (arms byte-identical

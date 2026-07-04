@@ -272,6 +272,21 @@ Read roughly in this order:
 - `geometry_feasible_region.md` — the "feasible region of good settings" geometry framing (radar ellipsoid ×
   motif subspace, audio as a constraint); the geometric-DL / map-the-region thread, parked for v2.
 
+## Good-settings region — tolerance(song)=f(features) (ACTIVE, 2026-07-03)
+- `backbone_phase_findings.md` — the 1/4→1/16 backbone flip under cranked chaos+guidance is CFG-amplified chaos
+  (~70%) + 16th-unlock calib (~30%), **NOT the governor** (0%). Confirms/decomposes H4/H14 (see UPDATE block —
+  the whole `chaos=0.9,g=3.0` regime is OOD; metrics reconciled to the real-anchored ones).
+- `real_phase_reference_findings.md` — **Rule-5 anchor.** REAL Hard charts get chaotic by ADDING density on a
+  PRESERVED, better-ANCHORED backbone (chaos→density +0.68, on_grid 0.99→0.85, s16 bounded ≤0.15, anchor 0.41→0.73).
+  The generated smear is far OOD. Tolerance = distance from THIS envelope; anchoring names the H4 defect.
+- `goodregion_findings.md` — **the by-ear REFEREE (taste_grid).** The anchoring metric is a validated OVERLOAD
+  DETECTOR but NOT a quality ranker (inverted-U: the PEAK has only medium anchoring 0.52; Spearman vs rating ≈0).
+  Tolerance = crank where anchoring<~0.3. **Actionable: crank CHAOS, keep GUIDANCE gentle** (guidance = the overload
+  lever, H14 ear-confirmed). Feature lead: denser songs = lower tolerance (ρ≈−0.37, marginal). Open fork = the
+  **chaos×onset gate** (conditioning-mechanism ceiling-raiser).
+- Tooling: `probe_backbone_phase.py` (ablation), `probe_real_phase_reference.py` (real ref),
+  `probe_backbone_tolerance.py` (real-anchored per-song tolerance sweep → feature regression).
+
 ## Roadmaps / standing plans
 - `augmentation_roadmap.md` — on-the-fly augmentation ideas (mirror, etc.).
 - `constraint_relaxation_roadmap.md` — when to relax max-2/variable-BPM/finer-res (data-layer v2).
