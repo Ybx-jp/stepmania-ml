@@ -5,9 +5,13 @@
 **tolerance** = how far a song can be cranked before it leaves the REAL high-chaos phase envelope. This arc is a
 CASE STUDY in exp-design LOSSES: three metric misreads + one pooled-OOD claim, each caught by the user's ear.
 
-**Status:** ACTIVE. Metric REFEREED by ear (taste_grid): anchoring = an OVERLOAD DETECTOR, not a quality ranker;
-tolerance = the anchoring<~0.3 cliff. Actionable rule: crank CHAOS, keep GUIDANCE gentle. **Open fork = the
-chaos×onset GATE (conditioning-mechanism ceiling-raiser).** Feature lead: denser songs = lower tolerance (marginal).
+**Status:** ACTIVE. **FORMULA DERIVED + EAR-CONFIRMED (2026-07-04):** tolerance is predicted from AUDIO ALONE by
+`env_strongbeat_frac` (onset-envelope mass on strong beats), ρ≈+0.63 / R²≈0.33, SUBSUMES the old density lead; it
+predicts the per-song FLIP GUIDANCE g₀≈0.77+1.62·SB to ±0.28, **PROSPECTIVELY EAR-CONFIRMED 3/3** (the first ear
+result on this thread to AGREE with the offline metric) — `notes/tolerance_formula_findings.md` + `playtest_log.md`. Metric REFEREED by ear (taste_grid): anchoring = an OVERLOAD
+DETECTOR, not a quality ranker; tolerance = the anchoring<~0.3 cliff. Actionable rule: crank CHAOS, keep GUIDANCE
+gentle — now a PER-SONG budget (low SB → tighter g ceiling). Open: PROSPECTIVE ear referee of the predictor;
+optional scale (n/k). Parked fork = the chaos×onset GATE (conditioning-mechanism ceiling-raiser).
 
 **Memory:** roots in the 2026-07-03 milestone (`notes/playtest_log.md`) + `geometry_feasible_region.md` (the
 map-the-region ancestor). DEPENDS-ON the chaos-conditioning arc (H4/H14) and [[quality-feature-attribution]]
@@ -97,6 +101,45 @@ The referee named the ceiling-raiser (chaos×onset gate). This session ran it to
 - **Method keeper:** de-risk a retrain CHEAPLY first (Rule 6) — the frozen-`h` chaos-stratified probe gave a clean
   go/no-go in minutes, vs H4's two BLIND feature retrains that burned cycles.
 
+## 2026-07-04 (cont.) — FORMULA derivation: the DEPLOYABLE predictor found (audio strong-beat mass)
+After parking the gate, reverted to the formula goal. Cheap-first (Rule 6) on the EXISTING n=40 CSV, then a
+no-generation deployability probe. Full note `notes/tolerance_formula_findings.md`.
+- **Partial-correlation pass (no gen):** the ρ≈−0.37 `real_density` lead is CLEAN — orthogonal to the audio-busyness
+  block (correlates +0.01–0.26 with it), survives controlling for the whole block (−0.36/−0.37), only significant
+  predictor; the HANDOFF's "density⊥busyness collinearity" worry was UNFOUNDED. **BUT `real_density` is the REFERENCE
+  chart's density → not deployable on an unseen song, and no audio feature proxies it (best 0.45).**
+- **Deployability check (user's call) — WON DECISIVELY (`probe_tolerance_audio_density.py`):** the audio-derivable
+  **`env_strongbeat_frac`** (fraction of onset-envelope MASS on strong-beat frames t%4∈{0,2}) predicts tolerance at
+  ρ≈**+0.63/+0.56/+0.63** (p<0.001) — ~2× density, R²≈0.33 from AUDIO ALONE (no reference chart, no model forward).
+  **SUBSUMES density** (partial strongbeat|density +0.60; density|strongbeat →−0.25 n.s.) → the density lead was a
+  SHADOW of audio on-grid-ness. LOO-stable [+0.61,+0.66], Spearman≈Pearson. Sign is mechanism-correct (on-grid audio
+  energy resists the H4 global off-grid smear). **Rule-8 retrodiction:** the two EAR-caught smear songs (Deja loin,
+  HSL) sit at the BOTTOM of the predictor; GC/NIM at MEDIUM = "great at g1.5, overload at g3.0" (matches the referee).
+- **Honesty (Rule 9):** pre-registered hypothesis was the MODEL's p_onset strong-beat frac (NULL −0.09); the RAW
+  ENVELOPE variant won (mechanism confirmed, operationalization corrected). n=40, k=2 label noise → ρ likely
+  ATTENUATED (true effect stronger). **NOT yet PROSPECTIVELY ear-tested** — the binding next gate = generate the
+  milestone crank on a fresh predicted-LOW vs predicted-HIGH SB song and play them (Rule 8).
+- **FLIP-POINT experiment (user: "predict which guidance flips a song"; `probe_flip_point.py`):** Rule-8 on the n=40
+  curves = 32/40 monotone anchoring CLIFFs (intuition confirmed). A focused DENSE 8-pt guidance × k4 sweep + a
+  logistic-cliff fit (g₀=inflection) → **SB predicts the flip guidance g₀ at Spearman +0.72 (p=0.003), R²=0.44,
+  resid ±0.28 guidance-units** (denser grid + k4 HALVED the coarse-data ±0.58; fits r²=1.00 = the cliff is literal).
+  **Formula `g₀ ≈ 0.77 + 1.62·SB`** = a per-song guidance CAP. SB subsumes density again (+0.65 partial); BPM null.
+  Cliff SHARPNESS w is an INDEPENDENT axis (SB predicts WHERE not HOW SHARP). Caveats: n=14 clean fits, in-sample
+  band, no taste_grid ear-anchor in the subset, outliers LOVE/BUMBLE BEE (SB ~44% of variance).
+- **PROSPECTIVE EAR VALIDATION — the binding gate CLEARED (2026-07-04, `notes/playtest_log.md`):** 3 songs spanning SB
+  × {below-g₀, above-g₀} at the milestone chaos spec (exported charts re-measured at the k4 anchoring means = faithful).
+  **User CONFIRMED 3/3:** every SAFE chart coherent, every OVERLOAD degraded; the g=2.0 same-guidance-opposite-verdict
+  cross-check landed (Heart Attack overloaded @2.0, Take It fine @2.0 / only "degraded not ruined" @3.0 = the high-SB
+  shallow-cliff prediction). BONUS: Heart Attack g=1.0 MORE expressive than g=2.0 → inverted-U re-confirmed by ear,
+  g₀ is a SAFETY CEILING (recommended setting sits gentle-side). **FIRST ear result on this thread that AGREED with the
+  offline metric** (the prior 5 were ear-overturned misreads). Caveat: n=3 by ear.
+- **State:** formula's CORE TERM (SB) derived + offline-validated + retrodicts the ear failures + predicts the FLIP
+  GUIDANCE g₀ to ±0.28 + now PROSPECTIVELY EAR-CONFIRMED (3/3). Deployable: SB<0.40 low tolerance (keep g≤1.5),
+  SB>0.65 high; g₀≈0.77+1.62·SB (a ceiling; recommend gentle-side). Open: a "recommended guidance" (the expressiveness
+  peak below g₀, not the ceiling); optional out-of-sample / more-songs for a tighter band. User's call whether to push. **Method keeper:** the deployability check didn't just clear the bar — a
+  mechanism-faithful audio feature BEAT and SUBSUMED the reference-chart lead. Reframe "predict density" → "predict
+  the target directly" (we didn't need to proxy real_density; the audio feature predicts tolerance outright).
+
 ## Cross-arc corroboration
 - **DEPENDS-ON chaos-conditioning arc (H4/H14, `conditioning-mechanics` §2/§6):** the parent phenomenon (chaos =
   global off-grid shift; guidance floods off-beats). This arc's NEW piece is the real-envelope anchoring metric +
@@ -119,6 +162,9 @@ metric) · `playtest` (the `taste_grid` by-ear referee).
 `probe_real_phase_reference.py` (Rule-5 real anchor) · `probe_backbone_tolerance.py` (real-anchored per-song sweep).
 GATE fork (07-04): `probe_chaos_onset_gate.py` (decode gate, ADD/DESMEAR arms) · `probe_seqcontext_chaos.py`
 (frozen-`h` chaos-stratified de-risk) · `decode_harness.chaos_onset_gate_offset` + `--chaos_onset_gate` flag.
-Formula tooling: `probe_song_similarity.py` + `cache/{audio_fingerprints_highres,song_bpms}.npz` (per-song audio
-feature table). Notes: `backbone_phase_findings.md`, `real_phase_reference_findings.md`, `chaos_onset_gate_scope.md`.
-Data `cache/backbone_{phase,tolerance}.csv`, `cache/chaos_onset_gate_v2.log`, `cache/seqcontext_chaos.log`.
+Formula tooling: `probe_tolerance_audio_density.py` (the DEPLOYABLE predictor — base p_onset + env strong-beat/
+occupancy features, merges with the tolerance CSV) → `cache/tolerance_audio_density.csv`; `probe_song_similarity.py`
++ `cache/{audio_fingerprints_highres,song_bpms}.npz` (per-song audio feature table). Notes:
+`tolerance_formula_findings.md` (the predictor), `backbone_phase_findings.md`, `real_phase_reference_findings.md`,
+`chaos_onset_gate_scope.md`. Data `cache/backbone_{phase,tolerance}.csv`, `cache/tolerance_audio_density.csv`,
+`cache/chaos_onset_gate_v2.log`, `cache/seqcontext_chaos.log`.

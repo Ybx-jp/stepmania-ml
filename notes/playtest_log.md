@@ -6,6 +6,74 @@ Each entry: **what was played → raw feedback → commentary/hypothesis → act
 
 Sample sets live under `outputs/` (gitignored). Generation: `export_typed_samples.py`.
 
+---
+
+## 2026-07-04 — FLIP-POINT prospective test: does the per-song predicted g₀ match where the backbone flips by ear? ✅ CONFIRMED 3/3
+
+**RAW FEEDBACK (user, verbatim):**
+- **Heart Attack** — g=2.0 "overloaded as predicted"; g=1.0 "safe as predicted, really fun, actually MORE chaotic and
+  expressive than 2.0".
+- **IN BETWEEN** — g=2.5 "overloaded as predicted"; g=1.5 "safe as predicted".
+- **Take It To The Morning Light** — g=3.0 "degraded but didn't read as ruined"; low-g (g≈2.0, user said 1.5) "much
+  better than 3.0, very fun and dancy".
+
+**VERDICT — H-tol-flip CONFIRMED prospectively (3/3 songs, both anchors each):**
+1. **Every SAFE chart read coherent, every OVERLOAD read degraded** — the predicted per-song g₀ brackets the felt flip.
+2. **The flip-guidance ORDER held**: Heart Attack overloaded by g=2.0 while Take It (higher SB) was still fine at
+   g=2.0 and only "degraded, not ruined" at g=3.0 → the g=2.0 cross-check (same guidance, opposite verdict) LANDED.
+3. **Take It's graceful degradation matched the prediction** — high-SB songs resist the smear ("didn't read as
+   ruined" = anch floored 0.42, not ~0). SB predicts BOTH where the cliff is AND that high-SB cliffs are shallower.
+4. **BONUS (inverted-U re-confirmed by ear):** Heart Attack g=1.0 was MORE expressive than g=2.0 → past the flip,
+   more guidance is WORSE; expressiveness peaks BELOW g₀. Re-confirms the referee's rule "crank CHAOS, keep GUIDANCE
+   gentle" (`goodregion_findings.md`) — guidance is the OVERLOAD lever, chaos (fixed 0.9 here) is the expressiveness
+   one. So g₀ is a SAFETY CEILING; the sweet spot sits gentle-side of it.
+
+**Commentary** — this clears the BINDING GATE on the tolerance-formula thread: the audio feature `env_strongbeat_frac`
+predicts the flip guidance from AUDIO ALONE, and the prediction now survives the EAR prospectively (not just the
+retrodiction of Deja loin/HSL). The thread's 5 prior metric misreads were all ear-caught; this time the ear AGREED.
+Caveat: n=3 by ear; SB is ~44% of g₀ variance (outliers exist). Full derivation `notes/tolerance_formula_findings.md`.
+
+**Action / next**
+- [x] User played all 6; SAFE/OVERLOAD confirmed per song; cross-check + graceful-degradation confirmed.
+- [x] Findings + lineage + memory updated with the ear result.
+- [ ] Open: a deployable "recommended guidance" (gentle-side of g₀, not g₀ itself) — the expressiveness peak, not the
+      ceiling. And out-of-sample / more songs if we want a tighter band. User's call on whether to push further.
+
+## (superseded above) 2026-07-04 — FLIP-POINT prospective test (setup)
+
+**What was played** — set in `~/sm-generated/flip_test/` (6 folders, each a generated Challenge + the original
+Hard for A/B; milestone spec `--style "chaos=0.9,voltage=0.7,air=0.5,freeze=0.5"`, deployed `gen_motif_full_fixed`,
+canonical decode palette, realized radar chaos≈0.44 on every chart). Three Hard songs spanning audio strong-beat
+fraction SB, each at a guidance BELOW and ABOVE its predicted flip `g₀ ≈ 0.77 + 1.62·SB`:
+
+| song | SB | predicted g₀ | SAFE chart | OVERLOAD chart | measured anch (safe→over) |
+|---|---|---|---|---|---|
+| Heart Attack | 0.48 | 1.28 | g=1.0 | g=2.0 | 0.72 → 0.27 |
+| IN BETWEEN | 0.61 | 1.94 | g=1.5 | g=2.5 | 0.84 → 0.47* |
+| Take It To The Morning Light | 0.84 | 2.34 | g=2.0 | g=3.0 | 0.77 → 0.42* |
+
+**The falsifiable prediction (H-tol-flip):** within each pair the SAFE (lower-g) chart keeps a coherent 1/4 backbone;
+the OVERLOAD (higher-g) chart smears onto the 1/16 grid. **Across songs the flip guidance RISES with SB** — the
+sharp cross-check: **g=2.0 is Heart Attack's OVERLOAD but Take It's SAFE** (same guidance, opposite verdict). And
+Take It should degrade LESS even at g=3.0 (high-SB songs resist the smear — anch floors at 0.42, not ~0).
+*Single-gen draws: IN BETWEEN's g2.5 came milder than the k=4 experiment mean (0.32); Take It's g3.0 resisting IS
+the prediction. Not cherry-picked — smeared draws deliberately NOT re-rolled (would bias the test).
+
+**Commentary / why this matters** — this is the BINDING GATE on the tolerance-formula thread (`notes/tolerance_
+formula_findings.md`): every offline metric on this thread has been overturned by ear at least once (5×, the
+[[experiment-design]] cautionary case). The formula predicts the flip from AUDIO ALONE (env_strongbeat_frac,
+ρ≈+0.72 vs g₀, R²=0.44, ±0.28 guidance-units). If the ear agrees the flip lands near the predicted g₀ for each
+song, the audio→behavior chain is validated PROSPECTIVELY, not just retrodictively. If a SAFE chart already smears
+or an OVERLOAD holds, that song's g₀ is off (SB is only ~44% of the variance — outliers LOVE/BUMBLE BEE exist).
+
+**Action / next**
+- [ ] User plays all 6; report per chart: coherent 1/4 backbone vs 1/16 smear (and where it "flips" if audible).
+- [ ] Key checks: (a) each SAFE coherent + each OVERLOAD smeared? (b) g=2.0 cross-check (Heart Attack smeared, Take
+      It coherent)? (c) Take It resists even at g=3.0?
+- [ ] Fill in raw feedback + verdict here; update `tolerance_formula_findings.md` + lineage with the ear result.
+
+---
+
 **METHODOLOGY (06-21, user directive): playtest sets must be GROOVE-VALIDATED.** A set only tests a
 hypothesis if its songs actually exercise the relevant axis — B4U with 3 holds can't test a hold fix.
 Going forward: (1) songs must be hard enough to reveal decoder/musicality subtleties; (2) MORE important,
