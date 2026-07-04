@@ -247,6 +247,12 @@ only existing where→when bridge).
 - **[[fatigue-governor]] (`governor_release_region.md`, cond-mech §8c):** stamina is the lone existing where→when
   coupling — proves decode-time placement-gating works, but suppress-only/biomechanical.
 - **[[jack-heaviness]]:** the onset head's blocky audio-only rhythm (the upstream cause) is what note-context fixes.
+- **REVIVED BY good-settings-region-arc.md (chaos×onset gate, 2026-07-04):** that thread's Phase-0 proved off-beat
+  placement is NOT in audio (a decode gate on perc/onset saliency crushed good + smear 16ths identically) → its
+  retrain IS this seq-onset head, with chaos as the organizing objective. Stage-1 de-risk (`probe_seqcontext_chaos.py`)
+  RE-CONFIRMED this arc's M1a on the HIGH-chaos stratum: frozen-`h` 16th-AUC **0.862 ≫ audio 0.618** (even stronger
+  than tame charts). The gate gives this parked build the MOTIVATION it lacked ("strategic — is it worth it"); the
+  binding gate is still free-run DRIFT (scheduled sampling). Parked by user 07-04; revive together.
 
 ## Skills in play
 `conditioning-mechanics` §0/§6/§8 (head decoupling, the one-way decode, stamina gate) · `experiment-design`

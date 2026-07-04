@@ -137,6 +137,12 @@ COLD feature cache, ~neutral warm. It touches NOTHING in the decode palette: out
 synchronous path (verified warm + cold, `w0`≡`w4`), because extraction is deterministic and consumes no global RNG.
 So it's NOT a "deviation" in the experiment-design sense — never treat a `--prefetch_workers` change as a variable.
 
+**Selection / experimental flags (2026-07-04):** `--hardest` (per-song HARDEST available difficulty — the non-groove
+`--song_filter` path otherwise silently picks the FIRST/Beginner chart, too sparse to reveal subtleties; use it for
+any playtest set drawn by filter; PR #61). `--chaos_onset_gate GAIN` is **EXPERIMENTAL and known-DEAD** — an
+audio-keyed off-beat gate (`decode_harness.chaos_onset_gate_offset`) that Phase-0 showed can't separate expressive
+16ths from smear ones (`notes/chaos_onset_gate_scope.md`); default 0 = off; do NOT use it in a canonical run.
+
 ## PRE-FLIGHT CHECKLIST (run before any generate/probe/export)
 1. **Model:** `gen_motif_full_fixed`, `audio_dim=42`? (NOT gen_style/gen_stage1.)
 2. **Features:** `highres` config (4 flags on) + `cache/samples_v3`? (NOT samples_v2/samples.)
