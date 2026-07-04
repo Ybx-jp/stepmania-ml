@@ -128,6 +128,11 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   sparse melodic event in a lull). SAME tau-coupling rule as calib (the caller's tau MUST include it; the exporter's
   `--harm_calib` does). Phrasing (WHEN notes fire) is the ONSET head's job, not the pattern head's — see
   `notes/phrasing_coherence_findings.md` + the experiment-design lineage `onset-phrasing-calibrator-arc.md`.
+  ▸ **`decode_harness.chaos_onset_gate_offset` (EXPERIMENTAL, 2026-07-04; exporter `--chaos_onset_gate`)** rides this
+  same slot: a chaos×onset gate `±gain·chaos·offbeat·saliency` keyed on dim41/dim35. **Phase-0 verdict = DEAD at
+  decode (`notes/chaos_onset_gate_scope.md`):** off-beat placement is NOT audio-reachable, so this gate can only do
+  blanket ops (ADD = more smear; DESMEAR = crushes the loved 16ths AND the smear identically). Do NOT re-try an
+  audio-keyed gate. Kept for ablation only; the real fix is a NOTE-CONTEXT (`h`) learned gate = the seq-onset retrain.
   GATE-FEATURE caveat (06-28, by-ear): the `--harm_calib` quiet gate keys on **dim-0 total energy**, which MISSES
   an energy-LOUD melodic solo (a piano solo is perc-ABSENT not quiet) → it dumped boost onto a loud drum section
   ("1/16s after the piano solo"). Gate on **`perc_onset` dim-35 absence** to fire IN the solo (`probe_phrasing_

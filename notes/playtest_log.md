@@ -15,6 +15,50 @@ voltage, freeze, AND air. For a hold test, require high **freeze**; for groove, 
 
 ---
 
+## 2026-07-04 — GC-audio-similar set at the "good" peak (chaos0.9 g1.5): tolerance is STILL song-dependent
+**Played:** `~/sm-generated/gc_similar_bpm20` (first-difficulty version) — the top-20 val songs most similar to Grand
+Chariot in AUDIO FEATURES (42-dim highres fingerprint, mean+std pooled), **BPM-gated to ±20 of GC's 191** (the pure-
+audio rank ignored tempo — beat-aligned features normalize it out — so it returned 100-150 BPM songs; user caught it).
+All generated at the taste_grid PEAK cell: `--style "chaos=0.9,voltage=0.7,air=0.5,freeze=0.5" --guidance 1.5`.
+Fingerprint store `cache/audio_fingerprints_highres.npz` + BPMs `cache/song_bpms.npz` (reusable; any "songs like X" now instant).
+
+**Raw feedback (user):**
+- **High School Love** (Hard): fun sections, but read as **somewhat DEGRADED — a significant section of generic
+  streaming, all 1/16s**.
+- **Love Vacation** (Medium): alright, but the model **clearly did fuckery to meet the request — random 1/16s intro
+  before the music even started**.
+- **Quark** (Easy): really weird, the model **struggled to choreograph — mostly WANDERING**, one spicy section.
+- **TimeToEye** (Medium): **really fun, solid chart — "this is what I was looking for."**
+- Japanese-titled ones: mixed (couldn't attribute — no JP charset handy).
+
+**Main takeaway (user, the important one):** "even at a GENTLER conditioning some songs still get pumped PAST TOLERANCE.
+A cheap 'use lower conditioning' isn't sufficient guidance."
+
+**Commentary / hypothesis:**
+- **Extends the taste_grid referee (2026-07-03):** "crank chaos, keep guidance gentle (g1.5)" is NECESSARY but NOT
+  SUFFICIENT — at the exact PEAK cell, HSL + Love Vacation still overload (1/16 smear / phantom off-beats), while
+  TimeToEye is the target. So tolerance is **song-DEPENDENT even at gentle guidance** → direct evidence AGAINST a global
+  "lower conditioning" knob and FOR the per-song **tolerance = f(song features)** formula (the active thread) + the
+  **chaos×onset GATE** (the ceiling-raiser). This was the milestone-vs-GC/NIM song-dependence, now seen ACROSS 20 songs.
+- **The failure signature is exactly H4:** HSL's "generic all-1/16 streaming" and Love Vacation's **"1/16s before the
+  music starts"** = chaos as a GLOBAL off-grid shift with NO local audio to anchor it (no off-beat signal → CFG smears
+  uniformly, and the onset head places in a SILENT intro). This is precisely what the chaos×onset gate targets (tie
+  off-beat placement to local perc/onset transients). Under setting X observed Y — not yet attributed by probe.
+- **Tolerance may be NON-monotonic in density (nuance for the formula):** the n=40 lead was "denser songs = lower
+  tolerance," but here the SPARSE end broke too — Quark (Easy, ~0.22 density source) WANDERED (the chaos0.9 manifold
+  density target is likely OOD for a sparse Easy chart → the model choreographs filler). So both a too-DENSE (HSL) and
+  too-SPARSE (Quark) song fail, TimeToEye (Medium) is the sweet spot → tolerance may be a BAND, not a slope. (Hypothesis; n small, confounded with difficulty.)
+- Note: HSL/LoveVacation/Quark/TimeToEye each have a SINGLE source difficulty, so the pending `--hardest` re-gen does
+  NOT change these four — this feedback stands for the hardest set too.
+
+**Action / next:**
+- [ ] This is the strongest case yet for the **chaos×onset gate** (the "harness it completely" fork) over any decode-knob
+  guidance — log against the good-settings thread (`notes/goodregion_findings.md`, memory [[good-settings-region]]).
+- [ ] Tolerance-formula probe: test the density-BAND hypothesis (sweet-spot density, both ends fail) at higher n.
+- [ ] Isolate Love Vacation's "1/16s before the music" as a clean onset-in-silence diagnostic (chaos×onset gate target).
+
+---
+
 ## 2026-07-03 — taste_grid referee: chaos×guidance on 2 songs (crank CHAOS, keep GUIDANCE gentle)
 **Played:** `~/sm-generated/ch{0.2,0.5,0.9}_g{1.5,3.0}` — Grand Chariot (GC) + NIGHT IN MOTION (NIM), milestone spec
 (voltage=0.7,air=0.5,freeze=0.5), varying chaos × guidance. Ratings (x/5):

@@ -36,7 +36,7 @@ from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
 from src.generation.typed_model import MOTIF_DIM
 from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
 from src.generation.decode_harness import (
-    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator)
+    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator, chaos_onset_gate_offset)
 from src.generation.motif_codebook import FIGURE_CLASSES
 from src.generation.typed import symbol_histogram, pair_holds
 from src.generation.sm_writer import charts_to_sm
@@ -277,6 +277,12 @@ def parse_args():
                         '0 = off. notes/phrasing_coherence_findings.md.')
     p.add_argument('--harm_quiet_q', type=float, default=40.0,
                    help='energy percentile defining "quiet" for --harm_calib (frames below it get the boost).')
+    p.add_argument('--chaos_onset_gate', type=float, default=0.0,
+                   help='[EXPERIMENTAL — chaos×onset gate, notes/chaos_onset_gate_scope.md] tie off-beat placement '
+                        'to LOCAL audio: raise an off-beat onset logit by gain·chaos·offbeat·saliency (saliency = '
+                        'norm01 max(highres-onset dim41, perc dim35)) so high chaos ADDS anchored off-beats and NONE '
+                        'in silence — vs the flat 16th-unlock that smears. Needs --features highres + a chaos --style. '
+                        'Pair with --onset_phase_calib "0,0" to REPLACE the unlock (else it stacks). 0 = off; ~3 to start.')
     p.add_argument('--motif', type=str, default=None,
                    help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
                         '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
@@ -540,6 +546,13 @@ def main():
                 if audio_dim != 42:
                     raise SystemExit("--harm_calib needs --features highres (the 42-dim perc/harm channels).")
                 harm_off_t = torch.from_numpy(_sparse_harm_offset(audio_np, args.harm_calib, args.harm_quiet_q)).to(device)
+            if args.chaos_onset_gate > 0:  # chaos×onset gate (single-sourced in the harness); tau sees it too, below
+                if audio_dim != 42:
+                    raise SystemExit("--chaos_onset_gate needs --features highres (dims 41/35).")
+                chaos_val = float(radar_for_gen[0, 4]) if radar_for_gen is not None else 1.0
+                gate_np = chaos_onset_gate_offset(audio_np, args.chaos_onset_gate, chaos_val)
+                gate_t = torch.from_numpy(gate_np).to(device)
+                harm_off_t = gate_t if harm_off_t is None else harm_off_t + gate_t  # stack with harm (same slot)
             # tau via the shared decode harness — conditioned + guided + phase-calibrated + harm offset, EXACTLY as
             # generate() decodes (conditioning-mechanics §3/§6). harm_off_t is also fed to generate() below.
             p_onset = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,

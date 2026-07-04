@@ -202,6 +202,11 @@ Rule-16 catch: I predicted hold_stream flattens the slope; the decomposition cre
 
 ## CHAOS / 16th-PLACEMENT ARC
 Read roughly in this order:
+- `chaos_onset_gate_scope.md` — **(2026-07-04) the good-settings ceiling-raiser, SCOPED + PARKED.** Phase-0 decode
+  probe = EXHAUSTED (audio can't separate an expressive 16th from a smear one — a de-smear crushed GC's loved 16ths
+  and HSL's smear IDENTICALLY .44/.95→.01); placement is in NOTE-CONTEXT → retrain = the seq-onset head revived with
+  chaos, **Stage-1 de-risk GREEN** (frozen-`h` 0.862 on high-chaos ≫ audio 0.618). User parked the train. Probes
+  `probe_chaos_onset_gate.py` + `probe_seqcontext_chaos.py`; lever `decode_harness.chaos_onset_gate_offset`.
 - `chaos_mechanism_plan.md` — keystone synthesis: chaos = where resolution + data + objective converge.
 - `chaos_conditioning_findings.md` — chaos-radar conditioning WORKS post-high-res (16th amount 0.3%→26%).
 - `selfsim_chaos_findings.md` — self-similarity feature REFUTED for section chaos (R²≈0.06).
