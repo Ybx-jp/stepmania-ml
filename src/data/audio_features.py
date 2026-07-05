@@ -16,7 +16,6 @@ from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
 
 from .stepmania_parser import StepManiaChart
-from .timing import TimingMap, resample_frames
 
 
 @dataclass
@@ -43,11 +42,6 @@ class AudioFeatureConfig:
     highres_n_fft: int = 512          # ~23ms window (vs the smeary 2048/~93ms used for the grid-hop onset).
     timesteps_per_beat: int = 4       # chart resolution (16th notes); must match the parser
     beats_per_measure: int = 4
-    # data-layer-v2 phase-2b: BEAT-SYNCHRONOUS audio grid. When True, extract at a fine uniform hop then resample
-    # each frame onto its TRUE musical time via TimingMap (the full #BPMS map), instead of a single avg-BPM hop
-    # that drifts on tempo changes (~20% of songs, second-scale on half-tempo sections; probe_v2_bpm_misalignment).
-    # On a constant-BPM song the beat-sync times reduce to the uniform grid (a near no-op). See notes/data_layer_v2_scope.md.
-    beat_sync: bool = False
 
 
 @dataclass
@@ -214,13 +208,8 @@ class AudioFeatureExtractor:
             if len(audio) < expected_samples:
                 audio = np.pad(audio, (0, expected_samples - len(audio)), mode='constant')
 
-            # Use chart-aligned hop_length. data-layer-v2 beat-sync (phase 2b): a single avg-BPM hop drifts on
-            # tempo changes, so for VARIABLE-BPM songs extract at a FINE UNIFORM hop and resample each feature onto
-            # the true beat-synchronous times below. CONSTANT-BPM songs keep the exact v1 grid-hop extraction (the
-            # beat-sync times would reduce to the uniform grid anyway) -> the ~80% fixed-BPM majority is untouched.
-            _bpms = [e.value for e in chart.timing_events if e.event_type == 'bpm' and e.value > 0]
-            use_beatsync = self.config.beat_sync and len({round(v, 3) for v in _bpms}) > 1
-            aligned_hop_length = self.config.highres_hop_length if use_beatsync else chart.hop_length
+            # Use chart-aligned hop_length
+            aligned_hop_length = chart.hop_length
 
             # Extract MFCC features with aligned hop_length
             mfcc = librosa.feature.mfcc(
@@ -292,57 +281,31 @@ class AudioFeatureExtractor:
 
             # Align audio frames to match chart timesteps exactly
             expected_frames = chart.timesteps_total
-            dst_times = None
+            actual_frames = mfcc.shape[1]
 
-            if use_beatsync:
-                # resample each fine-hop feature onto its TRUE beat-synchronous time (TimingMap over the full #BPMS)
-                tmap = TimingMap(chart.timing_events)
-                tpb = self.config.timesteps_per_beat
-                dst_times = tmap.beat_to_time(np.arange(expected_frames, dtype=np.float64) / tpb)
-                src_times = np.arange(mfcc.shape[1], dtype=np.float64) * aligned_hop_length / sr
-
-                def _rs(feat):
-                    if feat is None:
-                        return None
-                    if feat.ndim == 2:                                  # (D, n) -> (D, expected_frames)
-                        return resample_frames(feat.T, src_times, dst_times).T
-                    return resample_frames(feat, src_times, dst_times)[:, 0]  # (n,) -> (expected_frames,)
-
-                mfcc = _rs(mfcc); onset_env = _rs(onset_env); spectral_contrast = _rs(spectral_contrast)
-                chroma = _rs(chroma); perc_onset = _rs(perc_onset); harm_onset = _rs(harm_onset)
-                # recompute onset_rate on the RESAMPLED env so its 32-cell window matches the grid (line ~248 used
-                # the fine-hop env = a far shorter time window)
+            if expected_frames != actual_frames:
+                mfcc = self._align_features(mfcc, expected_frames)
                 if onset_env is not None:
-                    onset_rate = self._compute_onset_rate(onset_env, window_size=32)
-            else:
-                actual_frames = mfcc.shape[1]
-                if expected_frames != actual_frames:
-                    mfcc = self._align_features(mfcc, expected_frames)
-                    if onset_env is not None:
-                        onset_env = self._align_features_1d(onset_env, expected_frames)
-                    if onset_rate is not None:
-                        onset_rate = self._align_features_1d(onset_rate, expected_frames)
-                    if spectral_contrast is not None:
-                        spectral_contrast = self._align_features(spectral_contrast, expected_frames)
-                    if chroma is not None:
-                        chroma = self._align_features(chroma, expected_frames)
-                    if perc_onset is not None:
-                        perc_onset = self._align_features_1d(perc_onset, expected_frames)
-                    if harm_onset is not None:
-                        harm_onset = self._align_features_1d(harm_onset, expected_frames)
+                    onset_env = self._align_features_1d(onset_env, expected_frames)
+                if onset_rate is not None:
+                    onset_rate = self._align_features_1d(onset_rate, expected_frames)
+                if spectral_contrast is not None:
+                    spectral_contrast = self._align_features(spectral_contrast, expected_frames)
+                if chroma is not None:
+                    chroma = self._align_features(chroma, expected_frames)
+                if perc_onset is not None:
+                    perc_onset = self._align_features_1d(perc_onset, expected_frames)
+                if harm_onset is not None:
+                    harm_onset = self._align_features_1d(harm_onset, expected_frames)
 
-            # metric phase is derived from the (beat-aligned) frame index, not the audio (t%tpb / t%(tpb*bpm))
+            # metric phase is derived from the (BPM-aligned) frame index, not the audio
             metric_phase = self._metric_phase(mfcc.shape[1]) if self.config.use_metric_phase else None
 
-            # high-res onset: detect at a fine hop, then max-pool the peak into each grid cell.
+            # high-res onset: detect at a fine hop, then max-pool the peak into each 16th-grid cell.
             # (the grid-hop onset above smears transients across cells -> washes out off-beat saliency, H4)
             highres_onset = None
             if self.config.use_highres_onset:
-                if use_beatsync:
-                    highres_onset = self._highres_pooled_onset_beatsync(audio, sr, dst_times,
-                                                                        self.config.timesteps_per_beat)
-                else:
-                    highres_onset = self._highres_pooled_onset(audio, sr, aligned_hop_length, mfcc.shape[1])
+                highres_onset = self._highres_pooled_onset(audio, sr, aligned_hop_length, mfcc.shape[1])
 
             return AudioFeatures(
                 mfcc=mfcc,
@@ -461,26 +424,6 @@ class AudioFeatureExtractor:
         for t in range(n_frames):
             lo = (t * grid_hop) // hop_hr
             hi = max(lo + 1, ((t + 1) * grid_hop) // hop_hr)
-            seg = onset_hr[lo:hi]
-            pooled[t] = seg.max() if seg.size else 0.0
-        return pooled
-
-    def _highres_pooled_onset_beatsync(self, audio: np.ndarray, sr: int, dst_times: np.ndarray,
-                                       tpb: int) -> np.ndarray:
-        """Beat-sync (data-layer-v2 phase 2b) variant of _highres_pooled_onset: cell t spans the TIME interval
-        [dst_times[t], dst_times[t+1]) (non-uniform on tempo changes) instead of a fixed grid_hop. Max-pools the
-        fine onset envelope within each cell's true time span. dst_times = beat-synchronous frame starts."""
-        hop_hr = self.config.highres_hop_length
-        onset_hr = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=hop_hr, n_fft=self.config.highres_n_fft)
-        n = len(dst_times)
-        # one 48th-cell duration past the last frame, so the final cell has a right edge
-        last_dt = (dst_times[-1] - dst_times[-2]) if n >= 2 else (60.0 / (tpb * 120.0))
-        pooled = np.zeros(n, dtype=np.float32)
-        for t in range(n):
-            t0 = dst_times[t]
-            t1 = dst_times[t + 1] if t + 1 < n else dst_times[-1] + last_dt
-            lo = int(t0 * sr) // hop_hr
-            hi = max(lo + 1, int(t1 * sr) // hop_hr)
             seg = onset_hr[lo:hi]
             pooled[t] = seg.max() if seg.size else 0.0
         return pooled

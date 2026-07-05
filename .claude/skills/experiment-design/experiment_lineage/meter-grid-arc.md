@@ -75,33 +75,6 @@ before any wrong conclusion committed.
   discipline; BPM is the precedent for a hidden per-song quality driver (and the BPM RANGE filter is part of this
   refactor's scope).
 
-## The BUILD arc (data-layer-v2) — 2026-07-05, branch `feat/data-layer-v2`
-The diagnosis GREENLIT the refactor; this session BUILT it through Phase 4 (deployed model UNCHANGED — no v2
-checkpoint exists yet). Chain believed → learned:
-- **Grid design (A1 fixed 48th vs meter-adaptive):** believed a fixed 48th grid wastes context on the 70% pure-duple
-  songs → BUILT two hardening checks. **Emptiness** (`probe_v2_grid_emptiness.py`): only 4.2% of notes are triplet
-  payload, 49% of songs gain nothing. **Fit** (`probe_v2_context_fit.py`): the 3× context is CHEAP (bf16). ⇒
-  affordable waste beats a fallible deploy-time meter detector → **A1 fixed 48th CONFIRMED.**
-- **2a finer quantization** (`for_v2()`, `round_quantize`): success criterion `probe_v2_displacement.py` = triplet
-  displacement **50.5 → 0.3 ms** (ρ+0.808 reproduced the diagnosis's +0.83 → strong cross-val). Legacy floor path
-  byte-identical.
-- **2b beat-sync audio** (`beat_sync`): SIZING `probe_v2_bpm_misalignment.py` **overturned the scope's "2b = smaller
-  separable population"** — ~20% of songs, 14.6% ≥23 ms drift (double the triplet tax), second-scale on half-tempo
-  sections. REFINED: gate on ACTUAL tempo variation so constant-BPM keeps EXACT v1 features (0.00000 diff).
-- **Attribution corrections (method wins this build):**
-  - **Measure TRAINING-shaped memory, not a bare `model()`:** the first fit probe (no causal mask) said bf16 B16
-    fits at 3.4 GB; the masked training forward OOMs at B4 (T=4608). Real fitted config T=3072/B4 — a launch at the
-    default B8 would OOM instantly (Rule 2, memory edition).
-  - **Rule 7 twice on 2b sizing:** a hand-rolled avg-BPM slope bug (16× inflation); the corrected number still
-    looked alarming until eyeballing the actual songs confirmed the half-tempo mechanism is real.
-  - **Cache identity ≠ feature config** ([[dataset-cache-footgun]]): a v2 rebuild silently read stale 2a-only
-    features (instant cache hits) — the stamp checks song identity, not extractor config. DELETE the cache on config change.
-  - **The autotune skill is stale** ([[autotune-skill-stale]]): benchmarks `train_factorized.py`, not the deployed
-    `LayeredTypedChartGenerator` (the `train_motif_figure` lineage) — benchmark the real class directly.
-- **Current state:** cache `cache/samples_v3_48th` rebuilding; NEXT = the warm-started bf16 retrain
-  (`train_motif_figure_v2.py`, ~1.5 h) → **Phase 5** decode-side `t%12` re-index (export only) → **Phase 6 by-ear on
-  the triplet set = the binding gate.** Full per-phase status: `notes/data_layer_v2_scope.md`.
-
 ## Skills in play
 `experiment-design` (this arc is a WIN case — mechanism-grounded metric predicts the ear; harness/units bugs caught
 first) · `conditioning-mechanics` §6 (the `t%4` phase grid this questions; the refactor re-indexes it) ·

@@ -33,7 +33,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import split_chart_files
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
-from src.data.stepmania_parser import StepManiaParser
 from src.generation.typed_model import MOTIF_DIM
 from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
 from src.generation.decode_harness import (
@@ -177,13 +176,6 @@ def parse_args():
                         "first-in-dataset-order (which is usually Beginner -- too sparse to reveal decode/groove "
                         "subtleties). Keeps ALL songs (unlike --difficulty_select Hard, which drops songs lacking "
                         "a Hard chart). Applies on the non-groove path.")
-    p.add_argument('--relax_gates', action='store_true',
-                   help="INFERENCE-only reach: build the song pool with the WIDENED parser gates "
-                        "(BPM avg [40,320], length [30,600]s, gimmick-guarded) instead of the training "
-                        "gates ([60,200]/[75,130]). Reaches real songs generate() can already chart but "
-                        "the dataset filter hides. Forces cache_dir=None (the valid-song set shifts, so the "
-                        "index-keyed feature cache would go stale). Independent of the data-layer-v2 grid "
-                        "refactor; see notes/constraint_relaxation_roadmap.md.")
     p.add_argument('--prefetch_workers', type=int, default=min(4, os.cpu_count() or 1),
                    help='worker processes that pre-extract UPCOMING songs\' audio features while the GPU '
                         'decodes the current song (overlaps CPU extraction with GPU decode -> big win on a '
@@ -397,13 +389,8 @@ def main():
     # widen the candidate pool when groove-selecting (parsing is cheap; audio is extracted only for the
     # chosen songs) so the selector has enough songs to find strong-on-axis ones.
     pool = args.num_songs * (40 if args.groove_select != 'none' else 8)
-    # --relax_gates: widen the parser gates for reach (inference-only) and disable the index-keyed feature
-    # cache (the valid-song set shifts, so a cached feature at index i could belong to a different song).
-    infer_parser = StepManiaParser.for_inference() if args.relax_gates else None
-    ds_cache = None if args.relax_gates else cache
     ds = StepManiaDataset(chart_files=val_files[:pool], audio_dir=args.audio_dir,
-                          max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=ds_cache,
-                          parser=infer_parser)
+                          max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=cache)
 
     model = load_generator(args.checkpoint, audio_dim, device)  # harness: builds + loads (strict=False) + .eval()
     critic = DifficultyCritic(device=device)

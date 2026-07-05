@@ -125,13 +125,9 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
     tolerance formula ALL live on this grid. **Triplet/compound-feel songs are mis-gridded** — their onsets are
     floored ~33 ms off (chart-triplet vs displacement ρ+0.83), BY-EAR confirmed "off-time" on triplet songs; ~7% of
     the corpus (3.3% triplet-dominant; odd-METER is negligible 0.1% → a SUBDIVISION tax, not a time-signature one).
-    A probe using `t%4` on a triplet song measures garbage. The fix is the **data-layer-v2 refactor**, now BUILDING
-    (2026-07-05, branch `feat/data-layer-v2`; NOT deployed): a FIXED 48th grid (12/beat, `StepManiaParser.for_v2()` +
-    the `highres_v2` feature spec, `beat_sync=True`) + beat-synchronous audio. It RE-INDEXES this whole §6 phase
-    vocabulary — **Phase 5 (still ⬜) must convert `onset_phase_calib`/`phase_shares`/SB from `t%4`/`t%16` to
-    `t%12`/`t%48` before a v2 chart can be EXPORTED.** `metric_phase` re-indexes automatically via config. Do NOT mix
-    a v2 (`highres_v2`) feature set with the v1 checkpoint. See `notes/data_layer_v2_scope.md`, lineage
-    `meter-grid-arc.md`, memory [[meter-4-4-grid]].
+    A probe using `t%4` on a triplet song measures garbage. The fix is the **data-layer-v2 refactor** (finer /
+    meter-adaptive grid + variable-BPM, one beat-synchronous re-grid) — it would RE-INDEX this whole §6 phase
+    vocabulary. See lineage `meter-grid-arc.md`, memory [[meter-4-4-grid]].
 - Decode phase levers (all in `generate()`): `onset_phase_calib=(b8,b16)` adds logit offsets to 8th/16th frames
   BEFORE tau (the caller's tau MUST use the same offset) → 16th COUNT floats with audio per-song (the validated
   win). `onset_phase_alloc=(q,8,16)` forces fixed per-band SHARES (a quota — SMEARS; avoid). `onset_phase_penalty`

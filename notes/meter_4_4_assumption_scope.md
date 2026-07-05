@@ -197,13 +197,6 @@ User: while refactoring the grid, relax the fixed-BPM + length requirements too 
 - **Recommended sequencing:** (1) NOW, decoupled + low-risk: relax length + widen BPM (gimmick-guarded) on the
   inference/export path (pure reach, zero grid risk). (2) GATE the big refactor on the by-ear result; if it limps,
   finer-grid + variable-BPM v2 is one coordinated surgery.
-  - **UPDATE 2026-07-04 — step (1) SHIPPED:** `StepManiaParser.for_inference()` (BPM `[40,320]`, length
-    `[30,600]s`, gimmick guard rejecting raw `#BPMS` events >400) + `export_typed_samples.py --relax_gates`
-    (forces `cache_dir=None`) + `scripts/generate.py` warning band widened. Training path byte-identical (guard
-    default off, narrow gates unchanged); 7/7 guard/bounds cases + 12 parser tests pass. Step (2) — the by-ear
-    result is IN (limps, confirmed above) → the big refactor is now SCOPED as its own arc:
-    **`notes/data_layer_v2_scope.md`** (grid-design decision, re-index surface, cost, phased plan). Greenlight
-    pending the user's investment-priority call vs the parked seq-onset anchoring retrain.
 
 ## Links
 Parent thread: [[good-settings-region]] / `tolerance_formula_findings.md` (SB is the tolerance predictor whose 4/4
