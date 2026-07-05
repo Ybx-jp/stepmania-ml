@@ -394,6 +394,10 @@ def main():
         msl = yaml.safe_load(f)['classifier']['max_sequence_length']
     # feature set: base (23-dim) vs stage1 (41-dim musical) vs highres (42-dim, + high-res onset)
     feat_ext, audio_dim, cache = make_feature_extractor(args.features)  # harness = single source of the feature ladder
+    # decode phase-band period: 4 = the 16th grid (highres), 12 = the data-layer-v2 48th grid (highres_v2). Drives
+    # onset_phase_calib/penalty/alloc + phase_shares + the tau-side calib so triplet cells resolve (Phase 5). The
+    # tau path (conditioned_p_onset) and generate() MUST get the SAME subdiv or the 16th-unlock/tau decouple.
+    subdiv = feat_ext.config.timesteps_per_beat if feat_ext is not None else 4
     # widen the candidate pool when groove-selecting (parsing is cheap; audio is extracted only for the
     # chosen songs) so the selector has enough songs to find strong-on-axis ones.
     pool = args.num_songs * (40 if args.groove_select != 'none' else 8)
@@ -563,13 +567,14 @@ def main():
                 if audio_dim != 42:
                     raise SystemExit("--chaos_onset_gate needs --features highres (dims 41/35).")
                 chaos_val = float(radar_for_gen[0, 4]) if radar_for_gen is not None else 1.0
-                gate_np = chaos_onset_gate_offset(audio_np, args.chaos_onset_gate, chaos_val)
+                gate_np = chaos_onset_gate_offset(audio_np, args.chaos_onset_gate, chaos_val, subdiv=subdiv)
                 gate_t = torch.from_numpy(gate_np).to(device)
                 harm_off_t = gate_t if harm_off_t is None else harm_off_t + gate_t  # stack with harm (same slot)
             # tau via the shared decode harness — conditioned + guided + phase-calibrated + harm offset, EXACTLY as
             # generate() decodes (conditioning-mechanics §3/§6). harm_off_t is also fed to generate() below.
             p_onset = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
-                                          guidance=args.guidance, phase_calib=phase_calib, extra_offset=harm_off_t)
+                                          guidance=args.guidance, phase_calib=phase_calib, extra_offset=harm_off_t,
+                                          subdiv=subdiv)
         real_density = float((orig_typed != 0).any(1).mean())
         # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
         # E[density | difficulty, style], so stream-as-a-knob works and no source chart is needed) > the
@@ -601,7 +606,7 @@ def main():
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
-                          onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
+                          onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib, subdiv=subdiv,
                           onset_logit_offset=harm_off_t,  # STEP-1 sparse-harm-in-quiet phrase calibrator (None=off)
                           style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen,
                           motif=motif_vec,  # H15 continuous motif knobs (global vector; None if --motif unset)

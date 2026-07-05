@@ -21,7 +21,7 @@ from collections import namedtuple
 import numpy as np
 
 from src.generation.decode_defaults import (  # re-exported for convenience (one import for the whole harness)
-    CANONICAL_DECODE, apply_phase_calib, calib_arg_default, parse_phase_calib)
+    CANONICAL_DECODE, apply_phase_calib, phase_band_positions, calib_arg_default, parse_phase_calib)
 
 # the deployed 42-dim highres generator (generation-defaults skill §0). The single literal; probes import it.
 DEPLOYED_CHECKPOINT = "checkpoints/gen_motif_full_fixed/best_val.pt"
@@ -50,7 +50,7 @@ _FEATURE_SPECS = {
 FeatureSpec = namedtuple("FeatureSpec", ["extractor", "audio_dim", "cache_dir"])
 
 __all__ = [
-    "CANONICAL_DECODE", "apply_phase_calib", "calib_arg_default", "parse_phase_calib",
+    "CANONICAL_DECODE", "apply_phase_calib", "phase_band_positions", "calib_arg_default", "parse_phase_calib",
     "DEPLOYED_CHECKPOINT", "MODEL_ARCH", "FeatureSpec",
     "conditioned_p_onset", "compute_tau", "phase_shares",
     "make_feature_extractor", "load_generator",
@@ -58,7 +58,7 @@ __all__ = [
 
 
 def conditioned_p_onset(model, memory, difficulty, *, radar=None, style=None,
-                        guidance=1.0, phase_calib=None, extra_offset=None):
+                        guidance=1.0, phase_calib=None, extra_offset=None, subdiv=4):
     """The deployed onset -> p_onset path (the tau source), built EXACTLY as generate()/the exporter do.
 
     Steps, in the order the decode uses them (conditioning-mechanics §3 + §6):
@@ -78,7 +78,7 @@ def conditioned_p_onset(model, memory, difficulty, *, radar=None, style=None,
     if guidance != 1.0 and (radar is not None or style is not None):
         ol_u = model.onset_logits(memory, difficulty, radar=None, style=None)[0]
         ol = ol_u + guidance * (ol - ol_u)
-    ol = apply_phase_calib(ol, phase_calib)
+    ol = apply_phase_calib(ol, phase_calib, subdiv)
     if extra_offset is not None:
         ol = ol + extra_offset
     return torch.sigmoid(ol).detach().cpu().numpy()  # detach: safe to call outside a no_grad block (probe-friendly)
@@ -95,21 +95,26 @@ def compute_tau(p_onset, density, default=0.5):
     return float(np.quantile(p_onset, 1 - density)) if density and density > 0 else default
 
 
-def phase_shares(onset_frames):
-    """16th-grid phase shares of onset FRAME INDICES: (quarter, eighth, sixteenth-offbeat).
+def phase_shares(onset_frames, subdiv=4):
+    """Phase shares of onset FRAME INDICES: (quarter, eighth, sixteenth-offbeat), on a `subdiv`-per-beat grid.
 
-    Phase grid (conditioning-mechanics §6): t%4==0 -> quarter (backbone), t%4==2 -> 8th, t%4 in {1,3} ->
-    16th-offbeat (the chaos/syncopation share). Real Hard ~ (0.71, 0.25, 0.04). `onset_frames` = the frame
-    indices that carry a note (e.g. `np.where(typed.any(-1))[0]`). Returns (q, e8, s16) fractions; (0,0,0) if empty.
+    Phase grid (conditioning-mechanics §6): t%subdiv==0 -> quarter (backbone), the 8th and 16th-offbeat positions
+    come from `phase_band_positions(subdiv)` (subdiv=4 = the legacy 16th grid t%4; subdiv=12 = the v2 48th grid t%12).
+    Real Hard ~ (0.71, 0.25, 0.04). `onset_frames` = the frame indices that carry a note (e.g.
+    `np.where(typed.any(-1))[0]`). Returns (q, e8, s16) fractions; (0,0,0) if empty. NOTE (v2, subdiv>4): TRIPLET
+    frames are in none of the three bands, so on the 48th grid these three shares do NOT sum to 1 — the remainder is
+    triplet/finer subdivision. That's intentional: this stays the quarter/8th/16th backbone metric; measure triplet
+    placement with the v2 displacement probe, not by overloading this partition.
     """
     idx = np.asarray(onset_frames)
     if idx.size == 0:
         return 0.0, 0.0, 0.0
-    ph = idx % 4
-    return float((ph == 0).mean()), float((ph == 2).mean()), float(((ph == 1) | (ph == 3)).mean())
+    e8, (s16a, s16b) = phase_band_positions(subdiv)
+    ph = idx % subdiv
+    return float((ph == 0).mean()), float((ph == e8).mean()), float(((ph == s16a) | (ph == s16b)).mean())
 
 
-def chaos_onset_gate_offset(audio_np, gain, chaos=1.0, desmear=False):
+def chaos_onset_gate_offset(audio_np, gain, chaos=1.0, desmear=False, subdiv=4):
     """The chaos×onset GATE (scope: notes/chaos_onset_gate_scope.md) as a per-frame onset-logit offset (T,).
 
     Two variants (the flat 16th-unlock is a GLOBAL additive bias CFG smears uniformly — H4/referee):
@@ -128,7 +133,7 @@ def chaos_onset_gate_offset(audio_np, gain, chaos=1.0, desmear=False):
       syncopation clusters on transients (high saliency → survives). No chaos scale (a fixed dead-zone guard).
 
     - saliency[t] = per-song norm01 of max(highres_onset dim41, perc_onset dim35) — the H4 local off-beat cue.
-    - offbeat[t] = 0 quarter (t%4==0), 0.5 8th (t%4==2), 1.0 16th-offbeat (t%4∈{1,3}).
+    - offbeat[t] = 0 quarter (t%subdiv==0), 0.5 8th (t%subdiv==subdiv//2), 1.0 every other off-beat (subdiv=4: {1,3}).
 
     Needs highres 42-dim audio. Caller MUST feed the result to BOTH tau (conditioned_p_onset extra_offset=)
     AND generate(onset_logit_offset=) — same tau-coupling as onset_phase_calib/harm_calib (cond-mechanics §6).
@@ -140,8 +145,8 @@ def chaos_onset_gate_offset(audio_np, gain, chaos=1.0, desmear=False):
         raise ValueError(f"chaos_onset_gate needs 42-dim highres audio (dims 41/35), got {a.shape[1]}")
     sal = _np.maximum(a[:, 41], a[:, 35]).astype(_np.float64)
     sal = (sal - sal.min()) / (_np.ptp(sal) + 1e-9)                 # per-song norm01 (silence -> ~0)
-    ph = _np.arange(len(sal)) % 4
-    offbeat = _np.where(ph == 0, 0.0, _np.where(ph == 2, 0.5, 1.0))  # on-beat 0, 8th 0.5, 16th 1.0
+    ph = _np.arange(len(sal)) % subdiv
+    offbeat = _np.where(ph == 0, 0.0, _np.where(ph == subdiv // 2, 0.5, 1.0))  # on-beat 0, 8th 0.5, other off-beat 1.0
     if desmear:
         return (-float(gain) * offbeat * (1.0 - sal)).astype(_np.float32)   # subtract in LOW-saliency off-beats
     return (float(gain) * float(chaos) * offbeat * sal).astype(_np.float32)  # add in HIGH-saliency off-beats
