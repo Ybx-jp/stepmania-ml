@@ -277,7 +277,14 @@ Read roughly in this order:
 - `geometry_feasible_region.md` — the "feasible region of good settings" geometry framing (radar ellipsoid ×
   motif subspace, audio as a constraint); the geometric-DL / map-the-region thread, parked for v2.
 
-## Good-settings region — tolerance(song)=f(features) (ACTIVE, 2026-07-03)
+## Good-settings region — tolerance(song)=f(features) (2026-07-03; DOWNGRADED + superseded 2026-07-04 by the meter thread)
+**UPDATE 2026-07-04 (DOWNGRADE):** the formula EAR-CONFIRMED 3/3, BUT the expanded k4 flip run (`flip_point_v2.csv`,
+n=32) cut `SB→g₀` from R²0.44 (n=14 = small-n optimism) to **ρ+0.39 censored / R²~0.09 / LOO-CV≈0**, and a
+permutation-null 2nd-factor hunt (`probe_flip_secondfactor.py`, 84-dim fingerprint) = **CLEAN NEGATIVE** (best
+ΔCV+0.267 < null 95th +0.387, p0.23; neg-control density fired). SB is a real-but-WEAK RANK predictor; the high-SB
+fork is NOT audio-poolable → note-context; the 3/3 ear result survives (tested songs on the clean spine). The
+unexplained fork prompted verifying SB's 4/4 frame → **SPUN OFF the meter thread (below).** The chaos×onset GATE fork
+stays PARKED (`chaos_onset_gate_scope.md`).
 - `backbone_phase_findings.md` — the 1/4→1/16 backbone flip under cranked chaos+guidance is CFG-amplified chaos
   (~70%) + 16th-unlock calib (~30%), **NOT the governor** (0%). Confirms/decomposes H4/H14 (see UPDATE block —
   the whole `chaos=0.9,g=3.0` regime is OOD; metrics reconciled to the real-anchored ones).
@@ -288,13 +295,44 @@ Read roughly in this order:
   DETECTOR but NOT a quality ranker (inverted-U: the PEAK has only medium anchoring 0.52; Spearman vs rating ≈0).
   Tolerance = crank where anchoring<~0.3. **Actionable: crank CHAOS, keep GUIDANCE gentle** (guidance = the overload
   lever, H14 ear-confirmed). Feature lead: denser songs = lower tolerance (ρ≈−0.37, marginal). Open fork = the
-  **chaos×onset gate** (conditioning-mechanism ceiling-raiser).
+  **chaos×onset gate** (conditioning-mechanism ceiling-raiser, now PARKED — see `chaos_onset_gate_scope.md`).
+- `tolerance_formula_findings.md` — **THE FORMULA (2026-07-04) + EAR-CONFIRMED.** The audio-derivable
+  `env_strongbeat_frac` (onset-envelope mass on strong-beat 16ths) predicts per-song tolerance (ρ≈+0.63, R²≈0.33) and
+  SUBSUMES the density lead (density needed a reference chart; SB is audio-only). Predicts the per-song FLIP GUIDANCE
+  `g₀≈0.77+1.62·SB` to ±0.28 (logistic-cliff fit on a dense guidance×k4 sweep, ρ+0.72 R²0.44). **PROSPECTIVELY
+  EAR-CONFIRMED 3/3** (`playtest_log.md`) — the FIRST ear result on this thread to AGREE with the offline metric.
+  **Second-factor hunt: label-noise-limited, NOT feature-limited** — density/bpm/onset_rate OVERFIT (fail LOO-CV),
+  d22_std metric-inconsistent, no better SB variant (coarse env beats highres-onset). Lever = denoise labels (k↑)/more
+  songs; an expanded k4 flip run (`flip_point_v2.csv`, 32 songs SB 0.07–0.84) launched to re-hunt on clean labels.
 - Tooling: `probe_backbone_phase.py` (ablation), `probe_real_phase_reference.py` (real ref),
-  `probe_backbone_tolerance.py` (real-anchored per-song tolerance sweep → feature regression).
+  `probe_backbone_tolerance.py` (real-anchored per-song tolerance sweep), `probe_tolerance_audio_density.py` (the
+  deployable audio predictor), `probe_flip_point.py` (dense sweep + logistic-cliff g₀), `probe_sb_variants.py` (SB
+  feature-variant CV comparison).
+
+## 4/4 grid — meter tax + data-layer-v2 refactor (ACTIVE, 2026-07-04 — lineage `meter-grid-arc.md`)
+Spun off the tolerance downgrade by verifying SB's 4/4 frame. The whole pipeline is hard-4/4 duple-16th (parser
+`timesteps_per_beat=4`, no `#TIMESIGNATURES`, `ts=floor(beat·4)` floors triplets; `t%4` baked into
+metric_phase/16th-unlock/SB/tolerance). **Census (5345 songs): 7% structural triplet tax / 3.3% dominant; odd-METER
+0.1% → a SUBDIVISION tax, not a time-signature tax.** Damage (n=597): triplet vs floor-to-16th DISPLACEMENT ρ+0.83,
+~33ms (2-3 judgment windows). Critic STRUCTURALLY BLIND (triplets floored at parse time → sub-grid → measure at the
+QUANTIZER not the scorer). **✅ BY-EAR CONFIRMED** (plain-canonical triplet songs read off-time, severity ∝ triplet
+concentration — "badly timing everything"; the 33ms metric PREDICTED the ear — a WIN case, mechanism-grounded not a
+taste proxy). Meter-equivariant-SB prototype (rotation-invariant DFT of a beat-phase histogram) resolves subdivision
+ρ+0.47 (2 harness bugs + 1 units bug caught first). 16th-ceiling→cliff hypothesis: partial/NOT established
+(saturation refuted; sub-16th intensity vocab real ~10%, COMPLEMENTS the gate). Refactor = data-layer-v2 (finer grid
++ variable-BPM, one beat-sync re-grid); gates are DATASET-only (`generate()` filter-free) → cheap inference
+filter-relaxation decoupled. GREENLIGHT pending.
+- `meter_4_4_assumption_scope.md` — the whole thread: code verification, census, representation-damage, critic
+  blindness, the by-ear verdict, the meter-equivariant-SB prototype, the 16th-ceiling→cliff assessment, and the
+  refactor scope (three separable animals: length filter / BPM range / fixed-BPM-tempo).
+- Tooling: `probe_meter_equivariant_sb.py` (rotation-invariant DFT meter detector + meter-equivariant SB),
+  `probe_flip_secondfactor.py` (the 2nd-factor permutation-null hunt, shared with the tolerance downgrade).
 
 ## Roadmaps / standing plans
 - `augmentation_roadmap.md` — on-the-fly augmentation ideas (mirror, etc.).
-- `constraint_relaxation_roadmap.md` — when to relax max-2/variable-BPM/finer-res (data-layer v2).
+- `constraint_relaxation_roadmap.md` — when to relax max-2/variable-BPM/finer-res (data-layer v2). **Now the ACTIVE
+  refactor question (meter thread) — the by-ear-confirmed triplet tax justifies data-layer-v2; it already bundles
+  fixed-BPM + triplets as one beat-synchronous re-grid.**
 
 ## Meta
 - `HANDOFF.md` — **the next-session handoff** (current = governor complete + v0.1.0 release prep).

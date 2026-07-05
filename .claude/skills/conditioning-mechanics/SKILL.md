@@ -119,6 +119,15 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
 - **Phase grid** (frame index `t`, 16th resolution): `t%4` → **0 = quarter, 2 = 8th, 1&3 = 16th-offbeat**.
   Backbone = quarter (+8th). "Chaos / syncopation" = 16th-offbeat share. Real Hard ~ quarter 0.7 / 8th 0.25 /
   16th 0.04; "real-like chaos" sits ~0.25 chaos-radar.
+  ▸ **⚠️ THIS GRID IS HARD-4/4 DUPLE-16th (a KNOWN LIMITATION, 2026-07-04, `notes/meter_4_4_assumption_scope.md`).**
+    `t%4` assumes each beat = 4 sixteenths (simple meter); the parser hop is `sr·60/(avg_bpm·4)` (one hop/song) and
+    quantizes notes `ts=floor(beat·4)`. So `t%4`, `metric_phase`, the 16th-unlock, `phase_shares`, SB, and the
+    tolerance formula ALL live on this grid. **Triplet/compound-feel songs are mis-gridded** — their onsets are
+    floored ~33 ms off (chart-triplet vs displacement ρ+0.83), BY-EAR confirmed "off-time" on triplet songs; ~7% of
+    the corpus (3.3% triplet-dominant; odd-METER is negligible 0.1% → a SUBDIVISION tax, not a time-signature one).
+    A probe using `t%4` on a triplet song measures garbage. The fix is the **data-layer-v2 refactor** (finer /
+    meter-adaptive grid + variable-BPM, one beat-synchronous re-grid) — it would RE-INDEX this whole §6 phase
+    vocabulary. See lineage `meter-grid-arc.md`, memory [[meter-4-4-grid]].
 - Decode phase levers (all in `generate()`): `onset_phase_calib=(b8,b16)` adds logit offsets to 8th/16th frames
   BEFORE tau (the caller's tau MUST use the same offset) → 16th COUNT floats with audio per-song (the validated
   win). `onset_phase_alloc=(q,8,16)` forces fixed per-band SHARES (a quota — SMEARS; avoid). `onset_phase_penalty`
