@@ -309,7 +309,18 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   deployable audio predictor), `probe_flip_point.py` (dense sweep + logistic-cliff g₀), `probe_sb_variants.py` (SB
   feature-variant CV comparison).
 
-## 4/4 grid — meter tax + data-layer-v2 refactor (ACTIVE, 2026-07-04 — lineage `meter-grid-arc.md`)
+## 4/4 grid — meter tax + data-layer-v2 refactor (ACTIVE, 2026-07-04→05 — lineage `meter-grid-arc.md`)
+**UPDATE (2026-07-05) — GREENLIT → v2 BUILDING through Phase 4 (branch `feat/data-layer-v2`; NOT deployed).** A1
+FIXED 48th grid confirmed by a fit + emptiness check (3× context cheap in bf16; no fallible deploy-time detector).
+Built: timing spine (`src/data/timing.py TimingMap`) → 2a finer quantization (`StepManiaParser.for_v2()`, triplet
+displacement **50.5→0.3 ms**, `probe_v2_displacement.py`) → 2b beat-sync audio (`audio_features.beat_sync`, gated on
+tempo variation; 2b SIZED bigger than assumed — ~20% songs / 14.6% ≥23 ms drift, `probe_v2_bpm_misalignment.py`) →
+`highres_v2` feature spec → warm-started bf16 trainer (`train_motif_figure_v2.py`, fitted T=3072/B4). Cache
+`cache/samples_v3_48th` rebuilding; NEXT = retrain → Phase-5 decode `t%12` re-index → **Phase-6 by-ear GATE**. Full
+plan + per-phase status: **`data_layer_v2_scope.md`**. Method wins: measure TRAINING-shaped memory (the no-mask fit
+probe was 2× optimistic → B8 OOM); Rule-7 caught 2 probe bugs in 2b sizing; DELETE the cache on feature-config
+change. Also shipped (independent): the cheap inference-gate reach win (`for_inference()` + `--relax_gates`).
+
 Spun off the tolerance downgrade by verifying SB's 4/4 frame. The whole pipeline is hard-4/4 duple-16th (parser
 `timesteps_per_beat=4`, no `#TIMESIGNATURES`, `ts=floor(beat·4)` floors triplets; `t%4` baked into
 metric_phase/16th-unlock/SB/tolerance). **Census (5345 songs): 7% structural triplet tax / 3.3% dominant; odd-METER
@@ -322,9 +333,13 @@ taste proxy). Meter-equivariant-SB prototype (rotation-invariant DFT of a beat-p
 (saturation refuted; sub-16th intensity vocab real ~10%, COMPLEMENTS the gate). Refactor = data-layer-v2 (finer grid
 + variable-BPM, one beat-sync re-grid); gates are DATASET-only (`generate()` filter-free) → cheap inference
 filter-relaxation decoupled. GREENLIGHT pending.
-- `meter_4_4_assumption_scope.md` — the whole thread: code verification, census, representation-damage, critic
-  blindness, the by-ear verdict, the meter-equivariant-SB prototype, the 16th-ceiling→cliff assessment, and the
-  refactor scope (three separable animals: length filter / BPM range / fixed-BPM-tempo).
+- `meter_4_4_assumption_scope.md` — the whole DIAGNOSIS thread: code verification, census, representation-damage,
+  critic blindness, the by-ear verdict, the meter-equivariant-SB prototype, the 16th-ceiling→cliff assessment.
+- `data_layer_v2_scope.md` — the BUILD plan + per-phase status (the actionable arc): A1 grid-design decision +
+  CHECKS (fit/emptiness), the re-index surface, cost, phased plan (1 timing spine → 2a quantization → 2b beat-sync →
+  3 feature re-grid → 4 retrain → 5 decode re-index → 6 by-ear), risks, and the resolved bundle-2b decision.
+- Tooling (v2): `probe_v2_{context_fit,grid_emptiness,displacement,alignment,bpm_misalignment}.py`,
+  `train_motif_figure_v2.py`, `src/data/timing.py`, `tests/test_{timing,v2_quantize}.py`.
 - Tooling: `probe_meter_equivariant_sb.py` (rotation-invariant DFT meter detector + meter-equivariant SB),
   `probe_flip_secondfactor.py` (the 2nd-factor permutation-null hunt, shared with the tolerance downgrade).
 

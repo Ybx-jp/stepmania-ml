@@ -120,3 +120,6 @@ cache/samples/
 readme-0.1.0-audit.md
 RELEASE_CRITERIA.md
 notes/briefs/
+
+# v2 cache build log (reproducible artifact)
+cache_v2_build.log

@@ -72,17 +72,35 @@ def main():
     p.add_argument("--allow_hands", action="store_true",
                    help="admit hands/quads (max_simultaneous=4); use a fresh --cache_dir (e.g. cache/samples_hands). "
                         "Train scripts reading this cache MUST also pass --allow_hands (index-based cache).")
+    p.add_argument("--v2", action="store_true",
+                   help="data-layer-v2 FINER 48th grid: timesteps_per_beat=12 feature extractor + "
+                        "StepManiaParser.for_v2() + a v2-sized --max_seq_len. Use a fresh --cache_dir "
+                        "(e.g. cache/samples_v3_48th); train scripts reading it MUST also pass --v2. Implies --highres.")
+    p.add_argument("--max_seq_len", type=int, default=None,
+                   help="override the config max_sequence_length (needed for --v2: 1440 at the 48th grid is only "
+                        "~30s/song). Default: config value (1440), or 5400 under --v2 (holds a 130s@200BPM song).")
+    p.add_argument("--limit", type=int, default=None, help="cap #train/#val files (small-scale pipeline test).")
     args = p.parse_args()
     set_seed(args.seed)
 
     cf = glob.glob(f"{args.data_dir}/**/*.sm", recursive=True) + glob.glob(f"{args.data_dir}/**/*.ssc", recursive=True)
     train_files, val_files, _ = create_data_splits(cf, random_state=args.seed)
+    if args.limit:
+        train_files, val_files = train_files[:args.limit], val_files[:args.limit]
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)["classifier"]["max_sequence_length"]
+    if args.max_seq_len:
+        msl = args.max_seq_len
+    elif args.v2:
+        msl = 5400  # 130s @ 200BPM * 12/beat; the 48th grid needs ~3x the 16th msl
 
-    parser = StepManiaParser(max_simultaneous=4) if args.allow_hands else None
+    parser = (StepManiaParser.for_v2() if args.v2 else
+              StepManiaParser(max_simultaneous=4) if args.allow_hands else None)
     ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
-                                                   use_metric_phase=True, use_highres_onset=args.highres))
+                                                   use_metric_phase=True,
+                                                   use_highres_onset=(args.highres or args.v2),
+                                                   timesteps_per_beat=(12 if args.v2 else 4),
+                                                   beat_sync=args.v2))  # v2 = finer grid (2a) + beat-sync audio (2b)
     train_ds, val_ds, _ = create_datasets(train_files=train_files, val_files=val_files, test_files=[],
                                           audio_dir=args.audio_dir, max_sequence_length=msl, parser=parser,
                                           feature_extractor=ext, cache_dir=args.cache_dir)

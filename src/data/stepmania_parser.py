@@ -68,7 +68,10 @@ class StepManiaParser:
                  max_song_length: float = 130.0,
                  min_bpm: float = 60.0,
                  max_bpm: float = 200.0,
-                 max_simultaneous: int = 2):
+                 max_simultaneous: int = 2,
+                 gimmick_max_bpm: Optional[float] = None,
+                 gimmick_min_bpm: float = 15.0,
+                 round_quantize: bool = False):
         """
         Initialize parser with optional config dict.
 
@@ -79,10 +82,24 @@ class StepManiaParser:
                    simultaneously-occupied panels. Default 2 (the stale Phase-1 jump constraint, which
                    excludes 55% of real Hard charts — see notes/constraint_relaxation_roadmap.md). Pass 4
                    to admit hands/quads (the typed model's 15-way pattern head supports them).
+            gimmick_max_bpm: if set, reject any chart with a RAW BPM event above this (or below
+                   gimmick_min_bpm). The min/max_bpm filter above uses the duration-weighted AVERAGE,
+                   which is blind to a brief speed-gimmick spike (e.g. #BPMS=...=2467 for scroll flair) —
+                   a sane average sails through, then the single-hop 16th grid (hop = sr·60/(avg_bpm·4),
+                   ONE hop per song) mis-grids that section. Default None (guard OFF → training byte-
+                   identical). Paired with the widened INFERENCE bounds; see StepManiaParser.for_inference()
+                   and notes/constraint_relaxation_roadmap.md (the cheap decoupled reach win).
         """
         self.target_sample_rate = target_sample_rate
         self.timesteps_per_beat = timesteps_per_beat
         self.max_simultaneous = max_simultaneous
+        self.gimmick_max_bpm = gimmick_max_bpm
+        self.gimmick_min_bpm = gimmick_min_bpm
+        # data-layer-v2 (notes/data_layer_v2_scope.md): round-to-nearest on a FINER grid instead of floor-to-16th.
+        # On the 48th grid (timesteps_per_beat=12) a triplet at beat 1/3 -> round(12/3)=4 -> 4/12 = 1/3 EXACTLY
+        # (displacement 0), vs floor(4/3)=1 -> 1/4 (the 0.083-beat / 33 ms triplet shear). Default False keeps the
+        # DEPLOYED 16th path (timesteps_per_beat=4, floor) byte-identical. See for_v2().
+        self.round_quantize = round_quantize
 
         # Use config values if provided, otherwise use defaults
         if config:
@@ -95,6 +112,43 @@ class StepManiaParser:
             self.max_song_length = max_song_length
             self.min_bpm = min_bpm
             self.max_bpm = max_bpm
+
+    @classmethod
+    def for_inference(cls, **kwargs) -> "StepManiaParser":
+        """Parser for the INFERENCE / export path with WIDENED gates (the cheap decoupled reach win,
+        notes/constraint_relaxation_roadmap.md). generate() itself is filter-free (it consumes precomputed
+        audio + a scalar bpm and validates neither), so the only thing keeping the export/playtest path off
+        an out-of-band real song is THIS parser's dataset-build validation. Widen it so we reach songs
+        generate() can already chart — WITHOUT touching training (the training path keeps the default
+        narrow [60,200]/[75,130] gates on the clean single-BPM 16th grid).
+
+        Widened vs default: BPM avg [40, 320] (was [60, 200]); song length [30, 600]s (was [75, 130] — the
+        generate() context cap truncates the long tail, so the upper bound is only a discovery gate). The
+        gimmick guard is ON (gimmick_max_bpm=400) precisely BECAUSE the avg band is now wide enough to admit
+        variable-BPM charts whose brief scroll-gimmick spikes (2467/1431/441) would feed the single-hop grid
+        garbage. This is PURE reach and independent of the data-layer-v2 grid refactor.
+        """
+        defaults = dict(min_bpm=40.0, max_bpm=320.0, min_song_length=30.0, max_song_length=600.0,
+                        gimmick_max_bpm=400.0)
+        defaults.update(kwargs)  # caller overrides win
+        return cls(**defaults)
+
+    @classmethod
+    def for_v2(cls, subdiv: int = 12, **kwargs) -> "StepManiaParser":
+        """Parser for the data-layer-v2 FINER grid (notes/data_layer_v2_scope.md). subdiv=12 = the 48th grid
+        (LCM of duple-16th and triplet) that resolves the confirmed triplet tax: `timesteps_per_beat=subdiv` +
+        round-to-nearest quantization so triplets land EXACTLY (displacement -> 0) instead of floored to the 16th
+        grid. This is the finer-SUBDIVISION half (phase 2a); the variable-BPM audio re-grid (phase 2b, TimingMap
+        frame times) is separate. A version bump — keep the deployed 16th parser as the default."""
+        defaults = dict(timesteps_per_beat=subdiv, round_quantize=True)
+        defaults.update(kwargs)
+        return cls(**defaults)
+
+    def _beat_to_ts(self, beat_position: float) -> int:
+        """Quantize a beat position to a grid timestep. Floor on the legacy 16th grid (byte-identical), round on
+        the v2 finer grid (round_quantize) so triplets snap to their exact 48th cell. See __init__/for_v2()."""
+        scaled = beat_position * self.timesteps_per_beat
+        return int(np.round(scaled)) if self.round_quantize else int(np.floor(scaled))
 
     def parse_file(self, file_path: str) -> Optional[StepManiaChart]:
         """
@@ -211,6 +265,17 @@ class StepManiaParser:
         if not (self.min_bpm <= avg_bpm <= self.max_bpm):
             print(f"{chart.title} failed bpm requirement (avg_bpm={avg_bpm:.1f})")
             return False
+
+        # Gimmick guard (INFERENCE-only, off unless gimmick_max_bpm is set): the avg-BPM filter above is
+        # blind to a brief speed-gimmick spike (a sane average hides it), but the single-hop 16th grid
+        # mis-grids that section. Reject on any RAW event outside the sane-tempo band. See for_inference().
+        if self.gimmick_max_bpm is not None:
+            raw_bpms = [e.value for e in chart.timing_events if e.event_type == 'bpm']
+            bad = [v for v in raw_bpms if v > self.gimmick_max_bpm or v < self.gimmick_min_bpm]
+            if bad:
+                print(f"{chart.title} failed gimmick guard (raw BPM events {sorted(set(bad))} outside "
+                      f"[{self.gimmick_min_bpm:.0f}, {self.gimmick_max_bpm:.0f}])")
+                return False
 
         # Check song length
         if not (self.min_song_length <= chart.song_length_seconds <= self.max_song_length):
@@ -425,7 +490,7 @@ class StepManiaParser:
                     beat_position = current_beat + (line_idx * beats_per_line)
 
                     # Convert to timestep index
-                    timestep_idx = int(np.floor(beat_position * self.timesteps_per_beat))
+                    timestep_idx = self._beat_to_ts(beat_position)
 
                     # Ensure timestep is within bounds
                     if 0 <= timestep_idx < chart.timesteps_total:
@@ -494,7 +559,7 @@ class StepManiaParser:
                     beat_position = current_beat + (line_idx * beats_per_line)
 
                     # Convert to timestep index
-                    timestep_idx = int(np.floor(beat_position * self.timesteps_per_beat))
+                    timestep_idx = self._beat_to_ts(beat_position)
 
                     # Ensure timestep is within bounds
                     if 0 <= timestep_idx < chart.timesteps_total:
@@ -557,7 +622,7 @@ class StepManiaParser:
             for line_idx, line in enumerate(lines):
                 if len(line) >= 4:
                     beat_position = current_beat + (line_idx * beats_per_line)
-                    ts = int(np.floor(beat_position * self.timesteps_per_beat))
+                    ts = self._beat_to_ts(beat_position)
                     if 0 <= ts < chart.timesteps_total:
                         for panel_idx in range(4):
                             sym = self.TYPED_SYMBOLS.get(line[panel_idx], 0)
