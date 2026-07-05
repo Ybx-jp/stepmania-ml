@@ -119,6 +119,17 @@ def test_resample_frames_linear():
     assert out.shape == (4, 2)
 
 
+def test_beatsync_reduces_to_uniform_grid_on_constant_bpm():
+    """The 2b invariant: on a CONSTANT-BPM song, beat-sync frame times == the uniform avg-hop grid (a near no-op).
+    Only tempo changes make them differ. This is why 2b is safe on the ~80% fixed-BPM corpus."""
+    sr, tempo, tpb, N = 22050, 150.0, 12, 500
+    tm = TimingMap([bpm(0.0, tempo)])
+    dst = tm.beat_to_time(np.arange(N) / tpb)          # beat-sync times
+    hop = sr * 60.0 / (tempo * tpb)                      # the parser's constant hop (samples)
+    uniform = np.arange(N) * hop / sr                    # uniform grid times
+    np.testing.assert_allclose(dst, uniform, atol=1e-9)
+
+
 def test_resample_beatsync_grid_shape():
     from src.data.timing import resample_frames
     tm = TimingMap([bpm(0.0, 120.0), bpm(8.0, 200.0)])   # a tempo change

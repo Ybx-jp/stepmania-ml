@@ -99,7 +99,8 @@ def main():
     ext = AudioFeatureExtractor(AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True,
                                                    use_metric_phase=True,
                                                    use_highres_onset=(args.highres or args.v2),
-                                                   timesteps_per_beat=(12 if args.v2 else 4)))
+                                                   timesteps_per_beat=(12 if args.v2 else 4),
+                                                   beat_sync=args.v2))  # v2 = finer grid (2a) + beat-sync audio (2b)
     train_ds, val_ds, _ = create_datasets(train_files=train_files, val_files=val_files, test_files=[],
                                           audio_dir=args.audio_dir, max_sequence_length=msl, parser=parser,
                                           feature_extractor=ext, cache_dir=args.cache_dir)

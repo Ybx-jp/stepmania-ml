@@ -141,7 +141,13 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
    slope bug (16× inflation); the corrected probe uses `parser.compute_average_bpm` + eyeballed the actual songs
    (the half-tempo mechanism is real, confirmed on ハナノイロ [90,180] / 聖剣 [96,192] etc.). Variable-BPM songs ARE
    in training (parser doesn't reject them) → this is a TRAINING-data-quality issue, not just generation.
-   `#WARPS` if needed. → ⬜ BUILD PENDING (user decision — see the bundle question below).
+   `#WARPS` if needed. → ✅ BUILT (2026-07-05, user chose bundle-B): `audio_features.py` `beat_sync` config flag +
+   `_highres_pooled_onset_beatsync`; extracts at the fine hop then `resample_frames` onto `TimingMap.beat_to_time`.
+   GATED on ACTUAL tempo variation — only variable-BPM songs (>1 distinct #BPMS) take the fine-hop+resample path;
+   CONSTANT-BPM songs keep the EXACT v1 grid-hop extraction (verified true no-op, 0.00000 diff), so the ~80%
+   fixed-BPM majority is untouched (minimal warm-start shift). Verified: variable-BPM features CHANGE (0.755),
+   constant-BPM unchanged; end-to-end extract on a real 9-distinct-BPM song = finite 42-dim. Wired into
+   `highres_v2` spec (`beat_sync=True`) + `warm_cache_v2 --v2`. Bundled into the ONE 2a+2b cache build.
 3. **Feature re-grid + `_metric_phase` → `t%12`/`t%48`.** Rebuild the highres cache (new cache key/version).
    → ✅ PLUMBED + DE-RISKED: `highres_v2` feature spec (`decode_harness._FEATURE_SPECS`, `timesteps_per_beat=12`,
    cache `cache/samples_v3_48th`, still 42-dim — only hop density + metric_phase period change; `_metric_phase`
@@ -183,6 +189,9 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
 2. **⬜ v2 (this doc):** GATED on greenlight. By-ear justification is banked; the open question is INVESTMENT
    PRIORITY vs the parked seq-onset anchoring retrain (the musicality cliff). Both are big; the user's call on
    which goes first.
+
+## DECISION (2026-07-05) — RESOLVED: bundle 2b (option B). 2b is BUILT; the ONE cache build is 2a+2b.
+(historical framing below)
 
 ## OPEN DECISION (2026-07-05) — bundle 2b into the current rebuild, or retrain twice?
 The 48th cache building now is **Phase-2a-only** (finer grid, still single-avg-hop) → the pending retrain fixes

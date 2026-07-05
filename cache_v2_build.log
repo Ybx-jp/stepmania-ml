@@ -2529,3 +2529,10 @@ workers=4  train=4547  val=951  cache=cache/samples_v3_48th
 [src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
 [val] 700/951  ok=700  0.4/s  elapsed 28.7m  eta 10.3m
 [src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+[val] 800/951  ok=800  0.4/s  elapsed 32.8m  eta 6.2m
+[src/libmpg123/id3.c:process_comment():587] error: No comment text / valid description?
+[val] 900/951  ok=900  0.4/s  elapsed 36.9m  eta 2.1m
+[val] 951/951  ok=951  0.4/s  elapsed 38.4m  eta 0.0m
+[val] DONE 951/951 in 38.4m

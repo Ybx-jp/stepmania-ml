@@ -41,7 +41,7 @@ _FEATURE_SPECS = {
     # with StepManiaParser.for_v2() (same timesteps_per_beat) or audio frames and note cells mis-align — the
     # scope's "piecemeal drift" risk. Fresh cache dir (the grid changed → old cached features are stale).
     "highres_v2": (dict(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True, use_highres_onset=True,
-                        timesteps_per_beat=12), 42, "cache/samples_v3_48th"),
+                        timesteps_per_beat=12, beat_sync=True), 42, "cache/samples_v3_48th"),
     "stage1":  (dict(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True), 41, "cache/samples_v2"),
     "base":    (None, 23, "cache/samples"),
 }
