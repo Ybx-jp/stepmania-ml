@@ -8,6 +8,85 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-04 — ✅ CONFIRMED: the 4/4-GRID TRIPLET TAX by-ear gate (H-meter, B-step 3)
+
+**RAW FEEDBACK (user, verbatim):**
+- **First of the Year (Equinox)** (triplet-heavy in 94% of measures, only 12% near-pure): "did feel a little off,
+  it's dubstep so it definitely wanted that extra spice."
+- **My Christmas list** (80% triplet measures, **39% near-pure**): "was just… wow, it was really off. i was badly
+  timing everything."
+
+**VERDICT — H-meter CONFIRMED. The finer-grid refactor is justified by ear.**
+1. **The ~33 ms floor-to-16th displacement is FELT** — both pervasively-triplet 4/4 songs read off-time; the tax is
+   real, not sub-threshold.
+2. **Severity tracks triplet CONCENTRATION** (Rule-8 check `measure_triplet_profile`): My Christmas list has 3× the
+   near-pure-triplet measures (39% vs 12%) → "badly timing everything" (every note displaced) vs "a little off."
+   A global sync bug would NOT scale with triplet density → this IS the meter tax, not an offset artifact.
+3. **My "bursty vs pervasive" split was WRONG (self-overturned):** I predicted First of the Year would be bursty
+   triplets (mechanism C, missing spice) and Christmas pervasive (mechanism B, displacement). BOTH are pervasive
+   (94%/80% triplet measures). The dominant felt defect on BOTH is (B) timing displacement; the "wanted spice"
+   on First of the Year is a secondary read (dubstep drops). Neither is odd-meter — pure duple-16th SUBDIVISION tax.
+4. **The offline mechanism PREDICTED the ear** (2nd time this session): the 33 ms measurement forecast both that
+   triplet songs feel off AND which feels worse. Unlike the tolerance thread's ear-overturned metrics — because this
+   is a hard representation fact (notes on the wrong grid), not a taste proxy.
+
+**Commentary** — this clears the BINDING GATE on the meter thread. The tax is a REPRESENTATION cap no decode knob can
+touch (both charts were canonical-default, plain generation), confirmed felt and severe (dealbreaker on the more
+triplet-dominant song). Combined with the sub-16th intensity vocabulary real charts use (section C,
+`meter_4_4_assumption_scope.md`), the finer-grid + variable-BPM **data-layer-v2** refactor is now justified by ear —
+the roadmap's "defer until musicality plateaus" gate is met AND the need is confirmed. Cost/ROI: only ~7% of songs
+(≥0.15 triplet) but a SEVERE defect on them (near-unplayable timing). Full scope in the scope note §D.
+
+**Action / next**
+- [x] User played both; H-meter CONFIRMED (felt, severity ∝ triplet concentration); burst-hypothesis self-overturned.
+- [ ] DECISION (user's greenlight): commit to data-layer-v2 (beat-synchronous re-grid: finer subdivision + variable
+      BPM, one surgery) — re-indexes the whole `t%4` phase vocabulary (metric_phase / 16th-unlock / SB / tolerance).
+- [ ] Cheap decoupled win available now: relax length + widen BPM (gimmick-guarded) on the inference path.
+- [ ] `/refresh` to bank the session (tolerance downgrade + the whole meter thread).
+
+### (setup — for reference)
+## 2026-07-04 — (setup) the 4/4-GRID TRIPLET TAX by-ear gate (H-meter, B-step 3)
+
+**What was generated** — `~/sm-generated/meter_triplet_test/` (2 folders): **First of the Year (Equinox)** (chart
+triplet-frac 0.41, the named seed, also in the flip set) and **My Christmas list** (0.46) — the two most
+triplet-DOMINANT songs the val loader would generate. **Canonical defaults, PLAIN generation** (deployed
+`gen_motif_full_fixed`, no radar/chaos — this tests the GRID, not conditioning), `--hardest`, each folder =
+generated Challenge + the **original human chart** for A/B. Both re-parse; densities match (gen 0.35/0.39 vs ref
+0.37/0.39), critic Hard.
+
+**The falsifiable prediction (H-meter):** these songs' music is triplet/compound-feel, but the whole pipeline is
+hard-4/4 (`timesteps_per_beat=4`) so every triplet note is FLOORED onto the 16th grid at parse time
+(`stepmania_parser.py:560`). Measured consequence (`meter_4_4_assumption_scope.md`, n=597): triplet content →
+timing displacement ρ+0.83, up to **~0.083 beats ≈ 33 ms @150BPM = 2–3 judgment windows** off. So the GENERATED
+chart should **limp / feel off-time** on the triplet runs — notes landing a hair before/after the actual drum, an
+uneven "straightened" feel — while the **original human chart (real triplets, plays correctly) should feel
+locked-in**. The A/B is the tell: if the real chart grooves and the generated one limps on the SAME passage, the
+tax is felt; if both feel fine, the 33 ms is below the felt threshold here.
+
+**What to listen for / report:**
+- On the triplet runs specifically: does the GENERATED chart feel off-beat / limping / "straightened", vs the
+  ORIGINAL feeling locked to the music?
+- Severity call (the ROI gate): **dealbreaker** (badly limps → the metering refactor is justified for the ~7%
+  triplet songs) vs **minor blemish** (barely noticeable → document the cap, scope the project to duple-16th).
+- Any note-DROPS (collisions) vs pure timing-shove (the measurement says mostly shove, ≤2% loss — confirm by ear).
+
+**Commentary / why this matters** — this is the BINDING GATE on the meter thread. Everything upstream is proven:
+the tax is real at the REPRESENTATION level (ρ+0.83 displacement) but INVISIBLE to the critic (sub-grid — both real
+& generated are de-tripleted, so no 16th-grid instrument can score it — B-step 2). So the ear is the ONLY
+instrument above the grid. Unlike every prior playtest on the good-settings thread, no decode knob can change this
+outcome — it's a representation cap. If the user hears the limp, the only fix is the metering refactor
+(parser/features/model on a finer or meter-adaptive grid); if not, we scope to duple-16th and move on. Connects the
+new meter thread (`notes/meter_4_4_assumption_scope.md`) to the tolerance-formula parent (the `strong-beat : 4/4`
+verification that opened it).
+
+**Action / next**
+- [ ] User plays both, A/Bs generated vs original on the triplet passages; reports limp severity + the ROI call.
+- [ ] If dealbreaker → scope the metering refactor (parser reads real subdivision; features grid on it; retrain).
+- [ ] If minor → document the duple-16th limitation in the scope note + memory; close the meter thread.
+- [ ] (only 2 songs loaded; if a firmer read is wanted, debug why Ghost Hunt/水彩キャンディー failed the loader and add them.)
+
+---
+
 ## 2026-07-04 — FLIP-POINT prospective test: does the per-song predicted g₀ match where the backbone flips by ear? ✅ CONFIRMED 3/3
 
 **RAW FEEDBACK (user, verbatim):**

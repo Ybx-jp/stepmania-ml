@@ -1,5 +1,14 @@
 # Tolerance formula — the DEPLOYABLE predictor: audio strong-beat mass fraction
 
+> **⚠️ CORRECTION 2026-07-04 (read the bottom section first — `## EXPANDED k=4 run + second-factor hunt`).**
+> The expanded 32-song k=4 flip-point run **DOWNGRADED the formula**: `SB→g₀` fell from the small-n
+> **Spearman +0.72 / R²=0.44** (below) to **+0.29 clean (n.s.) / +0.39 censored (p=0.027), R²~0.09**, and
+> SB-only **LOO-CV R² ≈ 0**. The `R²=0.44`/`R²≈0.33` figures below are **small-n optimism** — SB is a real but
+> WEAK single-factor rank trend, not a variance-explaining model. A disciplined second-factor hunt (84-dim
+> fingerprint, permutation null) came back a **clean NEGATIVE** — no audio-poolable second factor. The **3/3
+> prospective ear result still stands** (those songs sit on the clean SB spine). Treat the numbers below as
+> superseded by the correction section.
+
 **Question (the good-settings thread's core goal):** tolerance(song) = f(song features) — how far can a song be
 cranked (CFG guidance, at the fixed milestone HIGH-chaos `--style` spec) before its 1/4 backbone collapses to a
 1/16 smear? The n=40 sweep (`probe_backbone_tolerance.py`) found the only significant predictor was `real_density`
@@ -118,10 +127,59 @@ judged by **LOO cross-validated R²** (in-sample R² just fits the k=2 label noi
   vs the coarse k=2 scalar's 0.25. → to optimize the fit, get CLEAN g₀ labels on MORE songs (higher k, more n), then
   re-hunt the second factor on labels clean enough for a real one to surface. (Feature engineering is tapped on n=40/k2.)
 
+## 2026-07-04 (cont.) — EXPANDED k=4 run + second-factor hunt: FORMULA DOWNGRADED, no audio 2nd factor
+The "optimize the fit" plan was: get CLEAN g₀ labels on MORE songs (the prior R²=0.44 rested on n=14 clean fits),
+then re-hunt the second factor on labels clean enough for a real one to surface. Both ran. **Both cut against the
+prior headline.**
+
+**Expanded flip-point run (`probe_flip_point.py --n_build 60 --n_pick 32 --k 4` → `cache/flip_point_v2.csv`):**
+32 songs spanning SB **0.07–0.84** × dense 8-pt guidance × k=4, logistic-cliff fit per song (fits still r²≈1.00).
+- **SB → g₀ WEAKENED, it did NOT tighten** (the HANDOFF prediction "denser+k4 tightens" was WRONG):
+
+  | fit | Spearman | Pearson R² | n |
+  |---|---|---|---|
+  | coarse 5-pt / k=2 (original) | +0.54 | ~0.25 | ~20 |
+  | focused 8-pt / k=4, **n=14 clean** (the R²=0.44 headline) | **+0.72** | **0.44** | 14 |
+  | **expanded 8-pt / k=4, clean flippers** | **+0.29 (p=0.13, n.s.)** | **0.088** | 28 |
+  | expanded, **fallbacks kept as censored** | **+0.39 (p=0.027)** | — | 32 |
+
+  ⇒ the +0.72/R²=0.44 was **small-n optimism** (14 songs). Adding songs regressed it toward the true, weaker value
+  — the *expected* direction when a first estimate was lucky, not a bug. The formula `g₀≈0.77+1.62·SB` still
+  brackets the flip in RANK, but SB explains ~9% of variance out-of-sample, not ~44%.
+- **The reported n=28 number is pessimistically censored.** `probe_flip_point.py` drops 4 songs whose cliff never
+  appears in-range (`fit_ok=0`); 3 of those (Abyss, Dead Heat, ONE TWO) are high-tolerance RESISTERS — dropping
+  them flattens the slope. Kept as censored (rank-safe), Spearman rises to **+0.39, p=0.027** (still significant).
+  **Report the censored number.**
+- **The weakening is a HIGH-SB FORK.** Among SB>0.65 songs, some resist (Take It g₀2.34, BUMBLE 2.48, Abyss/ONE TWO
+  never flip) and some flip EARLY (MEANING OF LIFE g₀1.05, And Then We Kiss 1.40, LOVE 1.79). SB can't separate them.
+- **The 3 ear-tested songs still land on-formula** in the clean data (Heart Attack v2 g₀1.28 vs formula 1.55; IN
+  BETWEEN 1.94 vs 1.76; Take It 2.34 vs 2.12) — they sampled the clean SB spine, so the 3/3 ear result is intact;
+  it just wasn't a fair sample of the scattered high-SB fork.
+
+**Second-factor hunt (`probe_flip_secondfactor.py`, judged by LOO-CV increment + PERMUTATION NULL):** the same
+84-dim pooled fingerprint (mean|std of the 42 highres dims, recomputed per song so titles align exactly), asking
+whether any dim explains the g₀ residual after SB. Disciplined for n=28 vs 84 candidates.
+- **CLEAN NEGATIVE.** Best-of-84 LOO-CV increment over SB-only = **+0.267** (clean) / +0.129 (censored) — BELOW the
+  permutation-null 95th pct (**+0.387** / +0.341); **p=0.23 / 0.60 = within chance.** No reliable second factor.
+- **The negative control validated the harness (Rule 11).** `real_density` — the known overfitter — raised in-sample
+  R² (+0.106) but LOWERED LOO-CV (−0.076), exactly as on the n=40 scalar. The null test can tell signal from overfit.
+- **SB barely survives out-of-sample even alone:** SB-only LOO-CV R² = **−0.055** (clean) / +0.016 (censored) — once
+  SB can't refit on the held-out song it's ≈ the mean. The +0.29/+0.39 is a weak rank trend, not a predictive fit.
+
+**VERDICT (Rule 9, stated conditionally): the flip point is SB-bracketed but essentially SINGLE-FACTOR and WEAK; the
+high-SB fork is NOT audio-poolable at n=32.** This is consistent with the thread's own standing result that off-beat
+placement is not audio-reachable (the parked chaos×onset gate: the discriminating signal lives in NOTE-CONTEXT, not
+in any pooling of the audio). What would change it: (a) many more songs (n=32 is underpowered for a subtle 2nd
+factor); (b) a NON-pooled, phase-structured candidate (SB itself is phase-structured — a mean/std fingerprint may be
+the wrong feature family); or (c) the note-context gate, which is where the fork most plausibly lives. **Fit
+optimization by adding audio features is TAPPED** — the same conclusion as the n=40 scalar hunt, now on clean labels.
+
 ## Tooling
 `probe_tolerance_audio_density.py` (base p_onset + env strong-beat/occupancy features; merges with the tolerance
 CSV) → `cache/tolerance_audio_density.csv`. `probe_flip_point.py` (dense guidance sweep + logistic-cliff fit →
-g₀) → `cache/flip_point.csv` + `cache/flip_point.log`. Confirmatory partials/LOO/OLS inline. Depends on
+g₀) → `cache/flip_point.csv` + `cache/flip_point.log`; the expanded 32-song version →
+`cache/flip_point_v2.csv`. `probe_flip_secondfactor.py` (the LOO-CV increment + permutation-null second-factor hunt
+on the v2 labels vs the 84-dim pooled fingerprint). Confirmatory partials/LOO/OLS inline. Depends on
 `cache/backbone_tolerance.csv` (the n=40 label sweep). Lineage `experiment_lineage/good-settings-region-arc.md`;
 memory [[good-settings-region]]; parent `goodregion_findings.md` (the referee) + `real_phase_reference_findings.md`
 (the real envelope the metric measures distance from).

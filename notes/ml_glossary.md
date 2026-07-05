@@ -74,3 +74,15 @@ Format per entry: **term** — plain meaning *(how it shows up here)*.
 ## Added 2026-06-27
 
 - **ablation** — a controlled "remove (or swap out) one component and measure the drop" experiment, to attribute how much that component actually contributes; here, comparing the learned pattern head against a foot-physics-only generator on identical onsets isolates what the learned head adds.
+
+## Added 2026-07-04 (meter-geometry thread)
+
+- **cyclic group Z/n** — the "clock arithmetic" set {0,1,…,n−1} that wraps around; a musical beat split into n equal slots lives on Z/n, and positions differing by a full loop are the same phase. The strong-beat feature counts onset mass on certain slots of Z/4 (a beat split into four 16ths).
+- **coset** — a shifted sub-pattern inside a group; the "strong" positions {0,2} are a coset (a regular every-other-slot subset) of Z/4. Generalizing the feature = picking the right strong coset for the song's actual meter.
+- **DFT / discrete Fourier transform** — decomposes a repeating signal into "how much of each cycles-per-window rhythm it contains"; run on a 12-slot beat-phase histogram, energy at 3 cycles/beat = triplet feel, at 4 = sixteenth feel.
+- **rotation-invariant statistic** — a measurement unchanged when you shift the whole pattern in phase (rotate the clock); DFT *magnitudes* are rotation-invariant, so they detect triplet-vs-duple meter without needing the song's exact beat offset.
+- **metrical group / meter-equivariance** — the symmetry group of a song's meter (which slots are metrically equivalent); a meter-equivariant feature computes the same musical quantity whether the beat divides in 4 (simple) or 3 (compound), instead of hard-wiring 4/4.
+- **simple vs compound meter** — simple = each beat divides into 2/4 (e.g. 4/4 with sixteenths); compound = each beat divides into 3 (e.g. 6/8, triplet feel). The pipeline assumes simple meter everywhere.
+- **duple vs triplet subdivision** — whether notes between beats fall on a 2/4-way grid (duple, "1-e-and-a") or a 3-way grid (triplet, "1-trip-let"); a triplet song's accents land between the sixteenth slots and get mis-read by a duple grid.
+- **sextuplet** — six evenly-spaced notes per beat (16th-note triplets); shows up as 6-cycles/beat energy in the beat-phase DFT.
+- **beat-phase histogram** — a tally of how much onset energy lands at each fractional position within a beat (0 = on the beat, 0.5 = the "and", etc.), pooled over the song; its shape reveals the subdivision.
