@@ -81,14 +81,16 @@ Keep it tight and current; stale handoffs mislead worse than no handoff. Date it
 Render THIS session's on-disk JSONL to a readable markdown transcript for mining the project's own history into
 learning material (the actual math + methodology, not vibes — the user's stated goal):
 ```
-python tools/export_transcript.py            # latest (= current) session -> transcripts/<date>_<id>.md
+python tools/export_transcript.py --index    # latest session -> transcripts/<date>_<id>.md + refresh INDEX.md
 ```
 - It reads `~/.claude/projects/<cwd-with-'/'-as-'-'>/<session>.jsonl` and keeps user prompts, assistant PROSE (the
   explanations/insight boxes — where the pedagogy lives), every tool call, and tool results (truncated). Thinking
   is NOT persisted on disk (only an encrypted signature) so it's necessarily omitted — flag this if asked "where's
   the reasoning": it's in the prose, not a recoverable chain-of-thought.
 - `transcripts/` is **gitignored** — this is a LOCAL artifact; do NOT stage it in the step-7 commit. Options:
-  `--session all` (re-export every past session for a full corpus), `--result-lines N` (cap result verbosity).
+  `--session all` (re-export every past session for a full corpus), `--session none --index` (rebuild INDEX.md only),
+  `--result-lines N` (cap result verbosity). `INDEX.md` maps each session to its seed prompt + turn/tool density +
+  a 🔁 correction-signal count (overturned/corrected conclusions = the richest learning cases).
 - Re-runnable anytime; running it here (near end of the cycle) captures the fullest transcript of the session.
 
 ## 7. Commit

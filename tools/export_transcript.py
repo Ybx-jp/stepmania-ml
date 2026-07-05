@@ -144,6 +144,63 @@ def render_session(jsonl: Path, include_thinking: bool, result_lines: int) -> tu
     return header + "\n\n".join(parts) + "\n", last_ts
 
 
+# Phrases that signal a METHODOLOGY correction / overturned conclusion — the highest-value learning moments
+# (a wrong belief caught by a cheap fair test). Curated to avoid the noise of a bare "actually".
+CORRECTION_SIGNALS = re.compile(
+    r"\b(overturn(?:ed|s)?|self-overturn\w*|refut(?:e|ed|es)|i was wrong|my mistake|"
+    r"incorrectly|wrongly|mis-?attribut\w*|misread|stale (?:default|value|config)|harness bug|units? bug|"
+    r"not the model|premature(?:ly)?|turned out (?:to be )?|caught (?:the|a|my|another) (?:bug|error)|"
+    r"the user (?:caught|overturned|corrected|flagged)|false null|optimistic\b|didn't materialize)\b",
+    re.IGNORECASE)
+USER_SEED = re.compile(r"^### 🧑 User\n\n(.+?)(?=\n\n(?:###|\*\*Claude|> 🔧|<details|---))", re.DOTALL | re.MULTILINE)
+
+
+def build_index(out_dir: Path) -> Path:
+    """Scan the rendered transcripts/*.md and write transcripts/INDEX.md — a navigation aid for mining:
+    per session the seed prompt (thread), turn/tool density, and a correction-signal count (overturned-conclusion
+    sessions = the richest learning cases). Purely local (transcripts/ is gitignored)."""
+    mds = sorted(p for p in out_dir.glob("*.md") if p.name != "INDEX.md")
+    rows = []
+    for md in mds:
+        txt = md.read_text()
+        turns = len(re.findall(r"^### 🧑 User", txt, re.MULTILINE))
+        if turns == 0:
+            continue  # skip empty stub sessions (no real content to mine)
+        tools = len(re.findall(r"^> 🔧", txt, re.MULTILINE))
+        m = USER_SEED.search(txt)
+        seed = re.sub(r"\s+", " ", m.group(1)).strip()[:160] if m else "(no substantive prompt)"
+        corrections = len(CORRECTION_SIGNALS.findall(txt))
+        kb = md.stat().st_size // 1024
+        date = md.name[:10]
+        rows.append(dict(name=md.name, date=date, kb=kb, turns=turns, tools=tools, corr=corrections, seed=seed))
+
+    lines = ["# Transcript index — learning-material navigation\n",
+             f"_{len(rows)} sessions, auto-built by `tools/export_transcript.py --index`. "
+             "Gitignored. 🔁 = correction-signal count (overturned/corrected conclusions — the richest cases)._\n",
+             "> A high **tool** count = density of empirical methodology (probe commands + measured numbers). "
+             "A high **🔁** count = a session where a belief was caught wrong and fixed — the best worked examples.\n"]
+
+    # correction-rich highlight (top by signal count, min 3)
+    rich = sorted([r for r in rows if r["corr"] >= 3], key=lambda r: r["corr"], reverse=True)[:10]
+    if rich:
+        lines.append("## 🔁 Correction-rich sessions (start here for methodology)\n")
+        for r in rich:
+            lines.append(f"- **{r['name']}** — 🔁×{r['corr']}, {r['turns']} turns / {r['tools']} tools — {r['seed']}")
+        lines.append("")
+
+    lines.append("## All sessions (chronological)\n")
+    lines.append("| date | KB | turns | tools | 🔁 | seed prompt |")
+    lines.append("|---|--:|--:|--:|--:|---|")
+    for r in sorted(rows, key=lambda r: r["name"]):
+        seed = r["seed"].replace("|", "\\|")
+        lines.append(f"| {r['date']} | {r['kb']} | {r['turns']} | {r['tools']} | {r['corr']} | {seed} |")
+    lines.append("")
+
+    out = out_dir / "INDEX.md"
+    out.write_text("\n".join(lines))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--session", default="latest", help="session UUID, 'latest' (default), or 'all'")
@@ -153,6 +210,8 @@ def main():
     ap.add_argument("--no-thinking", dest="thinking", action="store_false",
                     help="(compat no-op: thinking isn't persisted in the JSONL — only an encrypted signature)")
     ap.add_argument("--result-lines", type=int, default=40, help="max lines kept per tool result (default 40)")
+    ap.add_argument("--index", action="store_true",
+                    help="(re)build transcripts/INDEX.md navigation from the rendered .md files, after any export")
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parent.parent
@@ -164,7 +223,9 @@ def main():
     files = sorted(src.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not files:
         sys.exit(f"no .jsonl transcripts under {src}")
-    if args.session == "latest":
+    if args.session == "none":
+        targets = []  # index-only: skip export, just (re)build INDEX.md over existing transcripts
+    elif args.session == "latest":
         targets = files[:1]
     elif args.session == "all":
         targets = files
@@ -185,7 +246,11 @@ def main():
         written.append(out)
     for w in written:
         print(f"wrote {w}  ({w.stat().st_size // 1024} KB)")
-    print(f"\n{len(written)} transcript(s) -> {out_dir}")
+    if written:
+        print(f"\n{len(written)} transcript(s) -> {out_dir}")
+    if args.index or args.session == "none":
+        idx = build_index(out_dir)
+        print(f"index -> {idx}")
 
 
 if __name__ == "__main__":
