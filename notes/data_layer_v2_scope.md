@@ -129,6 +129,13 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
    alignment` + `audio_features.py` with per-frame `TimingMap.frame_times(subdiv=12)`. Separable from 2a (2a fixes
    fixed-BPM triplet DISPLACEMENT — chart-space; 2b fixes tempo-CHANGE songs — audio-space). `#WARPS` if needed.
 3. **Feature re-grid + `_metric_phase` → `t%12`/`t%48`.** Rebuild the highres cache (new cache key/version).
+   → ✅ PLUMBED + DE-RISKED: `highres_v2` feature spec (`decode_harness._FEATURE_SPECS`, `timesteps_per_beat=12`,
+   cache `cache/samples_v3_48th`, still 42-dim — only hop density + metric_phase period change; `_metric_phase`
+   re-indexes to `t%12`/`t%48` AUTOMATICALLY via config, so phase-5's metric_phase piece is free). Alignment
+   DE-RISK (`probe_v2_alignment.py`) on real chart+audio: v2 audio frames == v2 chart timesteps, exactly 3.00×
+   v1, dim 42 — the "piecemeal drift" risk is closed. Side benefit: v2 admits MORE difficulties (fewer floor-
+   collision false-hands rejections in `validate_pattern_quality`). MUST pair `highres_v2` with
+   `StepManiaParser.for_v2()`. → ⬜ REMAINING: run the actual corpus re-extraction into `cache/samples_v3_48th`.
 4. **Model retrain** at the new sequence length (config bump + `autotune` for throughput).
 5. **Re-index the phase vocabulary:** `onset_phase_calib`, `phase_shares`, SB/tolerance, the governors'
    `frame_hz`. Update `conditioning-mechanics §6` + `generation-defaults` in lockstep (version bump).

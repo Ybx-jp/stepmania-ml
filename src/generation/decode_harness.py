@@ -35,6 +35,13 @@ MODEL_ARCH = dict(d_model=128, num_layers=4, onset_layers=2)
 _FEATURE_SPECS = {
     "highres": (dict(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True, use_highres_onset=True),
                 42, "cache/samples_v3"),
+    # data-layer-v2 (notes/data_layer_v2_scope.md): SAME 42-dim channels, but gridded at the 48th subdivision
+    # (timesteps_per_beat=12) so triplets resolve. Only the audio hop density + the metric_phase PERIOD change
+    # (t%12 beat / t%48 measure — a triplet cell now differs from a 16th cell); audio_dim stays 42. MUST be paired
+    # with StepManiaParser.for_v2() (same timesteps_per_beat) or audio frames and note cells mis-align — the
+    # scope's "piecemeal drift" risk. Fresh cache dir (the grid changed → old cached features are stale).
+    "highres_v2": (dict(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True, use_highres_onset=True,
+                        timesteps_per_beat=12), 42, "cache/samples_v3_48th"),
     "stage1":  (dict(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True), 41, "cache/samples_v2"),
     "base":    (None, 23, "cache/samples"),
 }
