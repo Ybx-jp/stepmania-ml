@@ -135,7 +135,11 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
    DE-RISK (`probe_v2_alignment.py`) on real chart+audio: v2 audio frames == v2 chart timesteps, exactly 3.00×
    v1, dim 42 — the "piecemeal drift" risk is closed. Side benefit: v2 admits MORE difficulties (fewer floor-
    collision false-hands rejections in `validate_pattern_quality`). MUST pair `highres_v2` with
-   `StepManiaParser.for_v2()`. → ⬜ REMAINING: run the actual corpus re-extraction into `cache/samples_v3_48th`.
+   `StepManiaParser.for_v2()`. → CORPUS RE-EXTRACTION command (into `cache/samples_v3_48th`, ~5.2 GB, ~4.5 h on
+   4 cores; verify done via `ls cache/samples_v3_48th/{train,val} | wc -l` vs the split counts train 4452/val 954,
+   minus audio-not-found skips): `python experiments/generation_typed/warm_cache_v2.py --data_dir data --audio_dir
+   data --v2 --workers 4 --cache_dir cache/samples_v3_48th` (OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 to avoid BLAS
+   oversubscription). Cache is msl-keyed at 5400 (the v2 sequence length).
 4. **Model retrain** at the new sequence length (config bump + `autotune` for throughput).
 5. **Re-index the phase vocabulary:** `onset_phase_calib`, `phase_shares`, SB/tolerance, the governors'
    `frame_hz`. Update `conditioning-mechanics §6` + `generation-defaults` in lockstep (version bump).
