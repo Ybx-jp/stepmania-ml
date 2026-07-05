@@ -70,7 +70,8 @@ class StepManiaParser:
                  max_bpm: float = 200.0,
                  max_simultaneous: int = 2,
                  gimmick_max_bpm: Optional[float] = None,
-                 gimmick_min_bpm: float = 15.0):
+                 gimmick_min_bpm: float = 15.0,
+                 round_quantize: bool = False):
         """
         Initialize parser with optional config dict.
 
@@ -94,6 +95,11 @@ class StepManiaParser:
         self.max_simultaneous = max_simultaneous
         self.gimmick_max_bpm = gimmick_max_bpm
         self.gimmick_min_bpm = gimmick_min_bpm
+        # data-layer-v2 (notes/data_layer_v2_scope.md): round-to-nearest on a FINER grid instead of floor-to-16th.
+        # On the 48th grid (timesteps_per_beat=12) a triplet at beat 1/3 -> round(12/3)=4 -> 4/12 = 1/3 EXACTLY
+        # (displacement 0), vs floor(4/3)=1 -> 1/4 (the 0.083-beat / 33 ms triplet shear). Default False keeps the
+        # DEPLOYED 16th path (timesteps_per_beat=4, floor) byte-identical. See for_v2().
+        self.round_quantize = round_quantize
 
         # Use config values if provided, otherwise use defaults
         if config:
@@ -126,6 +132,23 @@ class StepManiaParser:
                         gimmick_max_bpm=400.0)
         defaults.update(kwargs)  # caller overrides win
         return cls(**defaults)
+
+    @classmethod
+    def for_v2(cls, subdiv: int = 12, **kwargs) -> "StepManiaParser":
+        """Parser for the data-layer-v2 FINER grid (notes/data_layer_v2_scope.md). subdiv=12 = the 48th grid
+        (LCM of duple-16th and triplet) that resolves the confirmed triplet tax: `timesteps_per_beat=subdiv` +
+        round-to-nearest quantization so triplets land EXACTLY (displacement -> 0) instead of floored to the 16th
+        grid. This is the finer-SUBDIVISION half (phase 2a); the variable-BPM audio re-grid (phase 2b, TimingMap
+        frame times) is separate. A version bump — keep the deployed 16th parser as the default."""
+        defaults = dict(timesteps_per_beat=subdiv, round_quantize=True)
+        defaults.update(kwargs)
+        return cls(**defaults)
+
+    def _beat_to_ts(self, beat_position: float) -> int:
+        """Quantize a beat position to a grid timestep. Floor on the legacy 16th grid (byte-identical), round on
+        the v2 finer grid (round_quantize) so triplets snap to their exact 48th cell. See __init__/for_v2()."""
+        scaled = beat_position * self.timesteps_per_beat
+        return int(np.round(scaled)) if self.round_quantize else int(np.floor(scaled))
 
     def parse_file(self, file_path: str) -> Optional[StepManiaChart]:
         """
@@ -467,7 +490,7 @@ class StepManiaParser:
                     beat_position = current_beat + (line_idx * beats_per_line)
 
                     # Convert to timestep index
-                    timestep_idx = int(np.floor(beat_position * self.timesteps_per_beat))
+                    timestep_idx = self._beat_to_ts(beat_position)
 
                     # Ensure timestep is within bounds
                     if 0 <= timestep_idx < chart.timesteps_total:
@@ -536,7 +559,7 @@ class StepManiaParser:
                     beat_position = current_beat + (line_idx * beats_per_line)
 
                     # Convert to timestep index
-                    timestep_idx = int(np.floor(beat_position * self.timesteps_per_beat))
+                    timestep_idx = self._beat_to_ts(beat_position)
 
                     # Ensure timestep is within bounds
                     if 0 <= timestep_idx < chart.timesteps_total:
@@ -599,7 +622,7 @@ class StepManiaParser:
             for line_idx, line in enumerate(lines):
                 if len(line) >= 4:
                     beat_position = current_beat + (line_idx * beats_per_line)
-                    ts = int(np.floor(beat_position * self.timesteps_per_beat))
+                    ts = self._beat_to_ts(beat_position)
                     if 0 <= ts < chart.timesteps_total:
                         for panel_idx in range(4):
                             sym = self.TYPED_SYMBOLS.get(line[panel_idx], 0)

@@ -119,6 +119,15 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
 2. **Parser re-grid:** quantize to `beat·12`, hop per BPM segment. Verify the triplet DISPLACEMENT metric
    (chart-triplet vs floor error, currently ρ+0.83 / 33 ms) collapses to ~0 on the triplet set — the concrete
    success criterion for the representation fix.
+   → ✅ 2a DONE (finer-grid quantization): centralized `_beat_to_ts` helper + `round_quantize` flag +
+   `StepManiaParser.for_v2(subdiv=12)` (round-to-nearest 48th); legacy 4-grid floor path byte-identical (87
+   tests pass). **Success criterion MET** (`probe_v2_displacement.py`, 6034 charts): triplet-note displacement
+   **0.1263 → 0.0009 beats (50.5 → 0.3 ms @150BPM); structural triplet songs 19.4 → 0.8 ms; ρ+0.808 → +0.344**
+   (residual = genuinely-sub-48th nesting, ~0.002 beats, musically nil — the probe reproduced the meter thread's
+   +0.83 on the deployed grid). Unit tests `tests/test_v2_quantize.py`.
+   → ⬜ 2b PENDING (variable-BPM audio re-grid): replace the single avg-BPM `hop_length` in `_calculate_audio_
+   alignment` + `audio_features.py` with per-frame `TimingMap.frame_times(subdiv=12)`. Separable from 2a (2a fixes
+   fixed-BPM triplet DISPLACEMENT — chart-space; 2b fixes tempo-CHANGE songs — audio-space). `#WARPS` if needed.
 3. **Feature re-grid + `_metric_phase` → `t%12`/`t%48`.** Rebuild the highres cache (new cache key/version).
 4. **Model retrain** at the new sequence length (config bump + `autotune` for throughput).
 5. **Re-index the phase vocabulary:** `onset_phase_calib`, `phase_shares`, SB/tolerance, the governors'
