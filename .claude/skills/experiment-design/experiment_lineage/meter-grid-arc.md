@@ -72,6 +72,14 @@ deployed. Spun off [[good-settings-region]] by verifying SB's 4/4 frame. Primary
 - **CONNECTS-TO the chaos×onset gate / seq-onset arc:** the 16th-ceiling→cliff hypothesis lands on the same
   anchoring failure the gate targets; the finer grid is complementary (new vocabulary) not a substitute (anchored
   placement). The cliff stays the gate's problem.
+- **CROSS-TESTS seq-onset-arc.md (48th-grid audio-placement lift, 2026-07-05, `notes/seqonset_v2grid_findings.md`,
+  `probe_seqcontext_frozenh_v2.py`):** re-ran that arc's M1a bracket on THIS build's 48th grid to ask if the ~0.65
+  audio-placement cap was partly a GRID artifact. Answer: a MODEST duple-16th lift (audio reach 32%→41% of gap;
+  suggestive, needs the constant-BPM control) BUT the wall EXTENDS to triplets HARD — audio ≈ CHANCE (0.505) for
+  triplet placement vs a note-context ceiling 0.930; `frozen_h_conv` ≡ ceiling (0.939) → the v2 decoder ENCODES
+  triplet placement. So this build fixes the TARGET (triplets representable + placeable by the trained prior)
+  without making them AUDIO-derivable — the seq-onset wall is corroborated, not overturned, on the finer grid.
+  Reciprocal link in `seq-onset-arc.md`.
 - **DEPENDS-ON [[quality-feature-attribution]]:** B-step 2 (meter-as-quality-axis) reuses its graded critic + ICC
   discipline; BPM is the precedent for a hidden per-song quality driver (and the BPM RANGE filter is part of this
   refactor's scope).

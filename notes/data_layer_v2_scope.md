@@ -229,6 +229,21 @@ believe 2b (double the population, second-scale drift) and want to avoid buildin
 argues it's real enough to make (B) tempting — but (A) keeps one-change-at-a-time (validate the grid fix in
 isolation before compounding it with a hop change). User's call.
 
+## PARKED LEADS (revisit after Phase 6 by-ear)
+- **Retrain HP question (2026-07-05, PARKED by user).** The warm-start fine-tune uses a CONSTANT lr 3e-4 (AdamW,
+  no scheduler) and was still descending at 40 total epochs (base 20 + `_cont` 20; best val_total 0.7435). Decomposed:
+  the descent is ENTIRELY the **pattern head** (val_pattern 0.735→0.672); **val_onset (0.025) and val_type (0.047)
+  were FLAT from epoch 1** — i.e. the onset/timing representation (the triplet-tax-relevant head) converged
+  immediately; only which-panel selection is slowly re-mapping to the 48th grid. So "still improving" is NOT the
+  placement head being undertrained. Verdict: undertrained-for-budget, NOT mis-tuned (smooth monotonic descent, no
+  oscillation, decelerating ~0.003–0.004/epoch late). **Optuna deferred deliberately:** val_total is a proxy BLIND to
+  the triplet placement objective (training loss can't confirm the fix — Phase 6 by-ear is the gate), and the mover is
+  the pattern head, orthogonal to the timing tax → HPO would optimize the wrong thing. Cheap one-change tests IF
+  by-ear is close-but-not-there and reads like panel choice: `--epochs 20` continuation (find the pattern floor) or
+  `--lr 6e-4` (test the LR hypothesis directly); the one principled upgrade for longer training = add a COSINE lr
+  decay (flat lr leaves a little at the tail). Do NOT spend compute expecting more training to fix PLACEMENT — that
+  head is done. Full reasoning in this session's transcript.
+
 ## Links
 Diagnosis: `notes/meter_4_4_assumption_scope.md` (census → damage → critic-blind → by-ear → §C 16th-ceiling →
 §D scope seed). Lineage: `experiment_lineage/meter-grid-arc.md`. Roadmap: `notes/constraint_relaxation_roadmap.md`

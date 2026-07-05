@@ -247,6 +247,17 @@ only existing where→when bridge).
 - **[[fatigue-governor]] (`governor_release_region.md`, cond-mech §8c):** stamina is the lone existing where→when
   coupling — proves decode-time placement-gating works, but suppress-only/biomechanical.
 - **[[jack-heaviness]]:** the onset head's blocky audio-only rhythm (the upstream cause) is what note-context fixes.
+- **CROSS-TESTED BY meter-grid-arc.md (48th-grid lift, 2026-07-05, `notes/seqonset_v2grid_findings.md`,
+  `probe_seqcontext_frozenh_v2.py`):** the user asked whether the ~0.65 audio-placement cap was partly a GRID
+  artifact (triplets floored on the 16th grid → corrupted target). Re-ran the M1a bracket on the data-layer-v2
+  48th grid (`gen_motif_v2_48th_cont`, val 0.7435). RESULT: (a) MODEST duple-16th lift — audio reach 32%→41% of the
+  chance→ceiling gap (SUGGESTIVE; co-varies grid + beat-sync → needs the constant-BPM control to attribute to grid
+  alone); (b) the wall EXTENDS to TRIPLETS HARD — audio 0.505 ≈ CHANCE for triplet placement (−5% in the triplet-
+  heavy stratum) vs note-context ceiling 0.930; (c) M1a REPLICATES + extends — `frozen_h_conv` ≡ ceiling on triplet
+  (0.939) too. So v2 fixes the TARGET (triplets representable + placeable by the trained prior / in `h`) without
+  moving the SOURCE (audio still placement-blind, now confirmed for the new positions). Nothing overturned; the wall
+  is corroborated on a finer grid, and the parked fork-A retrain would have triplet placement available in the
+  frozen v2 `h`. Back-link in `meter-grid-arc.md`.
 - **REVIVED BY good-settings-region-arc.md (chaos×onset gate, 2026-07-04):** that thread's Phase-0 proved off-beat
   placement is NOT in audio (a decode gate on perc/onset saliency crushed good + smear 16ths identically) → its
   retrain IS this seq-onset head, with chaos as the organizing objective. Stage-1 de-risk (`probe_seqcontext_chaos.py`)
