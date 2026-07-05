@@ -59,10 +59,16 @@ The A1-vs-A2 call hinged on two unknowns; both now measured (probes `probe_v2_co
 - **Fit (does 3× context train on the RTX 3060?) — YES, with huge headroom.** On the DEPLOYED
   `LayeredTypedChartGenerator` (d128/4dec/2enc, the `train_motif_figure.py` lineage — NOT `train_factorized.py`;
   the autotune skill is stale, [[autotune-skill-stale]]), a real forward+backward at the 48th/4320-frame context:
-  - Memory is a NON-issue: batch 16 fp32 = 5.6 GB, bf16 = 3.4 GB of 12.6 GB. The model is tiny; memory doesn't bind.
-  - The cost is WALL-CLOCK step time (O(T²) attention): fp32 0.78 s→6.23 s (~8×) going 16th→48th at B16. **But
-    bf16 (AMP) buys the whole penalty back: bf16 @ 48th 3× (0.76 s) ≈ fp32 @ today's 16th (0.78 s).** So v2's 3×
-    context is affordable IFF it trains in bf16 — exactly the autotune headline lever.
+  - ⚠️ CORRECTION (phase-4 setup): `probe_v2_context_fit.py` measured a NO-MASK forward and was OPTIMISTIC (bf16
+    B16 @ 4320 = 3.4 GB). The REAL TRAINING-shaped memory (causal `mask` + teacher-forced decoder + AdamW) is far
+    tighter — the O(T²) decoder self-attention dominates: at T=4608, B2 = 8 GB and **B4 OOMs**. ALWAYS measure the
+    masked training forward, not a bare `model()` call.
+  - FITTED retrain config (the authoritative training-shaped sweep): **T=3072 (256 beats = v1 gen_motif_figure's
+    musical coverage, NOT 4608 — same span, ¼ the attention memory), batch 4 = 7.2 GB / 0.355 s per step** (B6=10.8
+    GB tight; B8 OOMs). At ~3000 train samples that's ~5 min/epoch → a **~1.5 h warm-started retrain**.
+  - The cost is WALL-CLOCK step time (O(T²) attention), and **bf16 (AMP) is mandatory** — it buys the finer-grid
+    penalty back (the autotune headline lever). Affordability CONFIRMED; the batch is just smaller than the naive
+    no-mask probe implied.
 - **Emptiness (how much of the uniform 48th grid is USED?) — 4.2% payload, but affordable.** Over 6034 corpus
   charts: **4.2% of all notes are triplet-family** (land on the NEW cells the 48th grid adds); per-song mean 3.4%,
   median 0.16%. **49% of songs have ZERO triplet notes** (pay 3× context for pure representation-waste), 6.1% are
@@ -141,6 +147,13 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
    data --v2 --workers 4 --cache_dir cache/samples_v3_48th` (OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 to avoid BLAS
    oversubscription). Cache is msl-keyed at 5400 (the v2 sequence length).
 4. **Model retrain** at the new sequence length (config bump + `autotune` for throughput).
+   → ✅ TRAINER READY + DE-RISKED (`train_motif_figure_v2.py`): version bump of `train_motif_figure.py` — same
+   arch/heads/conditioning, only the data grid changes. WARM-STARTS from the deployed `gen_motif_full_fixed`
+   (every learned weight transfers; only the `pos_encoding.pe` buffer is filtered — 2048→5504 shape, rebuilt fresh
+   = correct; verified loads clean, unexpected=[]). bf16 + T=3072/B4 fitted config baked in. Onset loss unchanged
+   focal_bce — the 48th onset target is ~3× sparser, so WATCH val_onset epoch 1 and retune gamma/pos_weight ONLY
+   if recall collapses. → ⬜ REMAINING: launch it once `cache/samples_v3_48th` finishes (`python experiments/
+   generation_typed/train_motif_figure_v2.py --data_dir data --audio_dir data`).
 5. **Re-index the phase vocabulary:** `onset_phase_calib`, `phase_shares`, SB/tolerance, the governors'
    `frame_hz`. Update `conditioning-mechanics §6` + `generation-defaults` in lockstep (version bump).
 6. **Validate:** by-ear on the SAME triplet set (`~/sm-generated/meter_triplet_test/`) — the binding gate that
