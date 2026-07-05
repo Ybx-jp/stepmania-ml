@@ -91,3 +91,20 @@ class TimingMap:
     @property
     def total_stop_seconds(self) -> float:
         return float(self._stop_durs.sum()) if len(self._stop_durs) else 0.0
+
+
+def resample_frames(features: np.ndarray, src_times: np.ndarray, dst_times: np.ndarray) -> np.ndarray:
+    """Linearly resample per-frame features (n_src, D) sampled at `src_times` onto `dst_times` (n_dst,) -> (n_dst, D).
+
+    The v2 phase-2b primitive: extract audio features at a FINE CONSTANT hop (src_times = arange(n)*hop/sr), then
+    map them onto the BEAT-SYNCHRONOUS frame times (TimingMap.frame_times) so a note's cell reads the audio at its
+    TRUE musical moment on a variable-BPM song — instead of a single-avg-hop that drifts. Column-wise np.interp
+    (clamps at the ends). Pairs with TimingMap.frame_times(subdiv=12).
+    """
+    features = np.asarray(features, dtype=np.float64)
+    if features.ndim == 1:
+        features = features[:, None]
+    out = np.empty((len(dst_times), features.shape[1]), dtype=np.float64)
+    for d in range(features.shape[1]):
+        out[:, d] = np.interp(dst_times, src_times, features[:, d])
+    return out.astype(np.float32)

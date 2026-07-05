@@ -131,9 +131,17 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
    **0.1263 → 0.0009 beats (50.5 → 0.3 ms @150BPM); structural triplet songs 19.4 → 0.8 ms; ρ+0.808 → +0.344**
    (residual = genuinely-sub-48th nesting, ~0.002 beats, musically nil — the probe reproduced the meter thread's
    +0.83 on the deployed grid). Unit tests `tests/test_v2_quantize.py`.
-   → ⬜ 2b PENDING (variable-BPM audio re-grid): replace the single avg-BPM `hop_length` in `_calculate_audio_
-   alignment` + `audio_features.py` with per-frame `TimingMap.frame_times(subdiv=12)`. Separable from 2a (2a fixes
-   fixed-BPM triplet DISPLACEMENT — chart-space; 2b fixes tempo-CHANGE songs — audio-space). `#WARPS` if needed.
+   → 2b RE-SIZED — BIGGER THAN ASSUMED (2026-07-05, `probe_v2_bpm_misalignment.py`): variable-BPM audio re-grid.
+   Replace the single avg-BPM `hop_length` in `_calculate_audio_alignment` + `audio_features.py` with per-frame
+   `TimingMap.frame_times(subdiv=12)` (extract at a fine constant hop, then `timing.resample_frames` onto the
+   beat-sync grid — the primitive is BUILT + tested). SIZING: **~20% of the corpus is variable-BPM; 14.6% of ALL
+   charts drift ≥23 ms — DOUBLE the 7% triplet tax, and per-song far more severe (median ~767 ms, second-scale on
+   half-tempo intros/breakdowns)** because a single avg-hop can't follow a mid-song tempo step. NOT the "smaller
+   separable population" this scope originally claimed. ⚠️ Rule-7 note: the FIRST sizing had a hand-rolled-avg
+   slope bug (16× inflation); the corrected probe uses `parser.compute_average_bpm` + eyeballed the actual songs
+   (the half-tempo mechanism is real, confirmed on ハナノイロ [90,180] / 聖剣 [96,192] etc.). Variable-BPM songs ARE
+   in training (parser doesn't reject them) → this is a TRAINING-data-quality issue, not just generation.
+   `#WARPS` if needed. → ⬜ BUILD PENDING (user decision — see the bundle question below).
 3. **Feature re-grid + `_metric_phase` → `t%12`/`t%48`.** Rebuild the highres cache (new cache key/version).
    → ✅ PLUMBED + DE-RISKED: `highres_v2` feature spec (`decode_harness._FEATURE_SPECS`, `timesteps_per_beat=12`,
    cache `cache/samples_v3_48th`, still 42-dim — only hop density + metric_phase period change; `_metric_phase`
@@ -175,6 +183,21 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
 2. **⬜ v2 (this doc):** GATED on greenlight. By-ear justification is banked; the open question is INVESTMENT
    PRIORITY vs the parked seq-onset anchoring retrain (the musicality cliff). Both are big; the user's call on
    which goes first.
+
+## OPEN DECISION (2026-07-05) — bundle 2b into the current rebuild, or retrain twice?
+The 48th cache building now is **Phase-2a-only** (finer grid, still single-avg-hop) → the pending retrain fixes
+triplets but leaves the ~20% variable-BPM audio drift (2b, now shown ≥23 ms on 14.6% of charts) UNTOUCHED. Two paths:
+- **(A) Proceed with the 2a-only retrain now**, validate the triplet fix by-ear, add 2b later as a second
+  rebuild+retrain. Faster to a testable result; costs a second ~4.5 h cache build + retrain if 2b is pursued.
+- **(B) Build the beat-sync extractor FIRST** (`resample_frames` primitive is done; wire it into
+  `audio_features.extract_from_chart` + `_calculate_audio_alignment`, behind a `beat_sync` flag), then rebuild the
+  cache ONCE with 2a+2b and retrain once. One coordinated surgery; delays the first testable model by the
+  extractor build + a fresh cache build. The in-flight 2a cache would be superseded (not wasted — it validated the
+  pipeline).
+Recommendation: lean (A) IF the goal is the fastest by-ear read on the confirmed triplet tax; lean (B) if we
+believe 2b (double the population, second-scale drift) and want to avoid building/retraining twice. The 2b sizing
+argues it's real enough to make (B) tempting — but (A) keeps one-change-at-a-time (validate the grid fix in
+isolation before compounding it with a hop change). User's call.
 
 ## Links
 Diagnosis: `notes/meter_4_4_assumption_scope.md` (census → damage → critic-blind → by-ear → §C 16th-ceiling →

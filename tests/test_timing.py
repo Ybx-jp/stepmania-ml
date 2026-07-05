@@ -104,3 +104,28 @@ def test_bpm_before_beat0_is_clamped():
 def test_no_bpm_raises():
     with pytest.raises(ValueError):
         TimingMap([stop(0.0, 1.0)])
+
+
+# ----------------------------------------------------------------- phase-2b resampler
+def test_resample_frames_linear():
+    from src.data.timing import resample_frames
+    # src features = the identity ramp sampled at integer seconds; resample onto half-second grid
+    src_t = np.arange(5, dtype=float)              # 0..4 s
+    feats = np.stack([src_t, 2 * src_t], axis=1)    # two channels: t and 2t
+    dst_t = np.array([0.0, 0.5, 1.5, 3.25])
+    out = resample_frames(feats, src_t, dst_t)
+    np.testing.assert_allclose(out[:, 0], dst_t, atol=1e-6)       # channel 0 == t
+    np.testing.assert_allclose(out[:, 1], 2 * dst_t, atol=1e-6)   # channel 1 == 2t
+    assert out.shape == (4, 2)
+
+
+def test_resample_beatsync_grid_shape():
+    from src.data.timing import resample_frames
+    tm = TimingMap([bpm(0.0, 120.0), bpm(8.0, 200.0)])   # a tempo change
+    dst = tm.frame_times(total_beats=16.0, subdiv=12)     # 48th beat-sync grid
+    n_src = 400
+    src_t = np.linspace(0, dst[-1], n_src)
+    feats = np.random.randn(n_src, 42)
+    out = resample_frames(feats, src_t, dst)
+    assert out.shape == (len(dst), 42)
+    assert np.all(np.diff(dst) > 0)  # beat-sync times monotonic across the tempo change
