@@ -1,62 +1,50 @@
-# HANDOFF — ACTIVE: data-layer-v2 BUILT THROUGH PHASE 5. Only Phase 6 by-ear (deployment gate) remains.
+# HANDOFF — data-layer-v2: PHASE 6 BY-EAR PASSED. v2 is a DEPLOY CANDIDATE. Next = governor subdiv-recalibration.
 
-**Written 2026-07-05 for the next Claude.** The 4/4-grid meter thread (triplet tax BY-EAR CONFIRMED) was GREENLIT
-into the **data-layer-v2 refactor**, now BUILT through **Phase 5** (grid design → timing spine → 2a/2b re-grid →
-cache → Phase-4 retrain → Phase-5 decode re-index all ✅). This session: (1) built the 48th cache, (2) ran the
-Phase-4 warm-started retrain + a continuation, (3) implemented **Phase 5** (the decode-side `t%4→t%12` re-index),
-(4) added transcript-export tooling wired into `/refresh`. **The deployed model is UNCHANGED** — v2 is NOT deployed;
-**Phase 6 by-ear is the single binding gate before it can be.**
+**Written 2026-07-05 for the next Claude.** The 4/4-grid meter thread (triplet tax) reached its **binding gate and
+CLEARED it**: the data-layer-v2 48th grid was exported for the triplet songs, PLAYED, and the tax is GONE with zero
+degradation ("resounding 100% success… finally able to REALLY express tasty percussion"). v2 is now a **deploy
+candidate**. The deployed model is STILL UNCHANGED (v1) — one thing stands between v2 and deployment: the decode
+**governors are miscalibrated on the 48th grid** ("playability constraints kinda fell apart"), a bounded recalibration.
 
 ## WHERE WE ARE
-- **Deployed model UNCHANGED** = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres, 16th grid).
-  Canonical decode defaults UNCHANGED (block below; validator passes). Nothing v2 is deployed.
-- **v2 CHECKPOINTS EXIST (NOT deployed):** `checkpoints/gen_motif_v2_48th/best_val.pt` (Phase-4 retrain, val_total
-  **0.8098**, epoch 20 — still descending, never plateaued). A CONTINUATION `checkpoints/gen_motif_v2_48th_cont/
-  best_val.pt` (warm-started from that ckpt, `--warmup_freeze 0 --epochs 20 --patience 3`) is improving further
-  (~0.767 by epoch 11 when this was written). **Verify live state:** `tail train_v2_48th_cont.log`; `kill -0 1877046`.
-  Use the `_cont` checkpoint if it finished lower than 0.8098; else the base one.
-- **Phase 5 DONE (commit `590daa1`):** the decode phase grid is parameterized by `subdiv` (timesteps/beat). A
-  `--features highres_v2` export now drives the phase bands + tau on the 48th grid automatically.
-- **Branch: `feat/data-layer-v2`.** Commits this session: `590daa1` (phase 5) → `7482401` (transcript tooling) →
-  the docs(refresh) commit that carries this HANDOFF. Verify via `git log`.
+- **Deployed model UNCHANGED** = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres, 16th grid). Canonical
+  decode defaults UNCHANGED (block below; validator passes). Nothing v2 is deployed yet.
+- **v2 VALIDATED BY EAR (2026-07-05).** Best checkpoint `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (val_total
+  **0.7435**, epoch 19; below the base run's 0.8098). Phase 6 playtest logged in `notes/playtest_log.md` (top entry).
+- **v2 EXPORT TOOLING BUILT + committed `837c1ed`** (the Phase-6 prerequisite that had never been wired):
+  - `src/generation/sm_writer.py`: rows-per-measure parameterized by `timesteps_per_beat` (48th grid → 48 rows/measure
+    so triplets land at true 1/3-beat positions). **subdiv=4 verified BYTE-IDENTICAL** to before.
+  - `experiments/generation_typed/export_typed_samples.py`: `--features highres_v2` (auto-selects the `for_v2()` parser
+    + the 48th `sm_writer` + `cache_dir=None`), builds the model at `max_len=5504`, and the **msl-truncation FIX** (the
+    v1 config `msl=1440` = only 120 beats on the 3×-finer grid → clipped every song to ⅓; use `V2_MSL=5400`).
+- **Cross-arc probe** `notes/seqonset_v2grid_findings.md` (`probe_seqcontext_frozenh_v2.py`): audio is CHANCE at triplet
+  placement (0.505 vs note-context ceiling 0.930) → v2 fixed the TARGET (triplets placeable by the trained prior / in
+  the decoder `h`), NOT audio-derivability. The seq-onset wall is corroborated on the finer grid.
+- **Branch: `feat/data-layer-v2`.** This session's commits: `837c1ed` (phase-6 tooling + probe) → the docs(refresh)
+  commit carrying this HANDOFF. Verify via `git log`. A PR to `main` is being opened as the last refresh step.
 
-## THE ACTIVE THREAD — data-layer-v2 (lineage `experiment_lineage/meter-grid-arc.md`, memory [[meter-4-4-grid]])
-Refactor off the hard-4/4 duple-16th grid onto a **48th grid (12/beat)** + **beat-synchronous audio**. Full plan +
-per-phase status: `notes/data_layer_v2_scope.md`. State:
-- **0 grid design ✅** A1 fixed 48th confirmed (fit + emptiness checks).
-- **1 timing spine ✅** `src/data/timing.py TimingMap`.
-- **2a finer quantization ✅** `StepManiaParser.for_v2()` — triplet displacement 50.5→0.3 ms.
-- **2b beat-sync audio ✅** `audio_features.beat_sync` (gated on tempo variation; constant-BPM keeps EXACT v1).
-- **3 feature re-grid ✅** `highres_v2` spec; `metric_phase` re-indexes to `t%12`/`t%48` AUTOMATICALLY via config.
-- **4 retrain ✅** cache built (train 4547 / val 951). `train_motif_figure_v2.py` warm-started `gen_motif_full_fixed`
-  (only `pe` filtered), bf16, T=3072/B4. **`val_onset` never collapsed** (~0.025 throughout — the sparse-target worry
-  didn't materialize; pattern loss was the mover). Still-descending at epoch 20 → `--epochs 30` is the cheap lever if
-  by-ear is close. NOTE: training loss can't confirm the win (triplet placement is invisible to `val_total`).
-- **5 decode-side phase re-index ✅ (commit `590daa1`):** `decode_defaults.phase_band_positions(subdiv)` is the
-  single band-math source (8th=`subdiv//2`, 16th=`{subdiv//4, 3·subdiv//4}`); used by `apply_phase_calib` (tau) +
-  `generate()` calib/penalty/alloc + `phase_shares` + the chaos gate; `subdiv` threaded from
-  `feat_ext.config.timesteps_per_beat` into BOTH tau and generate. **subdiv=4 BYTE-IDENTICAL to v1** (verified).
-  Deliberate deferral: TRIPLETS get no phase band (retrained weights place them; a triplet-unlock is unvalidated) —
-  add one only if Phase-6 by-ear shows triplet under-placement. SB/tolerance + governor `frame_hz` still `t%4`
-  (analysis-only, not decode-critical). ⚠️ **Two different `t%12` conversions** — metric_phase (INPUT, Phase 3) ≠
-  the decode levers (Phase 5); a prior session did the former and thought Phase 5 was done. Verify at the code.
-- **6 by-ear validation ⬜ THE BINDING GATE:** export a triplet song (First of the Year / My Christmas list) with the
-  v2 checkpoint + `--features highres_v2` + `for_v2()` features, PLAY it — did the limp go away? Set is in
-  `~/sm-generated/meter_triplet_test/`. Do NOT mix `highres_v2` with the v1 checkpoint (grid mismatch).
+## THE ACTIVE THREAD — data-layer-v2 (lineage `meter-grid-arc.md`, memory [[meter-4-4-grid]])
+The 48th-grid (12/beat) + beat-sync refactor off the hard-4/4 duple-16th grid. **BUILD ARC COMPLETE** (phases 0–6 all
+done; per-phase detail `notes/data_layer_v2_scope.md`). Phase 6 by-ear ✅ PASSED. The thread is now at DEPLOYMENT.
 
 ## THE OPEN FORK / NEXT ACTION
-1. **Phase 6 by-ear (the gate).** Pick the lower-val v2 checkpoint (verify `_cont` vs base), export the triplet set
-   with `highres_v2` + `for_v2` at canonical decode defaults, install to `~/sm-generated/`, and have the user play it.
-   That is the single decision that turns v2 from a build into a deploy candidate.
-2. **Only after by-ear passes** does v2 become a deploy candidate (a coordinated `conditioning-mechanics §6` +
-   `generation-defaults` version bump: swap the deployed checkpoint + default `--features`).
-3. Parked elsewhere: the seq-onset anchoring retrain (the MUSICALITY cliff — [[good-settings-region]]); v2 is the
-   DATA-LAYER fix, complementary not a substitute.
+1. **Governor subdiv-recalibration (the binding blocker before deploy).** The §8 decode governors
+   (`max_jack_run`, fatigue/stamina, hold_stream) compute `frame_hz = BPM·4/60` and reason in FRAMES assuming a frame
+   = a 16th. On the 48th grid a frame is 1/12 beat (3× finer), so jack-adjacency, fatigue/stamina rates, and the hard
+   caps are ~3× miscalibrated — the user's "playability constraints kinda fell apart." **Thread `subdiv` into `frame_hz`
+   (`BPM·subdiv/60`) and the constraint spacings** (`conditioning-mechanics §8`; the skill's `frame_hz` "analysis-only"
+   claim was CORRECTED this session — it IS decode-critical on the finer grid). One change at a time; re-A/B by ear.
+2. **Deploy swap (only after #1).** A coordinated `conditioning-mechanics §6` + `generation-defaults §0` version bump:
+   swap the deployed checkpoint → `gen_motif_v2_48th_cont` + default `--features highres_v2`. NOT before the governors
+   are playable.
+3. **Parked leads:** (a) the retrain-HP/Optuna question (`data_layer_v2_scope.md` PARKED LEADS — Optuna deferred:
+   val_total is blind to placement; the descent is pattern-head-only, onset converged at epoch 1). (b) A triplet phase
+   band for the songs that still hedge onto duple-16ths (First of the Year gen 0.14 vs human 0.40) — only if the
+   governor re-tune doesn't lift it. (c) The seq-onset retrain (musicality cliff, [[good-settings-region]]) — separate.
 
 ## AWAITING USER
-- **Phase 6 v2 re-export by-ear** — not yet generated (needs the chosen v2 checkpoint). This is the next user
-  touchpoint; log the verdict to `notes/playtest_log.md`. The meter triplet-test set already CONFIRMED the tax on v1;
-  Phase 6 asks whether v2 REMOVES it.
+- **Nothing pending a user verdict.** The Phase-6 playtest is DONE and logged. The next work (governor recalibration)
+  is Claude-side; a re-A/B playtest of the recalibrated governors on the 48th grid will be the next user touchpoint.
 
 ## CANONICAL EXPORT DEFAULTS (the deployed v1 config — VALIDATED by `/refresh`; UNCHANGED by v2)
 The bare `export_typed_samples.py` run reproduces what the user plays. These MUST equal the script's argparse
@@ -88,35 +76,43 @@ guidance = 1.0
 ```
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
-NOTE: v2 export uses `--features highres_v2` + a v2 checkpoint + `for_v2()` — a SEPARATE regime from this deployed
-block. The Phase-5 re-index makes the phase levers above (esp. `onset_phase_calib`) grid-correct on v2 automatically
-(subdiv derived from the feature spec). Do NOT mix v2 features with the v1 checkpoint.
+NOTE: the v2 export is a SEPARATE regime — `--features highres_v2` + a v2 checkpoint (`gen_motif_v2_48th_cont`) + the
+`for_v2()` parser (auto-selected by the exporter now). It uses the 48th-grid writer + `V2_MSL=5400`. Do NOT mix
+`highres_v2` with the v1 checkpoint, or a v1 checkpoint with the v2 cache (grid mismatch). The canonical block above is
+the DEPLOYED v1 config and stays authoritative until the deploy swap (fork item 2).
 
 Also shipped earlier (independent of v2): the CHEAP inference-gate reach win — `StepManiaParser.for_inference()`
 (BPM `[40,320]`, length `[30,600]s`, gimmick guard) + `export_typed_samples.py --relax_gates`.
 
-## NEW TOOLING THIS SESSION
-- **`tools/export_transcript.py`** — renders a session's on-disk JSONL to markdown for learning-material mining
-  (prose + tool calls + truncated results; thinking isn't persisted on disk). **Wired into `/refresh` step 6b** →
-  gitignored `transcripts/`. `/export` is interactive (a skill can't call it) → this reads the JSONL directly.
-  Memory [[transcript-export-learning]].
+## v2 EXPORT — the exact invocation (reproduce the Phase-6 set)
+```
+python experiments/generation_typed/export_typed_samples.py --data_dir data --audio_dir data \
+  --checkpoint checkpoints/gen_motif_v2_48th_cont/best_val.pt --features highres_v2 \
+  --song_filter "first of the year,my christmas list" --hardest --num_songs 2 \
+  --out_dir outputs/meter_triplet_test_v2 --install --songs_dir /home/ybx/sm-generated
+```
+The exporter auto-raises `--max_len`→5400 and `msl`→5400 for `highres_v2`. Installed set: `~/sm-generated/
+meter_triplet_test_v2/` (A/B vs the v1 `meter_triplet_test/`). ⚠️ StepMania CACHES the song list — after re-installing a
+folder, clear `~/.stepmania-5.1/Cache/Songs/*<setname>*` + `Cache/index.cache` and restart the game (done this session).
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- Branch **`feat/data-layer-v2`** (off `feat/inference-gate-relaxation`, off `main`). This session's commits:
-  `590daa1` (phase 5 decode re-index) → `7482401` (transcript tooling) → this docs(refresh). **Verify pushed state /
-  PRs via `gh`.** v2 is NOT ready for a PR to `main` (Phase 6 by-ear is the gate) — no premature merge.
-- Gitignored / not committed: `train_v2_48th.log`, `train_v2_48th_cont.log`, `cache/samples_v3_48th/`, `transcripts/`.
+- Branch **`feat/data-layer-v2`** (off `feat/inference-gate-relaxation`, off `main`; `main` IS an ancestor). This
+  session added `837c1ed` (phase-6 tooling + probe) + this docs(refresh) commit. A PR `feat/data-layer-v2 → main` is
+  opened as the final refresh step (merging the v2 build; deploy is a SEPARATE later step). **Verify PR state via `gh`.**
+- Gitignored / not committed: `train_v2_48th*.log`, `probe_v2grid.log`, `cache/samples_v3_48th/`,
+  `cache/seqctx_frozenh_v2_*.npz`, `outputs/`, `transcripts/`.
 
 ## READ-FIRST (in order)
-`notes/data_layer_v2_scope.md` (the v2 plan + per-phase status incl. Phase 5 done + the two-`t%12` note) → lineage
-`experiment_lineage/meter-grid-arc.md` (meter tax → build arc → Phase 4/5 done) → `conditioning-mechanics §6` (the
-phase grid, now `subdiv`-parameterized) → `generation-defaults §0` (v1 canonical + the `highres_v2` regime). Load-
-bearing skills: **conditioning-mechanics §6**, **generation-defaults**, **experiment-design** (Rule 7 / HARNESS-first
-— it's what disambiguated the "Phase 5 already done?" question this session).
+`notes/data_layer_v2_scope.md` (per-phase status incl. Phase 6 PASSED + PARKED LEADS) → lineage
+`meter-grid-arc.md` (the meter tax → build arc → Phase 6 pass + the two harness-bug catches) → `conditioning-mechanics
+§8` (the governors that need the subdiv-recalibration — the `frame_hz` correction) → `generation-defaults §0` (v1
+canonical + the `highres_v2` deploy-candidate regime) → `notes/playtest_log.md` (the Phase-6 verdict). Load-bearing
+skills: **conditioning-mechanics §6/§8**, **generation-defaults §0**, **experiment-design** (the HARNESS-first Rule 7 —
+it's what caught BOTH Phase-6 export bugs: the hard-16th writer AND the msl truncation the user flagged as 150-vs-450).
 
 ## DISCIPLINE
-**Phase 6 by-ear is the binding gate** (training loss can't confirm the triplet fix — it's a placement property).
-**Verify volatile state at read time** (training PID, checkpoint val, PR status) — never trust a number written here
-as current. **DELETE the cache dir on any feature-CONFIG change** (identity stamp ≠ config; [[dataset-cache-footgun]]).
-**Don't pair `highres_v2` with the v1 checkpoint.** One change at a time. Match the verb to the evidence
-([[claim-precision]]).
+**The next lever (governor recalibration) needs a BY-EAR re-A/B** — playability is a play-feel property. **Verify
+volatile state at read time** (checkpoint val, PR status, StepMania cache) — never trust a number written here as
+current. **DELETE the cache dir on any feature-CONFIG change** ([[dataset-cache-footgun]]). **Don't pair `highres_v2`
+with the v1 checkpoint.** One change at a time. Match the verb to the evidence ([[claim-precision]]). HARNESS-first when
+a result looks wrong (the 150-vs-450 taps was a truncation bug, not the model — the user's instinct was right).

@@ -139,8 +139,15 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
     writes). A prior session did the metric_phase one and thought Phase 5 was done — different sites. **Deliberate
     deferral:** TRIPLET subdivisions get NO phase band (the 16th-unlock must not silently boost triplets = a new,
     unvalidated lever; the retrained weights place triplets). Add a triplet band only if Phase-6 by-ear shows triplet
-    under-placement. SB/tolerance-formula (analysis-only) + governor `frame_hz` are still `t%4` — not decode-critical.
-    Do NOT mix a v2 (`highres_v2`) feature set with the v1 checkpoint. **⬜ Phase 6 by-ear is the last gate.** See
+    under-placement. SB/tolerance-formula are analysis-only (still `t%4`). **⚠️ CORRECTION (2026-07-05): the governor
+    `frame_hz = BPM·4/60` IS decode-critical on the 48th grid, NOT "analysis-only" as previously written here.** The
+    §8 governors (`max_jack_run`/fatigue/stamina/hold_stream) reason in frames and assume a frame = a 16th; on the 48th
+    grid a frame is 1/12 beat (3× finer), so adjacency/rates/hard-caps are ~3× miscalibrated — Phase-6 by-ear surfaced
+    it ("playability constraints kinda fell apart"). The pending **governor subdiv-recalibration** threads `subdiv` into
+    `frame_hz` (BPM·subdiv/60) + the constraints; do it BEFORE the deploy swap.
+    Do NOT mix a v2 (`highres_v2`) feature set with the v1 checkpoint. **✅ Phase 6 by-ear PASSED (2026-07-05): the 48th
+    grid removes the triplet tax, zero degradation, "tasty percussion" — v2 is a DEPLOY CANDIDATE (pending the governor
+    recalibration above). New positions read musical → the no-triplet-band deferral is VALIDATED.** See
     `notes/data_layer_v2_scope.md`, lineage `meter-grid-arc.md`, memory [[meter-4-4-grid]].
 - Decode phase levers (all in `generate()`): `onset_phase_calib=(b8,b16)` adds logit offsets to 8th/16th frames
   BEFORE tau (the caller's tau MUST use the same offset) → 16th COUNT floats with audio per-song (the validated

@@ -6,9 +6,11 @@ mis-gridded (notes floored onto 16ths, ~33 ms off), CONFIRMED felt + severe by e
 offline measurement (not a taste proxy) PREDICTED the ear, and two of my own harness bugs + a units bug were caught
 before any wrong conclusion committed.
 
-**Status:** ACTIVE. Diagnosis binding-gate (by-ear) CLEARED → refactor BUILT THROUGH PHASE 5 (2026-07-05): cache +
-Phase-4 retrain + Phase-5 decode re-index all done; **only Phase 6 by-ear (the deployment gate) remains.** NOT
-deployed. Spun off [[good-settings-region]] by verifying SB's 4/4 frame. Primary note
+**Status:** ✅ BUILD ARC COMPLETE — **Phase 6 by-ear PASSED (2026-07-05, `_cont` val 0.7435):** the 48th grid REMOVES
+the triplet tax, ZERO degradation, user "resounding 100% success… finally able to REALLY express tasty percussion".
+v2 = DEPLOY CANDIDATE. Export tooling built (`837c1ed`: `--features highres_v2` + 48th `sm_writer` + the msl-truncation
+fix). **NEXT (open): governor subdiv-recalibration** (frame_hz is BPM·4/t%4-coupled → playability ~3× off on the 48th
+grid) THEN the deploy swap. NOT yet deployed. Spun off [[good-settings-region]] by verifying SB's 4/4 frame. Primary note
 `notes/meter_4_4_assumption_scope.md`; build status `notes/data_layer_v2_scope.md`; memory [[meter-4-4-grid]].
 
 ## The hypothesis chain (believed → learned)
@@ -126,9 +128,19 @@ checkpoint exists yet). Chain believed → learned:
   - **Deliberate deferral (Rule 16):** triplet frames get NO phase band — a triplet-unlock would be a NEW, unvalidated
     lever the hypothesis didn't ask for; the retrained weights place triplets. Add a band only if by-ear shows triplet
     under-placement. SB/tolerance (analysis-only) + governor `frame_hz` left on `t%4` (not decode-critical).
-- **Current state:** BUILT THROUGH PHASE 5; **Phase 6 by-ear on the triplet set (`~/sm-generated/meter_triplet_test/`)
-  is the ONLY ⬜ left = the binding gate** — export with `--features highres_v2` + the v2 checkpoint + `for_v2()`, play,
-  check the limp is gone. NOT deployed until it passes. Full per-phase status: `notes/data_layer_v2_scope.md`.
+- **Phase 6 by-ear ✅ PASSED (2026-07-05, `notes/playtest_log.md`):** exported the two near-pure-triplet songs with
+  `_cont` + `--features highres_v2` + `for_v2()` (A/B vs the v1 set). User: "it totally worked!!!! none of the new note
+  frames felt random… resounding 100% success! no degradation… finally able to REALLY express tasty percussion." The
+  triplet tax is GONE; the new positions read musical (the no-triplet-band deferral VALIDATED). **Two harness bugs
+  caught + fixed IN the export path (HARNESS-first, both user-flagged):** (1) the Phase-6 export TOOLING was assumed
+  ready but never wired — `sm_writer` was hard-16th (`ROWS_PER_MEASURE=16`) → parameterized by `timesteps_per_beat`;
+  (2) the exporter read the v1 config `msl=1440` → clipped every v2 song to 120 beats/⅓ (the USER caught it by tap
+  count 150 vs 450) → use `V2_MSL=5400`. Method win: the user's "150 vs 450 taps" was a HARNESS smell, not a model
+  defect — isolated parser (fine, 443 notes on `for_v2`) from export (the truncator) before fixing.
+- **Current state:** BUILD ARC COMPLETE, v2 = DEPLOY CANDIDATE (committed `837c1ed`). **OPEN NEXT: governor
+  subdiv-recalibration** — the §8 decode governors are `frame_hz=BPM·4/60`+subdiv-relative, ~3× off on the 48th grid
+  ("playability constraints kinda fell apart"); thread `subdiv` into `frame_hz`+caps (cond-mech §8) BEFORE the deploy
+  swap (checkpoint + default `--features`). Full per-phase status: `notes/data_layer_v2_scope.md`.
 
 ## Skills in play
 `experiment-design` (this arc is a WIN case — mechanism-grounded metric predicts the ear; harness/units bugs caught
