@@ -125,13 +125,23 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
     tolerance formula ALL live on this grid. **Triplet/compound-feel songs are mis-gridded** — their onsets are
     floored ~33 ms off (chart-triplet vs displacement ρ+0.83), BY-EAR confirmed "off-time" on triplet songs; ~7% of
     the corpus (3.3% triplet-dominant; odd-METER is negligible 0.1% → a SUBDIVISION tax, not a time-signature one).
-    A probe using `t%4` on a triplet song measures garbage. The fix is the **data-layer-v2 refactor**, now BUILDING
-    (2026-07-05, branch `feat/data-layer-v2`; NOT deployed): a FIXED 48th grid (12/beat, `StepManiaParser.for_v2()` +
-    the `highres_v2` feature spec, `beat_sync=True`) + beat-synchronous audio. It RE-INDEXES this whole §6 phase
-    vocabulary — **Phase 5 (still ⬜) must convert `onset_phase_calib`/`phase_shares`/SB from `t%4`/`t%16` to
-    `t%12`/`t%48` before a v2 chart can be EXPORTED.** `metric_phase` re-indexes automatically via config. Do NOT mix
-    a v2 (`highres_v2`) feature set with the v1 checkpoint. See `notes/data_layer_v2_scope.md`, lineage
-    `meter-grid-arc.md`, memory [[meter-4-4-grid]].
+    A probe using `t%4` on a triplet song measures garbage. The fix is the **data-layer-v2 refactor**, BUILT THROUGH
+    PHASE 5 (2026-07-05, branch `feat/data-layer-v2`; NOT deployed): a FIXED 48th grid (12/beat, `StepManiaParser.
+    for_v2()` + the `highres_v2` feature spec, `beat_sync=True`) + beat-synchronous audio. It RE-INDEXES this whole §6
+    phase vocabulary. **✅ Phase 5 DONE (commit `590daa1`): the decode phase grid is now PARAMETERIZED by `subdiv`**
+    (timesteps/beat; 4 = the 16th grid, 12 = the 48th grid). `decode_defaults.phase_band_positions(subdiv)` is the
+    single band-math source — 8th = `subdiv//2`, 16th = `{subdiv//4, 3·subdiv//4}` — used by `apply_phase_calib`
+    (tau side), `generate()`'s onset_phase_calib/penalty/alloc, and `phase_shares`. `subdiv` is threaded from
+    `feat_ext.config.timesteps_per_beat` into BOTH the tau path (`conditioned_p_onset`) and `generate()`, so the
+    16th-unlock↔tau coupling holds on either grid. subdiv=4 is BYTE-IDENTICAL to the old hard-coded `%4`.
+    **⚠️ TWO different `t%12` conversions — don't conflate:** `metric_phase` (the INPUT feature the model reads)
+    re-indexed AUTOMATICALLY in Phase 3 via `timesteps_per_beat`; Phase 5 is the DECODE-side levers (what the model
+    writes). A prior session did the metric_phase one and thought Phase 5 was done — different sites. **Deliberate
+    deferral:** TRIPLET subdivisions get NO phase band (the 16th-unlock must not silently boost triplets = a new,
+    unvalidated lever; the retrained weights place triplets). Add a triplet band only if Phase-6 by-ear shows triplet
+    under-placement. SB/tolerance-formula (analysis-only) + governor `frame_hz` are still `t%4` — not decode-critical.
+    Do NOT mix a v2 (`highres_v2`) feature set with the v1 checkpoint. **⬜ Phase 6 by-ear is the last gate.** See
+    `notes/data_layer_v2_scope.md`, lineage `meter-grid-arc.md`, memory [[meter-4-4-grid]].
 - Decode phase levers (all in `generate()`): `onset_phase_calib=(b8,b16)` adds logit offsets to 8th/16th frames
   BEFORE tau (the caller's tau MUST use the same offset) → 16th COUNT floats with audio per-song (the validated
   win). `onset_phase_alloc=(q,8,16)` forces fixed per-band SHARES (a quota — SMEARS; avoid). `onset_phase_penalty`

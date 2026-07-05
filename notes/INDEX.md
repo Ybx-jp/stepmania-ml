@@ -310,16 +310,19 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   feature-variant CV comparison).
 
 ## 4/4 grid — meter tax + data-layer-v2 refactor (ACTIVE, 2026-07-04→05 — lineage `meter-grid-arc.md`)
-**UPDATE (2026-07-05) — GREENLIT → v2 BUILDING through Phase 4 (branch `feat/data-layer-v2`; NOT deployed).** A1
-FIXED 48th grid confirmed by a fit + emptiness check (3× context cheap in bf16; no fallible deploy-time detector).
-Built: timing spine (`src/data/timing.py TimingMap`) → 2a finer quantization (`StepManiaParser.for_v2()`, triplet
-displacement **50.5→0.3 ms**, `probe_v2_displacement.py`) → 2b beat-sync audio (`audio_features.beat_sync`, gated on
-tempo variation; 2b SIZED bigger than assumed — ~20% songs / 14.6% ≥23 ms drift, `probe_v2_bpm_misalignment.py`) →
-`highres_v2` feature spec → warm-started bf16 trainer (`train_motif_figure_v2.py`, fitted T=3072/B4). Cache
-`cache/samples_v3_48th` rebuilding; NEXT = retrain → Phase-5 decode `t%12` re-index → **Phase-6 by-ear GATE**. Full
-plan + per-phase status: **`data_layer_v2_scope.md`**. Method wins: measure TRAINING-shaped memory (the no-mask fit
-probe was 2× optimistic → B8 OOM); Rule-7 caught 2 probe bugs in 2b sizing; DELETE the cache on feature-config
-change. Also shipped (independent): the cheap inference-gate reach win (`for_inference()` + `--relax_gates`).
+**UPDATE (2026-07-05) — v2 BUILT THROUGH PHASE 5 (branch `feat/data-layer-v2`; NOT deployed; Phase 6 by-ear is the
+only gate left).** A1 FIXED 48th grid confirmed by a fit + emptiness check. Built: timing spine (`TimingMap`) → 2a
+finer quantization (`for_v2()`, triplet displacement **50.5→0.3 ms**) → 2b beat-sync audio (`beat_sync`, ~20% songs /
+14.6% ≥23 ms) → `highres_v2` spec → **cache BUILT** (train 4547/val 951) → **Phase-4 retrain DONE** (`train_motif_
+figure_v2.py`; warm-start clean, val_onset never collapsed, `gen_motif_v2_48th/best_val.pt` val 0.8098, still
+descending → continuation `_cont` ~0.772) → **Phase-5 decode re-index DONE** (commit `590daa1`: phase grid
+parameterized by `subdiv`, `decode_defaults.phase_band_positions`, subdiv=4 byte-identical, triplets deferred).
+NEXT = **Phase-6 by-ear GATE** (`highres_v2` + v2 ckpt + `for_v2`, triplet set). Full per-phase status:
+**`data_layer_v2_scope.md`**. Method wins: measure TRAINING-shaped memory (the no-mask fit probe was 2× optimistic →
+B8 OOM); Rule-7 caught 2 probe bugs in 2b sizing; DELETE the cache on feature-config change; **the TWO-`t%12`
+disambiguation** — metric_phase (INPUT, Phase 3) ≠ the decode levers (Phase 5); verify at the code, don't trust a
+recollection of "did the t%12 stuff". Also shipped (independent): the cheap inference-gate reach win
+(`for_inference()` + `--relax_gates`) + transcript-export tooling (`tools/export_transcript.py`, `/refresh` step 6b).
 
 Spun off the tolerance downgrade by verifying SB's 4/4 frame. The whole pipeline is hard-4/4 duple-16th (parser
 `timesteps_per_beat=4`, no `#TIMESIGNATURES`, `ts=floor(beat·4)` floors triplets; `t%4` baked into

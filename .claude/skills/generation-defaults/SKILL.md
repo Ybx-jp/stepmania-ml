@@ -49,12 +49,15 @@ mechanism; **this skill is the config VALUES.**
 - **Features = `highres`:** `AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True,
   use_highres_onset=True)` → `audio_dim=42`, `cache_dir='cache/samples_v3'`. (41-dim `samples_v2` = the OLD
   stage1 space; 23-dim `samples` = the base/critic space — neither matches the deployed generator.)
-- ⏩ **`highres_v2` EXISTS but is NOT DEPLOYED (data-layer-v2, building 2026-07-05):** same 42-dim channels on the
-  48th grid (`timesteps_per_beat=12`, `beat_sync=True`, `cache/samples_v3_48th`), paired with `StepManiaParser.
-  for_v2()`. It is for the IN-PROGRESS v2 retrain ONLY — there is NO v2 checkpoint yet, and it needs Phase-5
-  decode-side `t%12` re-index before export. Do NOT pair `highres_v2` with `gen_motif_full_fixed` (grid mismatch).
-  Until v2 ships + passes by-ear, the deployed regime stays `highres` + `gen_motif_full_fixed`. See
-  `notes/data_layer_v2_scope.md`.
+- ⏩ **`highres_v2` EXISTS but is NOT DEPLOYED (data-layer-v2, built through Phase 5 as of 2026-07-05):** same 42-dim
+  channels on the 48th grid (`timesteps_per_beat=12`, `beat_sync=True`, `cache/samples_v3_48th`), paired with
+  `StepManiaParser.for_v2()`. A v2 CHECKPOINT now EXISTS (`checkpoints/gen_motif_v2_48th/best_val.pt`, val 0.8098;
+  a continuation `gen_motif_v2_48th_cont/` trains further), and the **Phase-5 decode re-index is DONE** (commit
+  `590daa1`): the decode phase grid is parameterized by `subdiv`, threaded from `feat_ext.config.timesteps_per_beat`
+  — so a `--features highres_v2` export automatically drives the phase bands + tau on the 48th grid (v1 `highres` =
+  subdiv 4, byte-identical). Do NOT pair `highres_v2` with `gen_motif_full_fixed`, or a v1 checkpoint with the v2
+  cache (grid mismatch). The remaining gate is **Phase 6 by-ear** — until v2 passes it, the deployed regime stays
+  `highres` + `gen_motif_full_fixed`. See `notes/data_layer_v2_scope.md`, `conditioning-mechanics §6`.
 - ⚠️ **TRAP:** `export_typed_samples.py`'s argparse `--checkpoint` DEFAULT is the legacy `gen_style` (23-dim) and
   `--features` defaults to `base`. So the exporter's *bare* default loads the WRONG model. You MUST pass
   `--checkpoint checkpoints/gen_motif_full_fixed/best_val.pt --features highres`.
