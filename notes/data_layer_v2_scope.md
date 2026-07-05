@@ -110,8 +110,12 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
 
 ## Phased plan (proposed)
 0. **Grid-design decision** (fixed 48th vs adaptive; the `max_len` strategy). Cheapest, gates everything.
+   → ✅ DONE: A1 fixed 48th CONFIRMED (grid-design section + CHECKS); `max_len` ~4608 + bf16 (fit check).
 1. **Timing spine:** port `bpm_map`/`time_to_beat` to `src/data/`, add `#STOPS`/`#WARPS`. Unit-test against the
    probe's validated outputs (drift-free beat↔time on a variable-BPM song).
+   → ✅ DONE: `src/data/timing.py` (`TimingMap`: beat↔time + STOPS + `frame_beats`/`frame_times(subdiv=12)`),
+   `tests/test_timing.py` (9 tests: hand-computed BPM/variable/stops, probe-equivalence, 48th grid). `#WARPS`
+   (negative/skip time) NOT yet handled — rare; add in phase 2 if the corpus needs it.
 2. **Parser re-grid:** quantize to `beat·12`, hop per BPM segment. Verify the triplet DISPLACEMENT metric
    (chart-triplet vs floor error, currently ρ+0.83 / 33 ms) collapses to ~0 on the triplet set — the concrete
    success criterion for the representation fix.
