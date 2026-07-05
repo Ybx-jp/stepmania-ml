@@ -123,3 +123,8 @@ notes/briefs/
 
 # v2 cache build log (reproducible artifact)
 cache_v2_build.log
+train_v2_48th.log
+train_v2_48th_cont.log
+
+# Session transcript exports (learning-material mining; written by tools/export_transcript.py via /refresh)
+transcripts/
