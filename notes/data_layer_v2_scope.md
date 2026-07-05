@@ -44,13 +44,39 @@ The subdivision multiplier is the cost driver. Options:
 | **48th (recommended)** | **12 = LCM(4,6)** | **16ths + triplets + sextuplets** | **3×** | **4320** |
 | 96th | 24 = LCM(8,6) | + 32nds alongside triplets | 6× | 8640 |
 
-- **Recommendation: the 48th grid (12/beat).** It's the MINIMUM that resolves the CONFIRMED triplet tax (and the
-  §C sub-16th expressiveness garnish: 32nd/triplet fills, ~10% of the densest real decile). 96th doubles cost for
-  a rare 32nd-triplet combination — defer.
+- **DECISION: the 48th grid (12/beat) — CONFIRMED 2026-07-04 (user + the two hardening checks below).** It's the
+  MINIMUM that resolves the CONFIRMED triplet tax (and the §C sub-16th expressiveness garnish: 32nd/triplet fills,
+  ~10% of the densest real decile). 96th doubles cost for a rare 32nd-triplet combination — defer.
 - **Alternative to a fixed finer grid: a meter-ADAPTIVE grid** (detect each song's subdivision via the equivariant
   detector, grid duple songs at 16th and triplet songs at 12th). Cheaper per-song frames, but variable frame
   semantics across songs complicate `t % subdiv` phase conditioning + the model's positional encoding. The fixed
   48th grid is simpler and uniform; prefer it unless the 3× sequence cost proves prohibitive.
+
+### CHECKS (2026-07-04) — A1 CONFIRMED (fixed 48th), the two hardening probes ran
+The A1-vs-A2 call hinged on two unknowns; both now measured (probes `probe_v2_context_fit.py`,
+`probe_v2_grid_emptiness.py`):
+
+- **Fit (does 3× context train on the RTX 3060?) — YES, with huge headroom.** On the DEPLOYED
+  `LayeredTypedChartGenerator` (d128/4dec/2enc, the `train_motif_figure.py` lineage — NOT `train_factorized.py`;
+  the autotune skill is stale, [[autotune-skill-stale]]), a real forward+backward at the 48th/4320-frame context:
+  - Memory is a NON-issue: batch 16 fp32 = 5.6 GB, bf16 = 3.4 GB of 12.6 GB. The model is tiny; memory doesn't bind.
+  - The cost is WALL-CLOCK step time (O(T²) attention): fp32 0.78 s→6.23 s (~8×) going 16th→48th at B16. **But
+    bf16 (AMP) buys the whole penalty back: bf16 @ 48th 3× (0.76 s) ≈ fp32 @ today's 16th (0.78 s).** So v2's 3×
+    context is affordable IFF it trains in bf16 — exactly the autotune headline lever.
+- **Emptiness (how much of the uniform 48th grid is USED?) — 4.2% payload, but affordable.** Over 6034 corpus
+  charts: **4.2% of all notes are triplet-family** (land on the NEW cells the 48th grid adds); per-song mean 3.4%,
+  median 0.16%. **49% of songs have ZERO triplet notes** (pay 3× context for pure representation-waste), 6.1% are
+  structural beneficiaries (≥15% — matches the 7% census). 48th-grid occupancy ~20% (sparse). So A1's waste is real
+  and proportionally large (half the corpus gains nothing) — but the fit check shows the 3× it costs is CHEAP.
+
+**VERDICT — A1 (uniform fixed 48th) confirmed.** The cost that would have justified A2's complexity (the 3×
+blowup) is affordable on this GPU in bf16; so A1's decisive advantage stands — it needs NO deployment-time meter
+detector (can never mis-grid an unseen song, the exact failure we're fixing) and keeps the phase vocabulary a clean
+uniform re-index. Two retrain riders the checks surface:
+1. **Train in bf16** (mandatory for the throughput, per the fit check) — validate a comparable val metric vs fp32.
+2. **The onset target is ~3× SPARSER** on the 48th grid (occupancy 20% vs ~61% at 16th) → the onset head's
+   positive base rate drops → revisit the onset `pos_weight`/class weighting on retrain (don't inherit the 16th-grid
+   value blindly).
 
 ## The RE-INDEX surface (the sharp part — everything keyed on `t%4`)
 A finer grid changes what a frame index MEANS, so every consumer of the phase grid must be re-derived, not just
@@ -71,9 +97,11 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
 
 ## Cost / constraints
 - **Sequence length:** 48th grid → 3× frames. `config/model_config.yaml max_sequence_length=1440` and the model's
-  `pos_encoding max_len=2048` (typed_model.py:37) are BELOW the 4320 a 2-min song needs. v2 must either (a) raise
-  `max_len` to ~4608+ (memory + AR-decode latency grow with context), (b) cap song length shorter at the finer
-  grid, or (c) add length bucketing. This is a real retrain-config decision, not free.
+  `pos_encoding max_len=2048` (typed_model.py:37) are BELOW the 4320 a 2-min song needs → raise `max_len` to ~4608
+  and `max_sequence_length` to ~4320. **MEASURED (the fit check, see CHECKS above): memory is a non-issue (bf16 B16
+  = 3.4 GB / 12.6); the cost is step-time, and bf16 recovers it (bf16 @ 3× ≈ fp32 @ 1×).** So B1 (raise context) +
+  bf16 is the answer; B2 (cap length shorter) is NOT needed and would regress reach; B3 (bucketing) is a free
+  throughput extra, not required.
 - **Retrain:** full model retrain on the re-gridded cache (all features re-extracted). ~3× the per-song compute +
   the longer context. The `autotune` skill is the tool for batch-size/AMP/bucketing under the new sequence length.
 - **Deployment:** the equivariant meter detector (`probe_meter_equivariant_sb.py`, ρ+0.47) moves onto the critical
