@@ -140,6 +140,10 @@ def main():
     import librosa
     duration = librosa.get_duration(path=args.audio)
     fspec = make_feature_extractor("highres")  # the deployed 42-dim space (harness = single source of the config)
+    # decode phase-band period, derived from the feature grid so it can't drift from the features: 4 = 16th grid
+    # (the deployed highres), 12 = the data-layer-v2 48th grid. Threaded into BOTH tau and generate() below so the
+    # 16th-unlock/tau coupling stays correct on whichever grid the features use (Phase 5; conditioning-mechanics §6).
+    subdiv = fspec.extractor.config.timesteps_per_beat if fspec.extractor is not None else 4
     stub = build_stub_chart(args.audio, bpm, duration, hop)
     feats = fspec.extractor.extract_from_chart(args.audio, stub)
     if feats is None:
@@ -185,7 +189,7 @@ def main():
     with torch.no_grad():
         memory = model.encode_audio(audio)
         p_onset = conditioned_p_onset(model, memory, diff, radar=radar_arg,
-                                      guidance=args.guidance, phase_calib=phase_calib)
+                                      guidance=args.guidance, phase_calib=phase_calib, subdiv=subdiv)
     tau = compute_tau(p_onset, gen_density)
 
     # 6. generate with the CANONICAL full-stack palette + mandatory playability (mirrors export_typed_samples.py)
@@ -195,7 +199,7 @@ def main():
         pattern_sample=True, pattern_temperature=args.pattern_temperature,
         repetition_penalty=CANONICAL_DECODE["repetition_penalty"],
         max_jack_run=CANONICAL_DECODE["max_jack_run"],
-        onset_phase_calib=phase_calib,  # ★ the 16th-unlock (same offset baked into tau above)
+        onset_phase_calib=phase_calib, subdiv=subdiv,  # ★ the 16th-unlock (same offset + grid baked into tau above)
         fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
         fatigue_free=args.fatigue_free,
         stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),

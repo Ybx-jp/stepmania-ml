@@ -8,6 +8,58 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-05 — 🎉 PHASE 6 PASSED: data-layer-v2 (48th grid) REMOVES the triplet tax — v2 is a DEPLOY CANDIDATE
+
+**WHAT WAS PLAYED** — `~/sm-generated/meter_triplet_test_v2/` (v2, 48th grid, `gen_motif_v2_48th_cont` val 0.7435,
+`--features highres_v2` + `for_v2()`, canonical decode defaults) vs the 2026-07-04 v1 set `meter_triplet_test/`
+(16th grid). SAME two near-pure-triplet songs: **First of the Year (Equinox)** and **My Christmas list** — the two
+that read "off-time / badly timing everything" on v1. FULL-length, density-matched (gen==real 0.123/0.131), grid-
+verified (48 rows/measure). (NOTE: a first export was TRUNCATED to 120 beats by the v1 `msl=1440` on the 3×-finer
+grid — the user CAUGHT it by the tap count 150 vs 450; fixed the exporter to use V2_MSL=5400 before this playtest.)
+
+**RAW FEEDBACK (user, verbatim):** "it totally worked!!!! none of the new note frames were used in a way that felt
+random. there needs to be some additional decode tuning to accommodate them, the playability constraints we set up
+previously kinda fell apart, but that's to be expected. this is was a resounding 100% success! no degradation at
+all, obvious potential for improvement. the model is finally able to REALLY express tasty percussion (that's what
+stood out to me, not saying it can't express harmonics similarly)."
+
+**VERDICT — the binding Phase-6 gate is CLEARED. The 48th-grid refactor removes the tax by ear, no regression.**
+1. **The triplet tax is GONE** — the v1 "badly timing everything" (My Christmas list) is resolved; the finer grid
+   places triplets at their true 1/3-beat positions instead of flooring to the 16th (~33 ms displacement). This
+   closes the meter-4-4 thread's build arc: measured 33 ms → predicted the ear (07-04) → built v2 → ear confirms.
+2. **The new positions read MUSICAL, not random** ("none of the new note frames felt random") — the retrained
+   weights place triplets meaningfully; the deliberate Phase-5 deferral (no triplet phase-band; let the weights
+   place them) is VALIDATED by ear. The offline artifact agreed: gen triplet-share 0.36 (My Christmas) toward the
+   human 0.48; First of the Year hedges more (0.14 vs 0.40, still 26% on duple-16ths — the weakest song, matching
+   the 16th-unlock-boosts-{3,9} hypothesis).
+3. **PERCUSSION expression is the standout** — "finally able to REALLY express tasty percussion." Consistent with
+   the theory: triplet/finer subdivisions are heavily a percussion phenomenon; the 16th grid was flooring exactly
+   that. (User notes harmonics likely similar; percussion is just what jumped out.)
+4. **KNOWN follow-up (user-flagged, expected):** "playability constraints kinda fell apart." The decode GOVERNORS
+   (`max_jack_run`, fatigue/stamina, hold_stream) are `frame_hz = BPM·4/60`-coupled and `subdiv`-relative — tuned
+   for the 16th grid. On the 48th grid a "frame" is 1/12 beat (3× finer), so jack-adjacency, fatigue rates, and the
+   hard caps are miscalibrated ~3×. This is the "additional decode tuning" — NOT a defect of the grid fix, a
+   re-calibration of the governors to `subdiv=12` (see conditioning-mechanics §8; frame_hz was flagged "still t%4").
+
+**ACTION / NEXT:**
+- [ ] **Governor subdiv-recalibration (the flagged decode tuning):** thread `subdiv` into `frame_hz` (BPM·subdiv/60)
+      and the jack/fatigue/hold-stream constraints so playability holds on the 48th grid. One change at a time; re-A/B.
+- [ ] **Deploy-candidate coordination** (only after governors re-tuned): version-bump `conditioning-mechanics §6` +
+      `generation-defaults` — swap the deployed checkpoint to `gen_motif_v2_48th_cont` + default `--features highres_v2`.
+- [ ] **(lower priority) triplet phase-band** for the hedging songs (First of the Year 0.14 vs 0.40) — turn the
+      16th-unlock triplet-aware; only if the governor re-tune doesn't already lift it.
+- [ ] Commit the v2 export tooling (`sm_writer` 48th-grid, exporter `highres_v2`/`for_v2` wiring, the `msl` fix;
+      all v1-byte-identical-verified) with this by-ear result in the message.
+
+**CONNECTING THREAD:** this is the biggest single by-ear WIN of the meter arc, and it fits the project's recurring
+pattern INVERTED — most wins have been *decode-time* fixes on an under-served base model ([[hold-in-stream-fix]],
+the 16th-unlock, the governor), but THIS one required a *data-layer* change (the grid) that no decode lever could
+reach (the seq-onset arc's 4-way wall + the 07-05 v2 probe: audio is chance-level at triplet placement — placement
+is the trained prior, so only a retrain on a faithful grid could fix it). The complement now flips: with the grid
+fixed, the NEXT gains ("obvious potential for improvement") are back to decode-time (governor recalibration).
+
+---
+
 ## 2026-07-04 — ✅ CONFIRMED: the 4/4-GRID TRIPLET TAX by-ear gate (H-meter, B-step 3)
 
 **RAW FEEDBACK (user, verbatim):**

@@ -37,7 +37,7 @@ from src.data.stepmania_parser import StepManiaParser
 from src.generation.typed_model import MOTIF_DIM
 from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
 from src.generation.decode_harness import (
-    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator, chaos_onset_gate_offset)
+    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator, chaos_onset_gate_offset, MODEL_ARCH)
 from src.generation.motif_codebook import FIGURE_CLASSES
 from src.generation.typed import symbol_histogram, pair_holds
 from src.generation.sm_writer import charts_to_sm
@@ -167,9 +167,12 @@ def parse_args():
     p.add_argument('--checkpoint', default='checkpoints/gen_motif_full_fixed/best_val.pt',
                    help='DEFAULT = the deployed model (42-dim H19 highres retrain; radar+motif+figure). '
                         'Legacy gen_style/gen_stage1 are 23/41-dim — pair them with --features base/stage1.')
-    p.add_argument('--features', choices=['base', 'stage1', 'highres'], default='highres',
+    p.add_argument('--features', choices=['base', 'stage1', 'highres', 'highres_v2'], default='highres',
                    help='DEFAULT highres=42-dim (cache/samples_v3, what gen_motif_full_fixed expects). '
-                        'stage1=41-dim (cache/samples_v2, legacy gen_stage1); base=23-dim (cache/samples, gen_style).')
+                        'stage1=41-dim (cache/samples_v2, legacy gen_stage1); base=23-dim (cache/samples, gen_style). '
+                        'highres_v2=42-dim on the data-layer-v2 48th grid (timesteps_per_beat=12, beat-sync) -- pair '
+                        'ONLY with a v2 checkpoint (e.g. gen_motif_v2_48th_cont); auto-selects the for_v2() parser + '
+                        'the 48th-grid .sm writer. Do NOT mix with gen_motif_full_fixed (grid mismatch).')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
     p.add_argument('--hardest', action='store_true',
@@ -392,20 +395,50 @@ def main():
             raise SystemExit(f"--song_filter {terms!r} matched no val files under {args.data_dir}.")
     with open(PROJECT_ROOT / "config/model_config.yaml") as f:
         msl = yaml.safe_load(f)['classifier']['max_sequence_length']
+    # data-layer-v2 (48th grid): the config msl (1440) is the 16th-grid value = only 120 beats on the 3x-finer grid,
+    # which TRUNCATES every song to ~1/3 (the 150-vs-450-tap bug). Use the v2 training sequence length (V2_MSL=5400,
+    # train_motif_figure_v2) so the full song is charted; also raise the per-song T cap (--max_len) to match, since
+    # T=min(mask.sum(), max_len) would otherwise re-clip it. Both the dataset msl AND the T cap must be v2-sized.
+    if args.features == 'highres_v2':
+        V2_MSL = 5400
+        msl = V2_MSL
+        if args.max_len < V2_MSL:
+            print(f"highres_v2: raising --max_len {args.max_len} -> {V2_MSL} (48th grid; the 1440 default clips the "
+                  f"song to 120 beats).")
+            args.max_len = V2_MSL
     # feature set: base (23-dim) vs stage1 (41-dim musical) vs highres (42-dim, + high-res onset)
     feat_ext, audio_dim, cache = make_feature_extractor(args.features)  # harness = single source of the feature ladder
+    # decode phase-band period: 4 = the 16th grid (highres), 12 = the data-layer-v2 48th grid (highres_v2). Drives
+    # onset_phase_calib/penalty/alloc + phase_shares + the tau-side calib so triplet cells resolve (Phase 5). The
+    # tau path (conditioned_p_onset) and generate() MUST get the SAME subdiv or the 16th-unlock/tau decouple.
+    subdiv = feat_ext.config.timesteps_per_beat if feat_ext is not None else 4
     # widen the candidate pool when groove-selecting (parsing is cheap; audio is extracted only for the
     # chosen songs) so the selector has enough songs to find strong-on-axis ones.
     pool = args.num_songs * (40 if args.groove_select != 'none' else 8)
-    # --relax_gates: widen the parser gates for reach (inference-only) and disable the index-keyed feature
-    # cache (the valid-song set shifts, so a cached feature at index i could belong to a different song).
-    infer_parser = StepManiaParser.for_inference() if args.relax_gates else None
-    ds_cache = None if args.relax_gates else cache
+    # Parser selection. data-layer-v2 (subdiv==12) MUST use for_v2() so note cells are quantized on the SAME 48th
+    # grid as the audio; and cache_dir=None because the feature cache is index-keyed and this is a SUBSET pool
+    # (a cached 48th feature at index i could belong to a different song -> [[dataset-cache-footgun]]).
+    # --relax_gates: widen the parser gates for reach (inference-only) and likewise disable the index-keyed cache.
+    if subdiv == 12:
+        if args.features != 'highres_v2':
+            raise SystemExit("subdiv=12 requires --features highres_v2 (48th grid); see generation-defaults §0.")
+        infer_parser = StepManiaParser.for_v2()
+        ds_cache = None
+    elif args.relax_gates:
+        infer_parser = StepManiaParser.for_inference()
+        ds_cache = None
+    else:
+        infer_parser = None
+        ds_cache = cache
     ds = StepManiaDataset(chart_files=val_files[:pool], audio_dir=args.audio_dir,
                           max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=ds_cache,
                           parser=infer_parser)
 
-    model = load_generator(args.checkpoint, audio_dim, device)  # harness: builds + loads (strict=False) + .eval()
+    # v2 (48th grid): build the positional-encoding at V2 capacity (5504) so a full ~3min song fits — the default
+    # 2048-frame build would index pe out of range past ~68s on the finer grid (truncated/abrupt-ending chart). The
+    # pe is a fixed sinusoid, so a fresh larger buffer is byte-identical to the checkpoint's over the shared range.
+    v2_arch = dict(MODEL_ARCH, max_len=5504) if subdiv == 12 else None
+    model = load_generator(args.checkpoint, audio_dim, device, arch=v2_arch)  # builds + loads (strict=False) + .eval()
     critic = DifficultyCritic(device=device)
 
     # Step 3: optional reference chart -> condition every generated song on its style
@@ -563,13 +596,14 @@ def main():
                 if audio_dim != 42:
                     raise SystemExit("--chaos_onset_gate needs --features highres (dims 41/35).")
                 chaos_val = float(radar_for_gen[0, 4]) if radar_for_gen is not None else 1.0
-                gate_np = chaos_onset_gate_offset(audio_np, args.chaos_onset_gate, chaos_val)
+                gate_np = chaos_onset_gate_offset(audio_np, args.chaos_onset_gate, chaos_val, subdiv=subdiv)
                 gate_t = torch.from_numpy(gate_np).to(device)
                 harm_off_t = gate_t if harm_off_t is None else harm_off_t + gate_t  # stack with harm (same slot)
             # tau via the shared decode harness — conditioned + guided + phase-calibrated + harm offset, EXACTLY as
             # generate() decodes (conditioning-mechanics §3/§6). harm_off_t is also fed to generate() below.
             p_onset = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
-                                          guidance=args.guidance, phase_calib=phase_calib, extra_offset=harm_off_t)
+                                          guidance=args.guidance, phase_calib=phase_calib, extra_offset=harm_off_t,
+                                          subdiv=subdiv)
         real_density = float((orig_typed != 0).any(1).mean())
         # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
         # E[density | difficulty, style], so stream-as-a-knob works and no source chart is needed) > the
@@ -601,7 +635,7 @@ def main():
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
-                          onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib,
+                          onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib, subdiv=subdiv,
                           onset_logit_offset=harm_off_t,  # STEP-1 sparse-harm-in-quiet phrase calibrator (None=off)
                           style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen,
                           motif=motif_vec,  # H15 continuous motif knobs (global vector; None if --motif unset)
@@ -655,6 +689,7 @@ def main():
             charts=ab_charts,
             bpm=bpm, title=f"{title} (gen)", artist=chart_obj.artist or "",
             music=music, offset=float(chart_obj.offset), typed=True,
+            timesteps_per_beat=subdiv,   # 4 = 16th grid, 12 = the v2 48th grid -> 48 rows/measure so triplets land true
         )
         (folder / "chart.sm").write_text(sm, encoding="utf-8")
 

@@ -49,12 +49,19 @@ mechanism; **this skill is the config VALUES.**
 - **Features = `highres`:** `AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True,
   use_highres_onset=True)` → `audio_dim=42`, `cache_dir='cache/samples_v3'`. (41-dim `samples_v2` = the OLD
   stage1 space; 23-dim `samples` = the base/critic space — neither matches the deployed generator.)
-- ⏩ **`highres_v2` EXISTS but is NOT DEPLOYED (data-layer-v2, building 2026-07-05):** same 42-dim channels on the
-  48th grid (`timesteps_per_beat=12`, `beat_sync=True`, `cache/samples_v3_48th`), paired with `StepManiaParser.
-  for_v2()`. It is for the IN-PROGRESS v2 retrain ONLY — there is NO v2 checkpoint yet, and it needs Phase-5
-  decode-side `t%12` re-index before export. Do NOT pair `highres_v2` with `gen_motif_full_fixed` (grid mismatch).
-  Until v2 ships + passes by-ear, the deployed regime stays `highres` + `gen_motif_full_fixed`. See
-  `notes/data_layer_v2_scope.md`.
+- ⏩ **`highres_v2` — ✅ PHASE 6 BY-EAR PASSED (2026-07-05), a DEPLOY CANDIDATE, but NOT YET the deployed default:**
+  same 42-dim channels on the 48th grid (`timesteps_per_beat=12`, `beat_sync=True`, `cache/samples_v3_48th`), paired
+  with `StepManiaParser.for_v2()`. Best checkpoint `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (val 0.7435). The
+  by-ear gate on the triplet set CLEARED — the 48th grid REMOVES the triplet tax with zero degradation
+  (`notes/playtest_log.md` 2026-07-05). **The exporter NOW SUPPORTS it (commit `837c1ed`):** `--features highres_v2`
+  auto-selects the `for_v2()` parser + the 48th-grid `sm_writer` (48 rows/measure) + `cache_dir=None` + builds the
+  model at `max_len=5504` + uses `V2_MSL=5400` (the v1 config msl=1440 clips a v2 song to ⅓ — a fixed truncation bug).
+  Phase-5 decode re-index (`590daa1`): the phase grid is `subdiv`-parameterized (v1 `highres`=subdiv 4, byte-identical).
+  Do NOT pair `highres_v2` with `gen_motif_full_fixed`, or a v1 checkpoint with the v2 cache (grid mismatch).
+  **BEFORE the deploy swap:** the decode GOVERNORS need a **subdiv-recalibration** — they're `frame_hz=BPM·4/60`-coupled
+  and subdiv-relative, so playability is ~3× off on the 48th grid (user: "playability constraints kinda fell apart";
+  `conditioning-mechanics §8`). Until governors are re-tuned + the swap lands, the deployed regime STAYS `highres` +
+  `gen_motif_full_fixed`. See `notes/data_layer_v2_scope.md`, `conditioning-mechanics §6/§8`.
 - ⚠️ **TRAP:** `export_typed_samples.py`'s argparse `--checkpoint` DEFAULT is the legacy `gen_style` (23-dim) and
   `--features` defaults to `base`. So the exporter's *bare* default loads the WRONG model. You MUST pass
   `--checkpoint checkpoints/gen_motif_full_fixed/best_val.pt --features highres`.

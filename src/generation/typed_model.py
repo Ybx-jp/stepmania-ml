@@ -384,7 +384,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
-                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, max_jack_run=None,
+                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4, max_jack_run=None,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
                  footswitch_pen=4.0, fatigue_cap=30.0, footswitch=True,
@@ -487,8 +487,8 @@ class LayeredTypedChartGenerator(nn.Module):
                 # metric gate: off-beat frames need higher onset confidence (on-beat free, 8th -p, 16th -2p).
                 # Restores the downbeat anchor under chaos conditioning -> off-beats survive only where the
                 # audio-driven onset head is confident, instead of a uniform off-grid smear.
-                ph = torch.arange(T, device=device) % 4          # 16th-grid phase within a beat
-                pen = torch.where(ph == 0, 0.0, torch.where(ph == 2, onset_phase_penalty, 2.0 * onset_phase_penalty))
+                ph = torch.arange(T, device=device) % subdiv     # beat-phase (subdiv/beat: 4=16th grid, 12=v2 48th grid)
+                pen = torch.where(ph == 0, 0.0, torch.where(ph == subdiv // 2, onset_phase_penalty, 2.0 * onset_phase_penalty))
                 ol = ol - pen.unsqueeze(0)                         # (T,) broadcast over batch
             if onset_phase_calib is not None:
                 # per-phase calibration offset (b8 on 8th frames, b16 on 16th frames), ADDED to the onset
@@ -497,8 +497,9 @@ class LayeredTypedChartGenerator(nn.Module):
                 # song -> many 16ths, calm song -> none), per-song-normalized (unlike a flat quota). The
                 # caller must compute its threshold from the SAME offset logits. See diag_song_chaos.py.
                 b8, b16 = onset_phase_calib
-                ph = torch.arange(T, device=device) % 4
-                off = torch.where(ph == 2, float(b8), torch.where((ph == 1) | (ph == 3), float(b16), 0.0))
+                ph = torch.arange(T, device=device) % subdiv
+                e8, s16a, s16b = subdiv // 2, subdiv // 4, 3 * subdiv // 4  # == decode_defaults.phase_band_positions(subdiv); tau side MUST match
+                off = torch.where(ph == e8, float(b8), torch.where((ph == s16a) | (ph == s16b), float(b16), 0.0))
                 ol = ol + off.unsqueeze(0)
             if onset_logit_offset is not None:
                 # per-FRAME onset logit offset (B,T) or (T,) — content-driven calibration (e.g. the
@@ -509,15 +510,16 @@ class LayeredTypedChartGenerator(nn.Module):
             p = torch.sigmoid(onset_logit_scale * ol + onset_logit_bias)
             p_onset = p                                       # (B,T) onset probs kept for the in-loop stamina gate
             if onset_phase_alloc is not None:
-                # phase-aware threshold: keep the budget N = (p>tau).sum() per row, split across the three
-                # 16th-grid phase bands (quarter t%4==0, 8th t%4==2, 16th t%4 in {1,3}) by `onset_phase_alloc`
+                # phase-aware threshold: keep the budget N = (p>tau).sum() per row, split across the three phase
+                # bands (quarter t%subdiv==0, 8th subdiv//2, 16th {subdiv//4, 3*subdiv//4}) by `onset_phase_alloc`
                 # shares, picking the top-p_on frames WITHIN each band. Each band gets its own implicit
                 # threshold -> the model's own 16th confidence wins 16th slots instead of losing globally to
                 # the more-confident 8ths (which a single tau buries; see diag_phase_threshold.py).
                 shares = torch.as_tensor(onset_phase_alloc, device=device, dtype=p.dtype)
                 shares = shares / shares.sum()
-                ph = torch.arange(T, device=device) % 4
-                bands = [ph == 0, ph == 2, (ph == 1) | (ph == 3)]
+                ph = torch.arange(T, device=device) % subdiv
+                e8, s16a, s16b = subdiv // 2, subdiv // 4, 3 * subdiv // 4
+                bands = [ph == 0, ph == e8, (ph == s16a) | (ph == s16b)]  # v2 (subdiv>4): triplet frames get NO budget (deprecated lever; prefer onset_phase_calib)
                 onset = torch.zeros(B, T, dtype=torch.bool, device=device)
                 for b in range(B):
                     N = int((p[b] > onset_threshold).sum())

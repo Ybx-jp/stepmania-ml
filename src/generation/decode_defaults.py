@@ -57,19 +57,37 @@ def parse_phase_calib(spec):
     return tuple(float(x) for x in str(spec).split(","))
 
 
-def apply_phase_calib(onset_logits, phase_calib):
+def phase_band_positions(subdiv=4):
+    """The within-beat phase INDICES of the 8th and the two 16th-offbeat positions, for a `subdiv`-per-beat grid.
+
+    `subdiv` = timesteps_per_beat: 4 = the legacy 16th grid (`t%4`), 12 = the data-layer-v2 48th grid (`t%12`).
+    A beat spans indices 0..subdiv-1; the strong beat is index 0. Returns `(eighth, (sixteenth_a, sixteenth_b))`:
+      - 8th  = the beat midpoint             = subdiv//2      (2 at subdiv=4; 6 at subdiv=12)
+      - 16th = the quarter-beat off-positions = {subdiv//4, 3*subdiv//4}  ({1,3} at subdiv=4; {3,9} at subdiv=12)
+    At subdiv=4 this is byte-identical to the old hard-coded {2} / {1,3}. NOTE (data-layer-v2, Phase 5): on the 48th
+    grid the TRIPLET subdivisions (e.g. t%12 in {2,4,8,10}) are in NONE of these three bands — the 16th-unlock is a
+    16th lever and must not silently boost triplets (that would be a new, unvalidated lever). Triplet placement comes
+    from the model's learned weights, not a decode nudge; a triplet phase band is a deliberate follow-up gated on the
+    Phase-6 by-ear result. See notes/data_layer_v2_scope.md / conditioning-mechanics §6.
+    """
+    return subdiv // 2, (subdiv // 4, 3 * subdiv // 4)
+
+
+def apply_phase_calib(onset_logits, phase_calib, subdiv=4):
     """Add the per-phase 16th-unlock offset to a (T,) onset-logit tensor BEFORE the tau quantile.
 
-    The phase grid (16th resolution, frame index t): t%4==2 -> 8th, t%4 in {1,3} -> 16th-offbeat,
-    t%4==0 -> quarter (untouched). This offset MUST be applied identically (a) here, before the
-    density quantile that sets tau, and (b) inside `generate()` (via the `onset_phase_calib` kwarg);
-    if tau is computed WITHOUT it, the boosted 16ths flood past the threshold (conditioning-mechanics
-    §6 / generation-defaults §1a). Returns the logits unchanged when phase_calib is None.
+    The phase grid (frame index t, `subdiv` timesteps/beat — 4=16th grid, 12=48th grid): the 8th and 16th-offbeat
+    positions come from `phase_band_positions(subdiv)`; the strong beat (t%subdiv==0) and any triplet subdivisions
+    are untouched. This offset MUST be applied identically (a) here, before the density quantile that sets tau, and
+    (b) inside `generate()` (via the `onset_phase_calib` kwarg, passed the SAME `subdiv`); if tau is computed WITHOUT
+    it, the boosted 16ths flood past the threshold (conditioning-mechanics §6 / generation-defaults §1a). Returns the
+    logits unchanged when phase_calib is None.
     """
     if phase_calib is None:
         return onset_logits
     import torch
     b8, b16 = phase_calib
-    ph = torch.arange(onset_logits.shape[0], device=onset_logits.device) % 4
-    return onset_logits + torch.where(ph == 2, float(b8),
-                                      torch.where((ph == 1) | (ph == 3), float(b16), 0.0))
+    e8, (s16a, s16b) = phase_band_positions(subdiv)
+    ph = torch.arange(onset_logits.shape[0], device=onset_logits.device) % subdiv
+    return onset_logits + torch.where(ph == e8, float(b8),
+                                      torch.where((ph == s16a) | (ph == s16b), float(b16), 0.0))

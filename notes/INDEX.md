@@ -309,17 +309,34 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   deployable audio predictor), `probe_flip_point.py` (dense sweep + logistic-cliff g₀), `probe_sb_variants.py` (SB
   feature-variant CV comparison).
 
-## 4/4 grid — meter tax + data-layer-v2 refactor (ACTIVE, 2026-07-04→05 — lineage `meter-grid-arc.md`)
-**UPDATE (2026-07-05) — GREENLIT → v2 BUILDING through Phase 4 (branch `feat/data-layer-v2`; NOT deployed).** A1
-FIXED 48th grid confirmed by a fit + emptiness check (3× context cheap in bf16; no fallible deploy-time detector).
-Built: timing spine (`src/data/timing.py TimingMap`) → 2a finer quantization (`StepManiaParser.for_v2()`, triplet
-displacement **50.5→0.3 ms**, `probe_v2_displacement.py`) → 2b beat-sync audio (`audio_features.beat_sync`, gated on
-tempo variation; 2b SIZED bigger than assumed — ~20% songs / 14.6% ≥23 ms drift, `probe_v2_bpm_misalignment.py`) →
-`highres_v2` feature spec → warm-started bf16 trainer (`train_motif_figure_v2.py`, fitted T=3072/B4). Cache
-`cache/samples_v3_48th` rebuilding; NEXT = retrain → Phase-5 decode `t%12` re-index → **Phase-6 by-ear GATE**. Full
-plan + per-phase status: **`data_layer_v2_scope.md`**. Method wins: measure TRAINING-shaped memory (the no-mask fit
-probe was 2× optimistic → B8 OOM); Rule-7 caught 2 probe bugs in 2b sizing; DELETE the cache on feature-config
-change. Also shipped (independent): the cheap inference-gate reach win (`for_inference()` + `--relax_gates`).
+## 4/4 grid — meter tax + data-layer-v2 refactor (lineage `meter-grid-arc.md`)
+**UPDATE (2026-07-05b) — 🎉 PHASE 6 BY-EAR PASSED → v2 = DEPLOY CANDIDATE.** Exported the two near-pure-triplet songs
+with `gen_motif_v2_48th_cont` (val 0.7435) + `--features highres_v2` + `for_v2()`; user played vs the v1 set: "it
+totally worked!!!! none of the new note frames felt random… resounding 100% success! no degradation… finally able to
+REALLY express tasty percussion." The triplet tax is GONE. **Export tooling built + committed `837c1ed`:** `sm_writer`
+rows-per-measure parameterized by `timesteps_per_beat` (48th→48 rows, subdiv=4 byte-identical), exporter `--features
+highres_v2` (auto `for_v2` + `cache_dir=None` + model `max_len=5504`), and the **msl-truncation FIX** (v1 config
+msl=1440 clipped v2 songs to 120 beats/⅓ — the 150-vs-450-tap bug the USER caught; use `V2_MSL=5400`). **Cross-arc
+probe** `seqonset_v2grid_findings.md` (`probe_seqcontext_frozenh_v2.py`): on the 48th grid, audio is CHANCE at triplet
+placement (0.505 vs note-context ceiling 0.930; `frozen_h_conv` 0.939 ≈ ceiling) — v2 fixed the TARGET not
+audio-derivability; modest duple-16th lift 32%→41% (suggestive). **NEXT (open): governor subdiv-recalibration** —
+`frame_hz=BPM·4/60`+subdiv-relative governors are ~3× off on the 48th grid ("playability constraints kinda fell
+apart") — thread `subdiv` in (cond-mech §8) THEN the deploy swap. Retrain-HP lead PARKED (Optuna deferred; val_total
+blind to placement; the descent is pattern-head only, onset converged at epoch 1). NOT yet deployed.
+
+**UPDATE (2026-07-05) — v2 BUILT THROUGH PHASE 5 (branch `feat/data-layer-v2`; NOT deployed; Phase 6 by-ear is the
+only gate left).** A1 FIXED 48th grid confirmed by a fit + emptiness check. Built: timing spine (`TimingMap`) → 2a
+finer quantization (`for_v2()`, triplet displacement **50.5→0.3 ms**) → 2b beat-sync audio (`beat_sync`, ~20% songs /
+14.6% ≥23 ms) → `highres_v2` spec → **cache BUILT** (train 4547/val 951) → **Phase-4 retrain DONE** (`train_motif_
+figure_v2.py`; warm-start clean, val_onset never collapsed, `gen_motif_v2_48th/best_val.pt` val 0.8098, still
+descending → continuation `_cont` ~0.772) → **Phase-5 decode re-index DONE** (commit `590daa1`: phase grid
+parameterized by `subdiv`, `decode_defaults.phase_band_positions`, subdiv=4 byte-identical, triplets deferred).
+NEXT = **Phase-6 by-ear GATE** (`highres_v2` + v2 ckpt + `for_v2`, triplet set). Full per-phase status:
+**`data_layer_v2_scope.md`**. Method wins: measure TRAINING-shaped memory (the no-mask fit probe was 2× optimistic →
+B8 OOM); Rule-7 caught 2 probe bugs in 2b sizing; DELETE the cache on feature-config change; **the TWO-`t%12`
+disambiguation** — metric_phase (INPUT, Phase 3) ≠ the decode levers (Phase 5); verify at the code, don't trust a
+recollection of "did the t%12 stuff". Also shipped (independent): the cheap inference-gate reach win
+(`for_inference()` + `--relax_gates`) + transcript-export tooling (`tools/export_transcript.py`, `/refresh` step 6b).
 
 Spun off the tolerance downgrade by verifying SB's 4/4 frame. The whole pipeline is hard-4/4 duple-16th (parser
 `timesteps_per_beat=4`, no `#TIMESIGNATURES`, `ts=floor(beat·4)` floors triplets; `t%4` baked into
@@ -337,7 +354,12 @@ filter-relaxation decoupled. GREENLIGHT pending.
   critic blindness, the by-ear verdict, the meter-equivariant-SB prototype, the 16th-ceiling→cliff assessment.
 - `data_layer_v2_scope.md` — the BUILD plan + per-phase status (the actionable arc): A1 grid-design decision +
   CHECKS (fit/emptiness), the re-index surface, cost, phased plan (1 timing spine → 2a quantization → 2b beat-sync →
-  3 feature re-grid → 4 retrain → 5 decode re-index → 6 by-ear), risks, and the resolved bundle-2b decision.
+  3 feature re-grid → 4 retrain → 5 decode re-index → 6 by-ear ✅ PASSED), risks, the resolved bundle-2b decision,
+  and a PARKED-LEADS section (the retrain-HP/Optuna-deferred lead).
+- `seqonset_v2grid_findings.md` — CROSS-ARC (seq-onset × meter): re-ran the M1a audio-placement bracket on the 48th
+  grid. Modest duple-16th lift (audio reach 32%→41%, suggestive/co-varies beat-sync) but audio is CHANCE at TRIPLET
+  placement (0.505 vs note-context ceiling 0.930; `frozen_h_conv` 0.939 ≈ ceiling) → v2 fixes the TARGET (triplets
+  placeable by the trained prior / in `h`), NOT audio-derivability. Corroborates the seq-onset wall on a finer grid.
 - Tooling (v2): `probe_v2_{context_fit,grid_emptiness,displacement,alignment,bpm_misalignment}.py`,
   `train_motif_figure_v2.py`, `src/data/timing.py`, `tests/test_{timing,v2_quantize}.py`.
 - Tooling: `probe_meter_equivariant_sb.py` (rotation-invariant DFT meter detector + meter-equivariant SB),

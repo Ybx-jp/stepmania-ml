@@ -1,7 +1,9 @@
 # SCOPE — data-layer v2 (beat-synchronous re-grid: finer subdivision + variable BPM)
 
 **Opened 2026-07-04**, out of the 4/4-grid meter thread (`notes/meter_4_4_assumption_scope.md`, memory
-[[meter-4-4-grid]]). Status: **SCOPED, greenlight PENDING** (the user's call). This doc is the actionable arc
+[[meter-4-4-grid]]). Status (2026-07-05): **BUILT through Phase 5** (grid design → timing spine → 2a/2b re-grid →
+cache → Phase-4 retrain → Phase-5 decode re-index all ✅); **Phase 6 by-ear is the only ⬜ left = the binding gate.**
+NOT deployed (deployed model unchanged until by-ear passes). This doc is the actionable arc
 scope for the BIG surgery; it does NOT re-derive the diagnosis (that lives in the meter scope note). It promotes
 section (D) of that note into a standalone plan a future implementation session can execute from.
 
@@ -166,12 +168,31 @@ the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
    (every learned weight transfers; only the `pos_encoding.pe` buffer is filtered — 2048→5504 shape, rebuilt fresh
    = correct; verified loads clean, unexpected=[]). bf16 + T=3072/B4 fitted config baked in. Onset loss unchanged
    focal_bce — the 48th onset target is ~3× sparser, so WATCH val_onset epoch 1 and retune gamma/pos_weight ONLY
-   if recall collapses. → ⬜ REMAINING: launch it once `cache/samples_v3_48th` finishes (`python experiments/
-   generation_typed/train_motif_figure_v2.py --data_dir data --audio_dir data`).
+   if recall collapses. → ✅ DONE (2026-07-05): cache built clean (train 4547/val 951 — v2 admits MORE than v1's
+   4452, fewer floor-collision rejections). Retrain ran full 20 epochs, warm-start loaded clean (only pos_encoding.pe
+   filtered), **val_onset NEVER collapsed** (locked ~0.025 the whole way — the sparser-target worry didn't
+   materialize; pattern loss was the mover). Best `checkpoints/gen_motif_v2_48th/best_val.pt` val_total **0.8098**
+   (epoch 20, still descending → not plateaued). A CONTINUATION (warm-start from that ckpt, `--warmup_freeze 0
+   --epochs 20 --patience 3`, dir `checkpoints/gen_motif_v2_48th_cont/`) is improving further (0.8098 → ~0.772 by
+   epoch 9; verify live state). "Still-descending at epoch 20" → `--epochs 30` is the cheap lever if by-ear is close.
 5. **Re-index the phase vocabulary:** `onset_phase_calib`, `phase_shares`, SB/tolerance, the governors'
    `frame_hz`. Update `conditioning-mechanics §6` + `generation-defaults` in lockstep (version bump).
+   → ✅ DECODE LEVERS DONE (2026-07-05, commit `590daa1`): parameterized the phase grid by `subdiv` (timesteps/beat)
+   across all 4 `%4` sites — `apply_phase_calib` (tau side) + generate()'s onset_phase_calib/penalty/alloc + decode_
+   harness `phase_shares`/`chaos_onset_gate_offset`. New `decode_defaults.phase_band_positions(subdiv)` is the single
+   band-math source (8th=subdiv//2, 16th={subdiv//4, 3·subdiv//4}). Threaded from `feat_ext.config.timesteps_per_beat`
+   in the exporter + scripts/generate.py, into BOTH tau (`conditioned_p_onset`) and `generate()` so the coupling holds.
+   VERIFIED: subdiv=4 BYTE-IDENTICAL to old (apply_phase_calib bit-equal); subdiv=12 unlock hits {3,9,15,21}, triplets
+   {2,4,8,10} untouched; decode+CLI tests pass; check_export_defaults ALIGNED. **Deliberate deferral:** triplets get NO
+   phase band (a triplet-unlock would be new+unvalidated; the retrained weights place triplets) — add a triplet band
+   ONLY if phase-6 by-ear shows triplet under-placement. **⚠️ metric_phase (the INPUT feature) was ALREADY done in
+   phase 3** (auto-re-indexes via `timesteps_per_beat`); Phase 5 is the DECODE-side levers — two different `t%12`
+   conversions the previous session/user conflated. SB/tolerance-formula analysis metrics + governor `frame_hz` are
+   NOT decode-critical for export → left on `t%4` (analysis-only; re-index when a v2 tolerance study needs it).
 6. **Validate:** by-ear on the SAME triplet set (`~/sm-generated/meter_triplet_test/`) — the binding gate that
-   opened this thread; the limp should be GONE.
+   opened this thread; the limp should be GONE. → ⬜ THE OPEN BINDING GATE. Needs a v2 export: `--features highres_v2`
+   + the v2 checkpoint (`checkpoints/gen_motif_v2_48th_cont/best_val.pt` once the continuation finishes, else
+   `gen_motif_v2_48th/best_val.pt`) + `StepManiaParser.for_v2()`. Do NOT pair highres_v2 with the v1 checkpoint.
 
 ## Risks / mitigations
 - **Destabilizing the current H4/anchoring grid** (roadmap's explicit warning). Mitigation: v2 is a version bump,
@@ -207,6 +228,21 @@ Recommendation: lean (A) IF the goal is the fastest by-ear read on the confirmed
 believe 2b (double the population, second-scale drift) and want to avoid building/retraining twice. The 2b sizing
 argues it's real enough to make (B) tempting — but (A) keeps one-change-at-a-time (validate the grid fix in
 isolation before compounding it with a hop change). User's call.
+
+## PARKED LEADS (revisit after Phase 6 by-ear)
+- **Retrain HP question (2026-07-05, PARKED by user).** The warm-start fine-tune uses a CONSTANT lr 3e-4 (AdamW,
+  no scheduler) and was still descending at 40 total epochs (base 20 + `_cont` 20; best val_total 0.7435). Decomposed:
+  the descent is ENTIRELY the **pattern head** (val_pattern 0.735→0.672); **val_onset (0.025) and val_type (0.047)
+  were FLAT from epoch 1** — i.e. the onset/timing representation (the triplet-tax-relevant head) converged
+  immediately; only which-panel selection is slowly re-mapping to the 48th grid. So "still improving" is NOT the
+  placement head being undertrained. Verdict: undertrained-for-budget, NOT mis-tuned (smooth monotonic descent, no
+  oscillation, decelerating ~0.003–0.004/epoch late). **Optuna deferred deliberately:** val_total is a proxy BLIND to
+  the triplet placement objective (training loss can't confirm the fix — Phase 6 by-ear is the gate), and the mover is
+  the pattern head, orthogonal to the timing tax → HPO would optimize the wrong thing. Cheap one-change tests IF
+  by-ear is close-but-not-there and reads like panel choice: `--epochs 20` continuation (find the pattern floor) or
+  `--lr 6e-4` (test the LR hypothesis directly); the one principled upgrade for longer training = add a COSINE lr
+  decay (flat lr leaves a little at the tail). Do NOT spend compute expecting more training to fix PLACEMENT — that
+  head is done. Full reasoning in this session's transcript.
 
 ## Links
 Diagnosis: `notes/meter_4_4_assumption_scope.md` (census → damage → critic-blind → by-ear → §C 16th-ceiling →

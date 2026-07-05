@@ -6,9 +6,12 @@ mis-gridded (notes floored onto 16ths, ~33 ms off), CONFIRMED felt + severe by e
 offline measurement (not a taste proxy) PREDICTED the ear, and two of my own harness bugs + a units bug were caught
 before any wrong conclusion committed.
 
-**Status:** ACTIVE. Binding gate (by-ear) CLEARED — refactor JUSTIFIED, decision pending. Spun off
-[[good-settings-region]] by verifying SB's 4/4 frame. Primary note `notes/meter_4_4_assumption_scope.md`; memory
-[[meter-4-4-grid]].
+**Status:** ✅ BUILD ARC COMPLETE — **Phase 6 by-ear PASSED (2026-07-05, `_cont` val 0.7435):** the 48th grid REMOVES
+the triplet tax, ZERO degradation, user "resounding 100% success… finally able to REALLY express tasty percussion".
+v2 = DEPLOY CANDIDATE. Export tooling built (`837c1ed`: `--features highres_v2` + 48th `sm_writer` + the msl-truncation
+fix). **NEXT (open): governor subdiv-recalibration** (frame_hz is BPM·4/t%4-coupled → playability ~3× off on the 48th
+grid) THEN the deploy swap. NOT yet deployed. Spun off [[good-settings-region]] by verifying SB's 4/4 frame. Primary note
+`notes/meter_4_4_assumption_scope.md`; build status `notes/data_layer_v2_scope.md`; memory [[meter-4-4-grid]].
 
 ## The hypothesis chain (believed → learned)
 1. **Opened from the tolerance downgrade.** User: SB (the tolerance predictor) may be a valid frame in 4/4 but
@@ -71,6 +74,14 @@ before any wrong conclusion committed.
 - **CONNECTS-TO the chaos×onset gate / seq-onset arc:** the 16th-ceiling→cliff hypothesis lands on the same
   anchoring failure the gate targets; the finer grid is complementary (new vocabulary) not a substitute (anchored
   placement). The cliff stays the gate's problem.
+- **CROSS-TESTS seq-onset-arc.md (48th-grid audio-placement lift, 2026-07-05, `notes/seqonset_v2grid_findings.md`,
+  `probe_seqcontext_frozenh_v2.py`):** re-ran that arc's M1a bracket on THIS build's 48th grid to ask if the ~0.65
+  audio-placement cap was partly a GRID artifact. Answer: a MODEST duple-16th lift (audio reach 32%→41% of gap;
+  suggestive, needs the constant-BPM control) BUT the wall EXTENDS to triplets HARD — audio ≈ CHANCE (0.505) for
+  triplet placement vs a note-context ceiling 0.930; `frozen_h_conv` ≡ ceiling (0.939) → the v2 decoder ENCODES
+  triplet placement. So this build fixes the TARGET (triplets representable + placeable by the trained prior)
+  without making them AUDIO-derivable — the seq-onset wall is corroborated, not overturned, on the finer grid.
+  Reciprocal link in `seq-onset-arc.md`.
 - **DEPENDS-ON [[quality-feature-attribution]]:** B-step 2 (meter-as-quality-axis) reuses its graded critic + ICC
   discipline; BPM is the precedent for a hidden per-song quality driver (and the BPM RANGE filter is part of this
   refactor's scope).
@@ -98,9 +109,38 @@ checkpoint exists yet). Chain believed → learned:
     features (instant cache hits) — the stamp checks song identity, not extractor config. DELETE the cache on config change.
   - **The autotune skill is stale** ([[autotune-skill-stale]]): benchmarks `train_factorized.py`, not the deployed
     `LayeredTypedChartGenerator` (the `train_motif_figure` lineage) — benchmark the real class directly.
-- **Current state:** cache `cache/samples_v3_48th` rebuilding; NEXT = the warm-started bf16 retrain
-  (`train_motif_figure_v2.py`, ~1.5 h) → **Phase 5** decode-side `t%12` re-index (export only) → **Phase 6 by-ear on
-  the triplet set = the binding gate.** Full per-phase status: `notes/data_layer_v2_scope.md`.
+- **Phase 4 retrain DONE (2026-07-05):** cache built (train 4547/val 951 — MORE than v1's 4452, fewer floor-collision
+  false-hands rejections). Full 20 epochs, warm-start clean (only `pos_encoding.pe` filtered). **The sparse-target
+  worry did NOT materialize** — `val_onset` locked ~0.025 throughout (the ~3× sparser 48th onset target did not
+  collapse recall; the pattern head was the loss mover). Best `gen_motif_v2_48th/best_val.pt` val 0.8098, still
+  descending at epoch 20 → a continuation (`_cont`, warmup_freeze 0) improves further (~0.772). "Train more" is a
+  real (small) gain; `--epochs 30` is the cheap lever if by-ear is close. NOTE: training loss can't confirm the win —
+  the triplet-placement fix is invisible to `val_total` (a placement property); Phase 6 by-ear is the binding evidence.
+- **Phase 5 decode re-index DONE (2026-07-05, commit `590daa1`):** parameterized the decode phase grid by `subdiv`
+  across all `%4` sites (`decode_defaults.phase_band_positions` = single band-math source; apply_phase_calib + generate
+  calib/penalty/alloc + phase_shares + chaos gate), threaded from `feat_ext.config.timesteps_per_beat` into BOTH tau
+  and generate. Verified subdiv=4 BYTE-IDENTICAL to v1 (bit-equal calib; CLI tests pass; defaults validator ALIGNED).
+  - **Method win — the TWO-`t%12` disambiguation:** the user believed Phase 5 was already done; investigation (git log
+    + code grep, HARNESS-first) showed the DONE work was `metric_phase` (the INPUT feature, auto-re-indexed in Phase 3
+    via `timesteps_per_beat`), NOT the DECODE levers (Phase 5). Two different `t%12` sites (model input vs model output)
+    → don't trust a recollection of "did the t%12 stuff" as "Phase 5 done"; verify at the code. Durable docs were right;
+    the recollection drifted.
+  - **Deliberate deferral (Rule 16):** triplet frames get NO phase band — a triplet-unlock would be a NEW, unvalidated
+    lever the hypothesis didn't ask for; the retrained weights place triplets. Add a band only if by-ear shows triplet
+    under-placement. SB/tolerance (analysis-only) + governor `frame_hz` left on `t%4` (not decode-critical).
+- **Phase 6 by-ear ✅ PASSED (2026-07-05, `notes/playtest_log.md`):** exported the two near-pure-triplet songs with
+  `_cont` + `--features highres_v2` + `for_v2()` (A/B vs the v1 set). User: "it totally worked!!!! none of the new note
+  frames felt random… resounding 100% success! no degradation… finally able to REALLY express tasty percussion." The
+  triplet tax is GONE; the new positions read musical (the no-triplet-band deferral VALIDATED). **Two harness bugs
+  caught + fixed IN the export path (HARNESS-first, both user-flagged):** (1) the Phase-6 export TOOLING was assumed
+  ready but never wired — `sm_writer` was hard-16th (`ROWS_PER_MEASURE=16`) → parameterized by `timesteps_per_beat`;
+  (2) the exporter read the v1 config `msl=1440` → clipped every v2 song to 120 beats/⅓ (the USER caught it by tap
+  count 150 vs 450) → use `V2_MSL=5400`. Method win: the user's "150 vs 450 taps" was a HARNESS smell, not a model
+  defect — isolated parser (fine, 443 notes on `for_v2`) from export (the truncator) before fixing.
+- **Current state:** BUILD ARC COMPLETE, v2 = DEPLOY CANDIDATE (committed `837c1ed`). **OPEN NEXT: governor
+  subdiv-recalibration** — the §8 decode governors are `frame_hz=BPM·4/60`+subdiv-relative, ~3× off on the 48th grid
+  ("playability constraints kinda fell apart"); thread `subdiv` into `frame_hz`+caps (cond-mech §8) BEFORE the deploy
+  swap (checkpoint + default `--features`). Full per-phase status: `notes/data_layer_v2_scope.md`.
 
 ## Skills in play
 `experiment-design` (this arc is a WIN case — mechanism-grounded metric predicts the ear; harness/units bugs caught
