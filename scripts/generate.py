@@ -127,9 +127,13 @@ def main():
 
     # 1. BPM -> the 16th-note-aligned hop the model was trained on
     bpm = args.bpm if args.bpm is not None else estimate_bpm(args.audio)
-    if not (60.0 <= bpm <= 200.0):
-        print(f"⚠️  BPM {bpm:.1f} is outside the trained range [60, 200] — output may be off-grid. "
-              "Pass --bpm if the estimate looks wrong.")
+    # The safe single-hop grid holds well past the TRAINING gate [60,200]; warn only outside the widened
+    # inference band [40,320] (StepManiaParser.for_inference). A gimmick-scale --bpm (e.g. 2467 copied from a
+    # #BPMS scroll trick) would make hop≈0 and grid garbage — that's what the parser's gimmick guard catches
+    # on the export path; here it's user-supplied, so just flag it.
+    if not (40.0 <= bpm <= 320.0):
+        print(f"⚠️  BPM {bpm:.1f} is outside the supported range [40, 320] — output may be off-grid "
+              "(a gimmick/notation BPM will mis-grid the whole song). Pass --bpm if the estimate looks wrong.")
     hop = int(SR * 60 / (bpm * TIMESTEPS_PER_BEAT))
 
     # 2. extract the 42-dim highres feature set via a stub chart (same pipeline as the dataset)

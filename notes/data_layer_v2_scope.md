@@ -1,0 +1,120 @@
+# SCOPE — data-layer v2 (beat-synchronous re-grid: finer subdivision + variable BPM)
+
+**Opened 2026-07-04**, out of the 4/4-grid meter thread (`notes/meter_4_4_assumption_scope.md`, memory
+[[meter-4-4-grid]]). Status: **SCOPED, greenlight PENDING** (the user's call). This doc is the actionable arc
+scope for the BIG surgery; it does NOT re-derive the diagnosis (that lives in the meter scope note). It promotes
+section (D) of that note into a standalone plan a future implementation session can execute from.
+
+## Why now (the justification is banked)
+- **The triplet tax is BY-EAR CONFIRMED + severe** (meter scope note step-3; `playtest_log.md`): plain-canonical
+  triplet songs read off-time ("badly timing everything"), severity ∝ triplet concentration. The offline 33 ms
+  floor-to-16th displacement (chart-triplet ρ+0.83) PREDICTED the ear. It's a REPRESENTATION cap, not a decode
+  bug — no knob reaches it.
+- **Size:** ~7% structural triplet tax (3.3% triplet-dominant); odd-METER is negligible (0.1%). So v2's payload is
+  a **duple-16th SUBDIVISION fix**, not a time-signature fix (do NOT scope bar-level odd meter as a priority).
+- **The roadmap gate is plausibly MET** (`constraint_relaxation_roadmap.md`: "defer until musicality plateaus /
+  data quantity becomes the limiter"): the remaining defects (triplet tax, BPM/length reach) are DATA-LAYER, not
+  musicality. CAVEAT: the chaos×onset anchoring gate (the seq-onset retrain, PARKED) is the still-open MUSICALITY
+  cliff fix — under the roadmap's own sequencing that arguably precedes a data-layer expansion. v2 and the gate are
+  COMPLEMENTARY (new vocabulary vs anchored placement), not substitutes.
+
+## What v2 IS / IS NOT
+- **IS:** ONE coordinated **beat-synchronous re-grid** — frames follow the real beat timeline (full `#BPMS`/stops
+  map) at a FINER subdivision, replacing today's single constant-tempo hop `hop = sr·60/(avg_bpm·4)`. The
+  variable-BPM relaxation and the finer-subdivision fix are the SAME surgery (both: beat-referenced frames).
+- **IS NOT:** a parser patch. It re-indexes the phase vocabulary the whole stack is built on (see the re-index
+  surface) → a coordinated `conditioning-mechanics §6` + `generation-defaults` **version bump**, plus a full
+  model retrain. Nothing crashes at parse time; the damage is silent mis-alignment if done piecemeal.
+- **IS NOT** required for BPM/length REACH — that was the cheap decoupled win, now SHIPPED (see sequencing §1).
+
+## The proven core (already written, validated)
+`probe_meter_equivariant_sb.py:54-77` — `bpm_map(txt)` builds the piecewise-constant `(start_beats, start_times,
+bpms)` map from the FULL `#BPMS`, and `time_to_beat(t, bm)` does drift-free time↔beat over a multi-minute
+variable-tempo song. This is EXACTLY the primitive v2's re-grid needs; it caught the "first-BPM-only drifts to
+noise" harness bug already. Port it into `src/data/` as the shared timing spine (parser + feature extractor both
+call it). `#STOPS`/`#WARPS`/`#DELAYS` are NOT yet handled by it — add them here (a stop = a beat with zero tempo /
+inserted dead time).
+
+## The GRID-DESIGN decision (open — pick before implementing)
+The subdivision multiplier is the cost driver. Options:
+
+| grid | subdiv/beat | resolves | frame cost vs today | 2-min song frames |
+|---|---|---|---|---|
+| today | 4 (16th) | duple only | 1× | 1440 |
+| **48th (recommended)** | **12 = LCM(4,6)** | **16ths + triplets + sextuplets** | **3×** | **4320** |
+| 96th | 24 = LCM(8,6) | + 32nds alongside triplets | 6× | 8640 |
+
+- **Recommendation: the 48th grid (12/beat).** It's the MINIMUM that resolves the CONFIRMED triplet tax (and the
+  §C sub-16th expressiveness garnish: 32nd/triplet fills, ~10% of the densest real decile). 96th doubles cost for
+  a rare 32nd-triplet combination — defer.
+- **Alternative to a fixed finer grid: a meter-ADAPTIVE grid** (detect each song's subdivision via the equivariant
+  detector, grid duple songs at 16th and triplet songs at 12th). Cheaper per-song frames, but variable frame
+  semantics across songs complicate `t % subdiv` phase conditioning + the model's positional encoding. The fixed
+  48th grid is simpler and uniform; prefer it unless the 3× sequence cost proves prohibitive.
+
+## The RE-INDEX surface (the sharp part — everything keyed on `t%4`)
+A finer grid changes what a frame index MEANS, so every consumer of the phase grid must be re-derived, not just
+the parser. Grep-confirmed consumers of the hard-4/4 `t%4` / `t%16` grid:
+1. **Parser** (`stepmania_parser.py`): `timesteps_per_beat=4`; `ts = floor(beat·4)` quantization (L560 — the
+   triplet-FLOOR that IS the tax); `beats_per_line = 4.0/len(lines)` hard 4-beats-per-measure (L420/489/556);
+   `hop_length = sr·60/(avg_bpm·4)`. NEW: read `#BPMS`/`#STOPS`, grid on `time_to_beat`, quantize to `beat·12`.
+2. **Audio features** (`audio_features.py`): the frame hop (variable now — one hop per BPM segment, not per song);
+   `_metric_phase` (L431-444) encodes `t%4` (beat-phase) + `t%16` (measure-phase) → becomes `t%12` + `t%48`.
+3. **Model conditioning / decode** (`conditioning-mechanics §6`, carries the ⚠️ 4/4 flag): `metric_phase`, the
+   `onset_phase_calib` **16th-UNLOCK** (`(b8,b16)` offsets on 8th/16th frames → must become the 48th-grid phase
+   bands), `phase_shares` (quarter/8th/16th → quarter/8th/16th/triplet/…).
+4. **Metrics / analysis:** **SB (strong-beat fraction)** and the **tolerance formula** are defined on `t%4` (the
+   equivariant SB prototype already generalizes this — it's the meter-correct successor). `probe_*`/`diag_*` that
+   compute `t%4` phase shares.
+5. **Governors** (`§8`): per-frame `frame_hz = bpm·4/60` becomes segment-local (`bpm·12/60`); beat-referenced taus
+   (`fatigue_tau` in beats, `stamina_tau` in beats) SURVIVE unchanged — that's the design payoff of beat-refs.
+
+## Cost / constraints
+- **Sequence length:** 48th grid → 3× frames. `config/model_config.yaml max_sequence_length=1440` and the model's
+  `pos_encoding max_len=2048` (typed_model.py:37) are BELOW the 4320 a 2-min song needs. v2 must either (a) raise
+  `max_len` to ~4608+ (memory + AR-decode latency grow with context), (b) cap song length shorter at the finer
+  grid, or (c) add length bucketing. This is a real retrain-config decision, not free.
+- **Retrain:** full model retrain on the re-gridded cache (all features re-extracted). ~3× the per-song compute +
+  the longer context. The `autotune` skill is the tool for batch-size/AMP/bucketing under the new sequence length.
+- **Deployment:** the equivariant meter detector (`probe_meter_equivariant_sb.py`, ρ+0.47) moves onto the critical
+  path IF v2 grids an unseen inference song by detected meter; for a fixed 48th grid it's not needed (grid
+  everything at 12/beat). Refine the detector only if the adaptive-grid option is chosen.
+
+## Phased plan (proposed)
+0. **Grid-design decision** (fixed 48th vs adaptive; the `max_len` strategy). Cheapest, gates everything.
+1. **Timing spine:** port `bpm_map`/`time_to_beat` to `src/data/`, add `#STOPS`/`#WARPS`. Unit-test against the
+   probe's validated outputs (drift-free beat↔time on a variable-BPM song).
+2. **Parser re-grid:** quantize to `beat·12`, hop per BPM segment. Verify the triplet DISPLACEMENT metric
+   (chart-triplet vs floor error, currently ρ+0.83 / 33 ms) collapses to ~0 on the triplet set — the concrete
+   success criterion for the representation fix.
+3. **Feature re-grid + `_metric_phase` → `t%12`/`t%48`.** Rebuild the highres cache (new cache key/version).
+4. **Model retrain** at the new sequence length (config bump + `autotune` for throughput).
+5. **Re-index the phase vocabulary:** `onset_phase_calib`, `phase_shares`, SB/tolerance, the governors'
+   `frame_hz`. Update `conditioning-mechanics §6` + `generation-defaults` in lockstep (version bump).
+6. **Validate:** by-ear on the SAME triplet set (`~/sm-generated/meter_triplet_test/`) — the binding gate that
+   opened this thread; the limp should be GONE.
+
+## Risks / mitigations
+- **Destabilizing the current H4/anchoring grid** (roadmap's explicit warning). Mitigation: v2 is a version bump,
+  not an in-place edit — keep the 16th-grid model deployed until v2 validates by-ear.
+- **Piecemeal drift:** re-gridding parser but not features (or vice-versa) silently mis-aligns audio↔notes.
+  Mitigation: the shared timing spine (phase 1) is the single source; both call it.
+- **Sequence-length blowup** un-budgeted (see Cost). Mitigation: decide the `max_len` strategy in phase 0.
+- **Scope creep into odd-meter/bar-level:** NOT justified (0.1%). Keep v2 to subdivision + variable-BPM.
+
+## Sequencing vs the cheap win
+1. **✅ SHIPPED (2026-07-04, decoupled, zero grid risk):** relax length + widen BPM (gimmick-guarded) on the
+   INFERENCE/export path. `StepManiaParser.for_inference()` (BPM `[40,320]`, length `[30,600]s`, gimmick guard on
+   raw `#BPMS` events > 400) + `export_typed_samples.py --relax_gates` + `scripts/generate.py` warning band. Pure
+   reach to songs `generate()` can already chart; training path byte-identical (guard default off).
+2. **⬜ v2 (this doc):** GATED on greenlight. By-ear justification is banked; the open question is INVESTMENT
+   PRIORITY vs the parked seq-onset anchoring retrain (the musicality cliff). Both are big; the user's call on
+   which goes first.
+
+## Links
+Diagnosis: `notes/meter_4_4_assumption_scope.md` (census → damage → critic-blind → by-ear → §C 16th-ceiling →
+§D scope seed). Lineage: `experiment_lineage/meter-grid-arc.md`. Roadmap: `notes/constraint_relaxation_roadmap.md`
+(fixed-BPM + 16th-resolution bundled as data-layer v2). Memory: [[meter-4-4-grid]]. Skills to version-bump in
+lockstep: `conditioning-mechanics §6` (the `t%4` phase grid), `generation-defaults §1` (canonical config).
+Complement (not substitute): the chaos×onset anchoring gate / seq-onset retrain (`notes/chaos_onset_gate_scope.md`,
+the musicality cliff). Proven core: `probe_meter_equivariant_sb.py:54-77`.
