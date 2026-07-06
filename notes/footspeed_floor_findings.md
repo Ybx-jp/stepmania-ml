@@ -39,10 +39,25 @@ after `onset` is finalized; skipped under `onset_override`.
   triplet-16ths (14 n/s) **preserved** (9→7); measures 28/71/72 clean; density −5% (0.116→0.110). Exporter
   `--min_onset_gap` (None=auto; raise to 3 to also drop 24ths — but that kills triplet-16ths, so keep 2).
 
-**Open (fork #2, NEXT):** the triplet PHASE BAND — resolve the duple/triplet hedge at the source (commit to
-triplet OR duple instead of placing both), lifting First-of-the-Year triplet occupancy 0.14 → ~0.40. A new,
-unvalidated §6 lever (the deliberate no-triplet-band deferral) → needs its own by-ear gate. The footspeed floor is
-the playability SAFETY NET; the phase band is the EXPRESSIVENESS fix.
+## 3. Triplet phase band — the duple/triplet hedge fix (BUILT, #2 of the fork)
+The root cause of §2's flams: the model UNDER-places triplets and hedges them onto adjacent 16ths. The 16th-unlock
+(`onset_phase_calib=(b8,b16)`) boosts the 8th + 16th-offbeat bands but the Phase-5 deferral gave TRIPLET positions
+NO band. **Fix:** an OPT-IN 3rd calib element `b_trip` applied to the triplet-only frames
+(`decode_defaults.triplet_band_positions`: **{2,4,8,10}@subdiv=12**, empty on the 16th grid) — a per-phase logit
+offset (same "knee not node", per-song-floating mechanism as the 16th-unlock), so the model COMMITS to triplets
+where audio affords them. **Single-sourced:** both the tau side (`apply_phase_calib`) and `generate()` now build the
+offset from one helper `decode_defaults.phase_calib_offset` (they can't drift). Exporter: `--onset_phase_calib
+"0,1.0,<b_trip>"` (the parser already comma-splits to a 3-tuple). Default `b_trip=0` (off) — a new, by-ear-gated
+lever; the canonical palette stays `(0.0, 1.0)`.
+- **Artifact-validated (Equinox, `--features highres_v2`):** triplet-occupancy (frac of notes at {2,4,8,10}):
+  baseline (floor, no band) **0.107** → **b_trip=0.7 → 0.390**, density held (382→392 notes). Human reference occ
+  0.40–0.57 (chart-dependent) → 0.39 lands in the human band (headroom to ~1.0 for more). **The floor (#1) still
+  holds with the band ON: 1-frame flams stay 0**, 24ths 7→2 — #1 and #2 compose (band commits triplets, floor
+  removes any 1-frame collisions). subdiv=4 byte-identical (triplet band empty + the 2-tuple refactor verified).
+
+**Awaiting user:** by-ear of the triplet band (installed `~/sm-generated/triplet_band_new`, b_trip=0.7) — does the
+committed-triplet feel read musical, and is 0.7 the right knee or should it go higher (~1.0)? The footspeed floor
+(#1) is the playability SAFETY NET; the triplet band (#2) is the EXPRESSIVENESS fix.
 
 **Awaiting user:** by-ear A/B of the footspeed floor — installed `~/sm-generated/footspeed_new` (floor on) vs
 `gov_subdiv_new` (recalibrated governor, floor off).

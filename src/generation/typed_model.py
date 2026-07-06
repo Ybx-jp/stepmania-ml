@@ -493,15 +493,14 @@ class LayeredTypedChartGenerator(nn.Module):
                 pen = torch.where(ph == 0, 0.0, torch.where(ph == subdiv // 2, onset_phase_penalty, 2.0 * onset_phase_penalty))
                 ol = ol - pen.unsqueeze(0)                         # (T,) broadcast over batch
             if onset_phase_calib is not None:
-                # per-phase calibration offset (b8 on 8th frames, b16 on 16th frames), ADDED to the onset
-                # logits, then the usual per-song threshold runs on the recalibrated probs. Corrects the
-                # model's systematic 16th under-confidence so the 16th COUNT floats with the audio (chaotic
-                # song -> many 16ths, calm song -> none), per-song-normalized (unlike a flat quota). The
-                # caller must compute its threshold from the SAME offset logits. See diag_song_chaos.py.
-                b8, b16 = onset_phase_calib
-                ph = torch.arange(T, device=device) % subdiv
-                e8, s16a, s16b = subdiv // 2, subdiv // 4, 3 * subdiv // 4  # == decode_defaults.phase_band_positions(subdiv); tau side MUST match
-                off = torch.where(ph == e8, float(b8), torch.where((ph == s16a) | (ph == s16b), float(b16), 0.0))
+                # per-phase calibration offset (b8 on 8th frames, b16 on 16th frames, optional b_trip on the triplet
+                # band {2,4,8,10}@subdiv=12), ADDED to the onset logits, then the usual per-song threshold runs on
+                # the recalibrated probs. Corrects the model's systematic under-confidence so the COUNT floats with
+                # the audio (chaotic/triplet song -> many, calm -> none), per-song-normalized (unlike a flat quota).
+                # SINGLE-SOURCED with the tau side via decode_defaults.phase_calib_offset -> they cannot drift; the
+                # caller must compute its threshold from the SAME offset. See conditioning-mechanics §6.
+                from .decode_defaults import phase_calib_offset
+                off = phase_calib_offset(T, onset_phase_calib, subdiv, device)
                 ol = ol + off.unsqueeze(0)
             if onset_logit_offset is not None:
                 # per-FRAME onset logit offset (B,T) or (T,) — content-driven calibration (e.g. the
