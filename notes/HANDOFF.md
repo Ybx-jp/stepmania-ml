@@ -1,4 +1,4 @@
-# HANDOFF — data-layer-v2 DECODE-PLAYABILITY pass done + BY-EAR WON. Next = the no-fast-jump cap.
+# HANDOFF — data-layer-v2 DECODE-PLAYABILITY pass done + no-fast-jump cap SHIPPED. Next = freeze=high hold-stream bug.
 
 **Written 2026-07-05 (session 2) for the next Claude.** The v2 48th-grid model was a deploy candidate but its
 decode governors were miscalibrated on the finer grid. This session **recalibrated the governors, added a footspeed
@@ -35,6 +35,10 @@ next action, and a second (hold-stream gate on freeze=high) freshly reported.
 4. **`--style` manifold density subdiv-fix** (exporter, `footspeed_floor_findings.md §1`): the manifold's
    `E[density|·]` is a 16th-grid frac; on the 48th grid it placed ~3× too many notes. `style_density *= 4/subdiv`.
    **BY-EAR confirmed** (pt_chaos_v2 "conditioning effective," not a wall). Bare export unaffected (source-chart density).
+6. **No-fast-jump cap** (`no_fast_jump`, default ON; `conditioning-mechanics §8d`, `footspeed_floor_findings.md §4`):
+   in `generate()` after `max_jack_run` — when `since_onset < f16` (strictly sub-16th) forbid `fresh_cnt ≥ 2`
+   patterns → the two-foot-jump sibling of `max_jack_run`. Forces a playable single, KEEPS the onset; causal
+   (trailing-note-only, leader jump survives). v1 byte-identical (`f16=1`). **BY-EAR PASSED.**
 5. **Groove-radar subdiv chaos** (retrain-gated, `manifold_radar_subdiv_findings.md`): `groove_radar._build_color_values`
    is now subdiv-aware (color by quantization denominator → triplets get DDR-green 1.25 not 1.0) + `dataset.py:104`
    threads `parser.timesteps_per_beat` (was hard-coded 4). ⚠️ **RETRAIN-GATED:** the v2 model + v1 manifold BOTH
@@ -42,14 +46,13 @@ next action, and a second (hold-stream gate on freeze=high) freshly reported.
    do NOT refit the manifold (it would DE-SYNC from the model). Refit + subdiv-tagging is bundled with the next retrain.
 
 ## THE OPEN FORK / NEXT ACTIONS (in order)
-1. **★ NEXT: the no-fast-jump cap** (`footspeed_floor_findings.md §4` — diagnosed, ready to build). BY-EAR on the
-   triplet band: fast sub-16th **JUMPS** evade playability — the fatigue governor governs WHICH-panels not WHETHER, and
-   there is NO hard cap on jumps at fast spacing (the two-foot analog of `max_jack_run`). At 14.5 n/s a jump
-   (`D+U→L+R` in 69ms) is unsteppable; the floor allows 2-frame gaps and `max_jack_run` is same-panel-only.
-   **FIX (user-approved direction):** forbid patterns with ≥2 fresh presses when `since_onset < f16` (sub-16th) →
-   forces a playable single, KEEPS the onset (user: "don't remove pink notes, the fatigue system needs another look").
-   v1 byte-identical (`f16=1` → `gap<1` never). One change, re-A/B by ear. (pink=48th {1,5,7,11}; green=12th {4,8}.)
-2. **Hold-stream gate on freeze=high v2** (NEW, `playtest_log.md`): user "hold-stream gate is broken" on *Watch Out*
+1. **✅ DONE — the no-fast-jump cap** (`footspeed_floor_findings.md §4`; `no_fast_jump`, default ON). BUILT in
+   `generate()` (right after `max_jack_run`): when `since_onset < f16` forbid `fresh_cnt ≥ 2` → forces a playable
+   single, KEEPS the onset. Causal/backward-looking (trailing note only; leader jump survives; rolling gap not
+   f16-cell binning). v1 byte-identical (`f16=1`). Exporter `--no_fast_jump/--no-no_fast_jump` + `--ab_no_fast_jump`.
+   **BY-EAR PASSED** (`nofastjump_ab`, Equinox: capped ≈ uncapped feel; uncapped had a "silly" 3-jump-jack in sub-16th
+   space). Not yet committed → committing with this doc refresh (verify via `git log`).
+2. **★ NEXT: hold-stream gate on freeze=high v2** (`playtest_log.md`): user "hold-stream gate is broken" on *Watch Out*
    (`--style stream=high,freeze=high`). `freeze=high` floods holds + `stream=high` floods density; the recalibrated
    `hold_stream_win·f16` gate mishandles the combo on the 48th grid. Needs its own inspection (dump the chart first).
 3. **Deploy swap** (after 1–2 land + by-ear): coordinated `conditioning-mechanics §6` + `generation-defaults §0`

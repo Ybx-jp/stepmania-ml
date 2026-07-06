@@ -385,7 +385,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4,
-                 min_onset_gap=None, max_jack_run=None,
+                 min_onset_gap=None, max_jack_run=None, no_fast_jump=True,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
                  footswitch_pen=4.0, fatigue_cap=30.0, footswitch=True,
@@ -733,6 +733,18 @@ class LayeredTypedChartGenerator(nn.Module):
                                            .expand(B, NUM_PATTERNS, 1)).squeeze(-1)           # (B,15) jack_panel pressed?
                     forbid = at_cap.unsqueeze(1) & (fresh.sum(-1) == 1) & on_jack             # fresh SINGLE on jack_panel
                     pat_logits = pat_logits.masked_fill(forbid, float("-inf"))               # (incl. {jack, hold-close} jumps)
+            if no_fast_jump and f16 > 1:  # NO FAST-JUMP CAP (v2 48th grid): the two-foot sibling of max_jack_run. A >=2-fresh-press
+                # JUMP at SUB-16th spacing (since_onset < f16 -> a 24th/48th gap; D+U->L+R in ~69ms @145bpm) is a
+                # two-foot move the body can't make in time. The fatigue governor governs WHICH-panels not WHETHER,
+                # and max_jack_run caps only SAME-panel runs -> nothing else forbids it (the footspeed floor permits
+                # 2-frame gaps). Forbid the jump but KEEP the onset (singles have fresh_cnt<=1 -> never masked here),
+                # so the fast note is spent as a playable single. Pure frame-count gate (tempo-independent, like
+                # min_onset_gap); v1 (f16=1) can never fire (since_onset>=1 -> since_onset<1 impossible) -> byte-identical.
+                fast = since_onset < f16                                                      # (B,) strictly sub-16th gap
+                if fast.any():
+                    fresh_cnt = (panel_bits.unsqueeze(0).bool() & (~held).unsqueeze(1)).sum(-1)  # (B,15) fresh presses/pattern
+                    forbid = fast.unsqueeze(1) & (fresh_cnt >= 2)                             # jump (>=2 fresh) at sub-16th
+                    pat_logits = pat_logits.masked_fill(forbid, float("-inf"))
             if jack_penalty and frame_hz is not None:  # single-foot jack governor (escalating same-panel-run penalty)
                 has_run = jack_panel >= 0
                 if has_run.any():

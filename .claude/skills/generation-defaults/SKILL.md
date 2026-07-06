@@ -63,9 +63,10 @@ mechanism; **this skill is the config VALUES.**
   `--min_onset_gap` (None→auto 2 on v2: forbids 1-frame 48th flams, keeps 2-frame triplet-16ths; `63125eb`); the
   **triplet band** via `--onset_phase_calib "0,1.0,b_trip"` (3rd element, default 0; `b_trip=0.7` BY-EAR WON, `46a25b4`);
   the **`--style` density fix** (`style_density*=4/subdiv`, `63125eb`). BY-EAR WIN on pt_chaos_v2 ("brand new note
-  colors, flowy streams, conditioning effective"). ⚠️ STILL OPEN before the swap: the **no-fast-jump cap** (fast
-  sub-16th JUMPS evade playability — `conditioning-mechanics §8d`) + a hold-stream-gate bug on `freeze=high` v2. Until
-  those land + the swap, the deployed regime STAYS `highres` + `gen_motif_full_fixed`. Groove-radar chaos fix is
+  colors, flowy streams, conditioning effective"). The **no-fast-jump cap** (`--no_fast_jump`, default ON; sub-16th
+  two-foot-jump veto — `conditioning-mechanics §8d`) is now BUILT + BY-EAR PASSED. ⚠️ STILL OPEN before the swap: a
+  hold-stream-gate bug on `freeze=high` v2. Until that lands + the swap, the deployed regime STAYS `highres` +
+  `gen_motif_full_fixed`. Groove-radar chaos fix is
   RETRAIN-GATED (`notes/manifold_radar_subdiv_findings.md` — do NOT refit the manifold for the current model). See
   `notes/footspeed_floor_findings.md`, `notes/data_layer_v2_scope.md`, `conditioning-mechanics §6/§8`.
 - ⚠️ **TRAP:** `export_typed_samples.py`'s argparse `--checkpoint` DEFAULT is the legacy `gen_style` (23-dim) and

@@ -151,9 +151,9 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
     Do NOT mix a v2 (`highres_v2`) feature set with the v1 checkpoint. **✅ Phase 6 by-ear PASSED: the 48th grid removes
     the triplet tax, zero degradation. NEW v2 decode levers (session 2, all v1-no-op): the FOOTSPEED FLOOR
     (`min_onset_gap`, §6 below) + the TRIPLET BAND (`onset_phase_calib` 3rd element, §6) — both BY-EAR WON on
-    pt_chaos_v2 ("brand new note colors, flowy streams, conditioning effective"). ⚠️ OPEN: fast sub-16th JUMPS still
-    evade playability (no two-foot hard cap = the queued **no-fast-jump cap**, §8b); and the hold-stream gate misbehaves
-    on `freeze=high` v2. See `notes/footspeed_floor_findings.md`, `notes/data_layer_v2_scope.md`, lineage
+    pt_chaos_v2 ("brand new note colors, flowy streams, conditioning effective"). ✅ NO-FAST-JUMP CAP now BUILT +
+    BY-EAR PASSED (`no_fast_jump`, §8d) — closes the sub-16th two-foot-jump hole. ⚠️ STILL OPEN: the hold-stream gate
+    misbehaves on `freeze=high` v2. See `notes/footspeed_floor_findings.md`, `notes/data_layer_v2_scope.md`, lineage
     `meter-grid-arc.md`, memory [[meter-4-4-grid]].
 - Decode phase levers (all in `generate()`): `onset_phase_calib=(b8,b16[,b_trip])` adds logit offsets to 8th/16th
   (and OPTIONALLY triplet) frames BEFORE tau (the caller's tau MUST use the same offset) → the COUNT floats with audio
@@ -357,11 +357,18 @@ contrast `onset_phase_alloc` (§6, a flat quota that SMEARS). VALIDATED + playte
 - **BODY-TURN:** charges full per-foot travel for a coordinated rotation (ranking right, magnitude too high).
 - **MODEL UNDER-JUMPS** these songs (6% vs real 31%) — a separate density/air thread; do NOT calibrate the
   governor to close that gap (the calib "dist-to-real" is dominated by it — the wrong target).
-- **NO FAST-JUMP CAP (v2, 48th grid) — the QUEUED fix** (`notes/footspeed_floor_findings.md §4`): the fatigue
-  governor governs WHICH-panels not WHETHER, and `max_jack_run` caps only SAME-panel runs — so a JUMP at sub-16th
-  spacing (14.5 n/s, `D+U→L+R` in 69ms) is unsteppable but uncapped (the floor permits 2-frame gaps; fatigue only
-  soft-penalizes). BY-EAR: pink (48th) notes "evade decode playability constraints." FIX = forbid ≥2-fresh-press
-  patterns when `since_onset < f16` → forces a playable single, KEEPS the onset (v1 byte-identical). Not yet built.
+- **NO FAST-JUMP CAP (v2, 48th grid) — ✅ BUILT + BY-EAR PASSED 2026-07-05** (`no_fast_jump`, default ON;
+  `notes/footspeed_floor_findings.md §4`): the fatigue governor governs WHICH-panels not WHETHER, and `max_jack_run`
+  caps only SAME-panel runs — so a JUMP at sub-16th spacing (14.5 n/s, `D+U→L+R` in 69ms) is unsteppable but uncapped
+  (the floor permits 2-frame gaps; fatigue only soft-penalizes). FIX (in `generate()`, right after the `max_jack_run`
+  block): when `since_onset < f16` (strictly sub-16th) forbid every pattern with `fresh_cnt ≥ 2` → forces a playable
+  SINGLE, KEEPS the onset. **CAUSAL / backward-looking** (rolling gap to the immediate prev onset, NOT f16-cell
+  binning → straddling 24/48ths ARE mutually caught): it only ever constrains the TRAILING note of a too-close pair,
+  so the run-LEADER jump (which had ≥f16 space before it, hence steppable) survives and every sub-16th note after it
+  becomes a single. Composes with `min_onset_gap` (the forward-looking NMS floor deletes gap-1 48th pairs pre-loop, so
+  the cap only sees gap-2 24th trailing notes on deployed v2). Exporter `--no_fast_jump/--no-no_fast_jump` +
+  `--ab_no_fast_jump` (shared-RNG Edit arm). v1 (`f16=1`) can never fire (`since_onset≥1`) → BYTE-IDENTICAL. BY-EAR:
+  capped ≈ uncapped in feel (dulled nothing), uncapped exposed a "silly" 3-jump-jack in sub-16th space.
 
 ## THE ALIGNMENT CHECKLIST (run before any probe / eval / export)
 1. **Radar:** built via `manifold.build_target` (matches `--style`)? Or a deliberate, labeled `--radar` OOD

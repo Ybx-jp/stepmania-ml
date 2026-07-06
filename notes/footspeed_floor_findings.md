@@ -61,3 +61,34 @@ committed-triplet feel read musical, and is 0.7 the right knee or should it go h
 
 **Awaiting user:** by-ear A/B of the footspeed floor — installed `~/sm-generated/footspeed_new` (floor on) vs
 `gov_subdiv_new` (recalibrated governor, floor off).
+
+## 4. No fast-jump cap — the two-foot sibling of `max_jack_run` (BUILT, #3 of the fork)
+**By-ear (`triplet_band_new`, Equinox):** with the triplet band ON, the user liked the new **pink notes** (48ths,
+{1,5,7,11}) but flagged that "some of them seemed to enable the model to **evade decode playability constraints** …
+the fatigue system needs another look" — and explicitly "**don't remove pink notes**." So the fix must KEEP the
+onset and fix the FOOTING, not thin the note (that rules out raising `min_onset_gap`).
+**Diagnosis (`conditioning-mechanics §8d`, ascii-dumped):** a **JUMP (≥2 fresh presses) at SUB-16th spacing** is the
+uncapped hole. The footspeed floor (#2) permits 2-frame gaps (a 24th, ~14.5 n/s); when one of those is a jump
+(`D+U→L+R` in ~69 ms) the body can't lift+re-place two feet in time. Nothing else forbids it: the fatigue governor
+governs WHICH-panels not WHETHER (it just re-routes, and a 2-note jump splits load across both feet so neither foot's
+exertion accumulator trips), and `max_jack_run` caps only SAME-panel runs (`on_jack`).
+**Fix — `no_fast_jump` (default ON), a pattern-logit hard cap in `generate()`** (right after the `max_jack_run`
+block): when `since_onset < f16` (strictly sub-16th — a 24th/48th gap), forbid every pattern whose fresh-press count
+(`(panel_bits & ~held).sum` — the same idiom as `no_jump_during_hold`) is ≥2. Singles have `fresh_cnt ≤ 1` → never
+masked, so the fast note is spent as a **playable single and the onset is KEPT**. Pure frame-count gate
+(tempo-independent, like `min_onset_gap`); **v1 (`f16=1`) can never fire** (`since_onset ≥ 1` ⇒ `< 1` impossible) →
+**byte-identical**.
+- **Smoke-verified** (`scratchpad/smoke_nofastjump.py`, synthetic model biased hard toward the L+R jump, onsets every
+  2 frames, pure taps): subdiv=4 → all 12 jumps KEPT (branch skipped); subdiv=12 → the phrase-opening jump (gap 99)
+  kept, every subsequent 24th-spaced jump forced to a single, onset kept, **0 sub-16th jump violations**. The toggle
+  flips cleanly (`no_fast_jump=False` restores all jumps).
+- Exporter: `--no_fast_jump/--no-no_fast_jump` (default ON) + `--ab_no_fast_jump` (shared-RNG "Edit" arm = uncapped,
+  for the by-ear A/B). `tools/check_export_defaults.py` still ALIGNED (v2-only lever, outside the v1 canonical block).
+
+**✅ BY-EAR PASSED (2026-07-05, `nofastjump_ab`, Equinox `b_trip=0.7` + `--ab_no_fast_jump`, shared RNG):** the capped
+(Challenge) and uncapped (Edit) arms read "basically the same" — the cap dulled NOTHING of the pink-note
+expressiveness — and the uncapped arm exposed exactly the pathology the cap targets: a **3-jump-jack in sub-16th
+space** ("just silly", physically unsteppable). Invisible when not needed, decisive when it is. Default stays ON.
+The trailing-note-only mechanism (leader jump survives, every sub-16th note after it → single; rolling backward gap,
+NOT f16-cell binning) matched the user's play-feel. Cap = the third and final v2 playability sibling
+(`max_jack_run` same-panel / `min_onset_gap` timing-floor / `no_fast_jump` two-foot-jump).

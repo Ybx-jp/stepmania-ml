@@ -8,6 +8,25 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-05 (session 2 cont.) — NO-FAST-JUMP CAP: by-ear A/B PASSED
+
+**WHAT WAS PLAYED** — `nofastjump_ab` (v2, 48th grid, `gen_motif_v2_48th_cont`, Equinox `b_trip=0.7`), a shared-RNG
+A/B via `--ab_no_fast_jump`: **Challenge = capped** (`no_fast_jump=True`, default) vs **Edit = uncapped**.
+
+**RAW FEEDBACK** — "the songs were basically the same as far as i could tell, but the uncapped one had a
+**3-jump-jack in sub16 space**, which is just silly, so i'd say it worked." The mechanism explanation "grooves with
+my vibes." → PASS.
+
+**COMMENTARY** — the textbook outcome for a hard playability cap: **invisible when not needed** (capped ≈ uncapped
+feel → it dulled none of the pink-note/triplet expressiveness), **decisive when it is** (the uncapped arm surfaced
+the exact pathology — three consecutive jumps at 24th spacing, physically unsteppable). Confirms the causal /
+trailing-note-only design (leader jump survives, every sub-16th note after it → single) reads right by ear. Cap =
+the third v2 playability sibling (`max_jack_run` / `min_onset_gap` / `no_fast_jump`). Default stays ON.
+
+**ACTION** — banked. NEXT = the `freeze=high` v2 hold-stream-gate bug (Watch Out), then the deploy swap.
+
+---
+
 ## 2026-07-05 (session 2) — v2 DECODE-PLAYABILITY pass: governor recalib + floor + triplet band = a BY-EAR WIN
 
 **WHAT WAS PLAYED** — five v2 (48th-grid, `gen_motif_v2_48th_cont`) sets. Verdicts:
