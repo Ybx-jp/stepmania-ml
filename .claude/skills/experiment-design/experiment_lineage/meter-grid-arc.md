@@ -168,6 +168,35 @@ Believed → learned, three sub-threads then a strategic call:
   retrain = the correct-but-deferred fix). Un-park trigger: user says "the times have changed." Memory
   [[ship-mode-park-research]]. **This arc is now PARKED** (its GDL/meter-equivariance deep-math end).
 
+## Session 4 (2026-07-06b) — the SHIP-facing end: b_trip auto-switch + safety envelope + a gate-bug fix
+The arc is PARKED at its GDL/research end, but its SHIP-facing tail (checklist #2/#3 of [[ship-mode-park-research]])
+was executed. Believed → learned:
+- **b_trip AUTO-SWITCH built** (`--auto_b_trip`): per-song, apply the triplet band only where the AUDIO meter
+  detector says triplet (`triple_pref>thresh`). Extracted the validated detector from `probe_meter_equivariant_sb.py`
+  into `src/data/meter_detect.py` (single source; the probe now imports it, stays the validation reference).
+- **Safety-envelope sweep** (`analyze_v2_envelope.py`, v2-aware): 5 arms × 12 songs. **Playability rock-solid
+  across the whole range** (0 fast-jumps/flams, jack ≤2, no smear) → the safety zone EXISTS.
+- **★ ATTRIBUTION CORRECTION (Rule 9, the arc's headline lesson this session):** the FIRST sweep ran on the narrow
+  gate pool (2 triplet songs, both audio-clearly-triplet) and I wrote "auto STRICTLY dominates global." The gate
+  fix (below) admitted 6 triplet songs and OVERTURNED it — the ρ+0.47 detector fires on only **3/6** chart-triplet
+  songs (misses Sway tf0.61 / After The Rain / Parousia). So auto-vs-global is a real by-ear TRADEOFF. **The lesson
+  is Rule 12 (stratify/sample before pooling) compounded with Rule 9: a 2-song "clean win" was small-n optimism;
+  don't commit a "best default" from a sample that under-covers the regime the switch is FOR (triplet songs).** The
+  fix that surfaced it was itself the diagnostic — the thin triplet coverage was a SYMPTOM of the gate bug.
+- **★ A HARNESS BUG the user's question surfaced (HARNESS-first, the arc's recurring win):** user asked "isn't the
+  bpm/relax-gate handling needlessly blocking songs?" → traced the code: `--relax_gates` was a **silent no-op on the
+  v2 export path** (the `if subdiv==12` branch called `for_v2()` unconditionally with narrow TRAINING gates). Also
+  found a THIRD stale gate (`max_simultaneous=2` rejecting hand/quad charts the 15-way head supports). Fixed via a
+  shared `INFERENCE_GATES` (bpm[40,320]/len[30,600]/simul4/gimmick); widened is now the v2 export DEFAULT. Measured
+  reach with the REAL parser (not a hand-rolled gate re-impl — Rule 2): 532→822 val songs (+55%). Verified
+  end-to-end on the exact blocked songs (See Me Now 206s, SHINY DAYS 220bpm+quads).
+- **Method keeper — validate the detector on the KNOWN cases before trusting it, and re-validate on the HARD ones:**
+  the detector looked clean on the easy 9-song set (+0.81) but its true chart-triplet hit-rate is ~50%; the
+  6-triplet sweep was the fair test. A metric that separates the easy cases is not validated on the hard ones.
+- **Current state:** the switch + gate fix are SAFE + shipped (uncommitted, `feat/governor-subdiv-recalib`). Open
+  fork = the auto-vs-global by-ear verdict (pack `~/sm-generated/v2byear_*`), then the deploy-swap. Notes
+  `notes/v2_safety_envelope_findings.md`.
+
 ## Skills in play
 `experiment-design` (this arc is a WIN case — mechanism-grounded metric predicts the ear; harness/units bugs caught
 first) · `conditioning-mechanics` §6 (the `t%4` phase grid this questions; the refactor re-indexes it) ·
