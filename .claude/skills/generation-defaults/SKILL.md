@@ -58,10 +58,16 @@ mechanism; **this skill is the config VALUES.**
   model at `max_len=5504` + uses `V2_MSL=5400` (the v1 config msl=1440 clips a v2 song to ⅓ — a fixed truncation bug).
   Phase-5 decode re-index (`590daa1`): the phase grid is `subdiv`-parameterized (v1 `highres`=subdiv 4, byte-identical).
   Do NOT pair `highres_v2` with `gen_motif_full_fixed`, or a v1 checkpoint with the v2 cache (grid mismatch).
-  **BEFORE the deploy swap:** the decode GOVERNORS need a **subdiv-recalibration** — they're `frame_hz=BPM·4/60`-coupled
-  and subdiv-relative, so playability is ~3× off on the 48th grid (user: "playability constraints kinda fell apart";
-  `conditioning-mechanics §8`). Until governors are re-tuned + the swap lands, the deployed regime STAYS `highres` +
-  `gen_motif_full_fixed`. See `notes/data_layer_v2_scope.md`, `conditioning-mechanics §6/§8`.
+  **DECODE-PLAYABILITY pass DONE (2026-07-05 session 2)** — all v1-no-op / subdiv=4 byte-identical: the governor
+  **subdiv-recalibration** (`frame_hz=BPM·subdiv/60` + `f16` gap/window scaling, `33de530`); the **footspeed floor**
+  `--min_onset_gap` (None→auto 2 on v2: forbids 1-frame 48th flams, keeps 2-frame triplet-16ths; `63125eb`); the
+  **triplet band** via `--onset_phase_calib "0,1.0,b_trip"` (3rd element, default 0; `b_trip=0.7` BY-EAR WON, `46a25b4`);
+  the **`--style` density fix** (`style_density*=4/subdiv`, `63125eb`). BY-EAR WIN on pt_chaos_v2 ("brand new note
+  colors, flowy streams, conditioning effective"). ⚠️ STILL OPEN before the swap: the **no-fast-jump cap** (fast
+  sub-16th JUMPS evade playability — `conditioning-mechanics §8d`) + a hold-stream-gate bug on `freeze=high` v2. Until
+  those land + the swap, the deployed regime STAYS `highres` + `gen_motif_full_fixed`. Groove-radar chaos fix is
+  RETRAIN-GATED (`notes/manifold_radar_subdiv_findings.md` — do NOT refit the manifold for the current model). See
+  `notes/footspeed_floor_findings.md`, `notes/data_layer_v2_scope.md`, `conditioning-mechanics §6/§8`.
 - ⚠️ **TRAP:** `export_typed_samples.py`'s argparse `--checkpoint` DEFAULT is the legacy `gen_style` (23-dim) and
   `--features` defaults to `base`. So the exporter's *bare* default loads the WRONG model. You MUST pass
   `--checkpoint checkpoints/gen_motif_full_fixed/best_val.pt --features highres`.

@@ -143,15 +143,30 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
     `frame_hz = BPM·4/60` IS decode-critical on the 48th grid, NOT "analysis-only" as previously written here.** The
     §8 governors (`max_jack_run`/fatigue/stamina/hold_stream) reason in frames and assume a frame = a 16th; on the 48th
     grid a frame is 1/12 beat (3× finer), so adjacency/rates/hard-caps are ~3× miscalibrated — Phase-6 by-ear surfaced
-    it ("playability constraints kinda fell apart"). The pending **governor subdiv-recalibration** threads `subdiv` into
-    `frame_hz` (BPM·subdiv/60) + the constraints; do it BEFORE the deploy swap.
-    Do NOT mix a v2 (`highres_v2`) feature set with the v1 checkpoint. **✅ Phase 6 by-ear PASSED (2026-07-05): the 48th
-    grid removes the triplet tax, zero degradation, "tasty percussion" — v2 is a DEPLOY CANDIDATE (pending the governor
-    recalibration above). New positions read musical → the no-triplet-band deferral is VALIDATED.** See
-    `notes/data_layer_v2_scope.md`, lineage `meter-grid-arc.md`, memory [[meter-4-4-grid]].
-- Decode phase levers (all in `generate()`): `onset_phase_calib=(b8,b16)` adds logit offsets to 8th/16th frames
-  BEFORE tau (the caller's tau MUST use the same offset) → 16th COUNT floats with audio per-song (the validated
-  win). `onset_phase_alloc=(q,8,16)` forces fixed per-band SHARES (a quota — SMEARS; avoid). `onset_phase_penalty`
+    it ("playability constraints kinda fell apart"). **✅ DONE (2026-07-05 session 2, commit `33de530`): the governor
+    subdiv-recalibration threads `subdiv` — `frame_hz=BPM·subdiv/60`, `tau_frames=fatigue_tau·subdiv`, per-frame
+    `stamina_decay`, and the integer gap/window thresholds via `f16=subdiv//4` (`since_onset≤f16`, `free_gap` bands,
+    `jack_max_gap·f16`, `hold_stream_win·f16`, `stamina_breathe_win·f16`). Exertion accumulators/caps need NO rescale
+    (press-rate=frame_hz/gap is grid-invariant). subdiv=4 BYTE-IDENTICAL; BY-EAR PASSED (Equinox maxJackRun 3→2).**
+    Do NOT mix a v2 (`highres_v2`) feature set with the v1 checkpoint. **✅ Phase 6 by-ear PASSED: the 48th grid removes
+    the triplet tax, zero degradation. NEW v2 decode levers (session 2, all v1-no-op): the FOOTSPEED FLOOR
+    (`min_onset_gap`, §6 below) + the TRIPLET BAND (`onset_phase_calib` 3rd element, §6) — both BY-EAR WON on
+    pt_chaos_v2 ("brand new note colors, flowy streams, conditioning effective"). ⚠️ OPEN: fast sub-16th JUMPS still
+    evade playability (no two-foot hard cap = the queued **no-fast-jump cap**, §8b); and the hold-stream gate misbehaves
+    on `freeze=high` v2. See `notes/footspeed_floor_findings.md`, `notes/data_layer_v2_scope.md`, lineage
+    `meter-grid-arc.md`, memory [[meter-4-4-grid]].
+- Decode phase levers (all in `generate()`): `onset_phase_calib=(b8,b16[,b_trip])` adds logit offsets to 8th/16th
+  (and OPTIONALLY triplet) frames BEFORE tau (the caller's tau MUST use the same offset) → the COUNT floats with audio
+  per-song (the validated win). ★ **TRIPLET BAND (2026-07-05, commit `46a25b4`):** the optional 3rd element `b_trip`
+  is applied to the triplet-only frames `decode_defaults.triplet_band_positions(subdiv)` ({2,4,8,10}@subdiv=12, empty
+  on the 16th grid) → the model COMMITS to triplets where audio affords, resolving the duple/triplet HEDGE. Both sites
+  (tau via `apply_phase_calib`, decode via generate()) are SINGLE-SOURCED through `decode_defaults.phase_calib_offset`
+  so they can't drift. Default `b_trip=0` (off; canonical stays `(0.0,1.0)`) — a by-ear-gated lever; **`b_trip=0.7`
+  BY-EAR WON** (Equinox triplet-occ 0.107→0.390, "committal to greens, even rhythm"). ★ **FOOTSPEED FLOOR
+  (`min_onset_gap`, commit `63125eb`):** a decode-time onset REFRACTORY — enforce a min pairwise onset gap of
+  `min_onset_gap` FRAMES via NMS (keep the higher-`p_onset` note in each too-close pair). Default auto: 2 on the 48th
+  grid (forbids 1-frame 48th flams, PRESERVES 2-frame triplet-16ths), 1 (no-op) on the 16th grid. The timing-domain,
+  panel-agnostic sibling of `max_jack_run`; floor-ALONE reads "bland/messy" (superseded by the triplet band). `onset_phase_alloc=(q,8,16)` forces fixed per-band SHARES (a quota — SMEARS; avoid). `onset_phase_penalty`
   subtracts from off-beat logits (a gate; doesn't rescue chaos because chaos MOVES notes off-beat).
   `onset_logit_offset=(B,T)` (added 06-28) = a per-FRAME content-driven onset logit offset — the hook for the
   ONSET PHRASE CALIBRATOR (e.g. the validated sparse-harm-in-quiet offset `gain·quiet_gate·harm` that un-buries a
@@ -342,6 +357,11 @@ contrast `onset_phase_alloc` (§6, a flat quota that SMEARS). VALIDATED + playte
 - **BODY-TURN:** charges full per-foot travel for a coordinated rotation (ranking right, magnitude too high).
 - **MODEL UNDER-JUMPS** these songs (6% vs real 31%) — a separate density/air thread; do NOT calibrate the
   governor to close that gap (the calib "dist-to-real" is dominated by it — the wrong target).
+- **NO FAST-JUMP CAP (v2, 48th grid) — the QUEUED fix** (`notes/footspeed_floor_findings.md §4`): the fatigue
+  governor governs WHICH-panels not WHETHER, and `max_jack_run` caps only SAME-panel runs — so a JUMP at sub-16th
+  spacing (14.5 n/s, `D+U→L+R` in 69ms) is unsteppable but uncapped (the floor permits 2-frame gaps; fatigue only
+  soft-penalizes). BY-EAR: pink (48th) notes "evade decode playability constraints." FIX = forbid ≥2-fresh-press
+  patterns when `since_onset < f16` → forces a playable single, KEEPS the onset (v1 byte-identical). Not yet built.
 
 ## THE ALIGNMENT CHECKLIST (run before any probe / eval / export)
 1. **Radar:** built via `manifold.build_target` (matches `--style`)? Or a deliberate, labeled `--radar` OOD

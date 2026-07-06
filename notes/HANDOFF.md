@@ -1,55 +1,71 @@
-# HANDOFF — data-layer-v2: PHASE 6 BY-EAR PASSED. v2 is a DEPLOY CANDIDATE. Next = governor subdiv-recalibration.
+# HANDOFF — data-layer-v2 DECODE-PLAYABILITY pass done + BY-EAR WON. Next = the no-fast-jump cap.
 
-**Written 2026-07-05 for the next Claude.** The 4/4-grid meter thread (triplet tax) reached its **binding gate and
-CLEARED it**: the data-layer-v2 48th grid was exported for the triplet songs, PLAYED, and the tax is GONE with zero
-degradation ("resounding 100% success… finally able to REALLY express tasty percussion"). v2 is now a **deploy
-candidate**. The deployed model is STILL UNCHANGED (v1) — one thing stands between v2 and deployment: the decode
-**governors are miscalibrated on the 48th grid** ("playability constraints kinda fell apart"), a bounded recalibration.
+**Written 2026-07-05 (session 2) for the next Claude.** The v2 48th-grid model was a deploy candidate but its
+decode governors were miscalibrated on the finer grid. This session **recalibrated the governors, added a footspeed
+floor + a triplet phase band, fixed the `--style` manifold density, and fixed (retrain-gated) the groove-radar
+triplet-chaos measurement** — then playtested. Result: **a big expressive WIN by ear** ("brand new note colors,"
+"flowy streams," "conditioning effective"), with ONE diagnosed remaining playability hole (fast jumps) queued as the
+next action, and a second (hold-stream gate on freeze=high) freshly reported.
 
 ## WHERE WE ARE
-- **Deployed model UNCHANGED** = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim highres, 16th grid). Canonical
-  decode defaults UNCHANGED (block below; validator passes). Nothing v2 is deployed yet.
-- **v2 VALIDATED BY EAR (2026-07-05).** Best checkpoint `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (val_total
-  **0.7435**, epoch 19; below the base run's 0.8098). Phase 6 playtest logged in `notes/playtest_log.md` (top entry).
-- **v2 EXPORT TOOLING BUILT + committed `837c1ed`** (the Phase-6 prerequisite that had never been wired):
-  - `src/generation/sm_writer.py`: rows-per-measure parameterized by `timesteps_per_beat` (48th grid → 48 rows/measure
-    so triplets land at true 1/3-beat positions). **subdiv=4 verified BYTE-IDENTICAL** to before.
-  - `experiments/generation_typed/export_typed_samples.py`: `--features highres_v2` (auto-selects the `for_v2()` parser
-    + the 48th `sm_writer` + `cache_dir=None`), builds the model at `max_len=5504`, and the **msl-truncation FIX** (the
-    v1 config `msl=1440` = only 120 beats on the 3×-finer grid → clipped every song to ⅓; use `V2_MSL=5400`).
-- **Cross-arc probe** `notes/seqonset_v2grid_findings.md` (`probe_seqcontext_frozenh_v2.py`): audio is CHANCE at triplet
-  placement (0.505 vs note-context ceiling 0.930) → v2 fixed the TARGET (triplets placeable by the trained prior / in
-  the decoder `h`), NOT audio-derivability. The seq-onset wall is corroborated on the finer grid.
-- **Branch: `feat/data-layer-v2`.** This session's commits: `837c1ed` (phase-6 tooling + probe) → the docs(refresh)
-  commit carrying this HANDOFF. Verify via `git log`. A PR to `main` is being opened as the last refresh step.
+- **Deployed model STILL v1** = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim, 16th grid). Canonical v1
+  decode defaults UNCHANGED (block below; `tools/check_export_defaults.py` passes). Nothing v2 is deployed yet.
+- **v2 deploy candidate** = `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (val 0.7435), `--features highres_v2`.
+- **This session's 4 commits on branch `feat/governor-subdiv-recalib`** (verify via `git log`): `33de530` governor
+  subdiv-recalibration → `63125eb` footspeed floor + `--style` density fix → `46a25b4` triplet phase band →
+  `ed26aa6` groove-radar subdiv chaos (retrain-gated). All subdiv=4 BYTE-IDENTICAL (v1 untouched).
 
-## THE ACTIVE THREAD — data-layer-v2 (lineage `meter-grid-arc.md`, memory [[meter-4-4-grid]])
-The 48th-grid (12/beat) + beat-sync refactor off the hard-4/4 duple-16th grid. **BUILD ARC COMPLETE** (phases 0–6 all
-done; per-phase detail `notes/data_layer_v2_scope.md`). Phase 6 by-ear ✅ PASSED. The thread is now at DEPLOYMENT.
+## WHAT SHIPPED THIS SESSION (all in `generate()` / the exporter / groove_radar; v1 byte-identical)
+1. **Governor subdiv-recalibration** (`conditioning-mechanics §8`): the §8 governors reasoned in FRAMES assuming a
+   frame=16th (`frame_hz=BPM·4/60`); on the 48th grid a frame=1/12 beat. Threaded `subdiv`: `frame_hz=BPM·subdiv/60`,
+   `tau_frames=fatigue_tau·subdiv`, `stamina_decay` per-frame, and the integer gap/window thresholds via
+   `f16=subdiv//4` (`since_onset≤f16`, the `free_gap` 16th/8th bands, `jack_max_gap·f16`, `hold_stream_win·f16`,
+   `stamina_breathe_win·f16`). Exertion accumulators/caps need NO rescale (press-rate = frame_hz/gap is
+   grid-invariant). **BY-EAR PASSED** (governor recalib playtest: Equinox "much better," maxJackRun 3→2).
+2. **Footspeed floor** (`min_onset_gap`, generate()): a decode-time onset REFRACTORY (NMS on the precomputed onset
+   tensor: enforce min pairwise gap = `min_onset_gap` frames, keep the higher-`p_onset` note in each too-close pair).
+   Default auto: **2 on the 48th grid** (forbids 1-frame 48th flams, PRESERVES 2-frame triplet-16ths), **1 on the
+   16th grid = no-op**. Killed all 31 of Equinox's 34ms flams. Exporter `--min_onset_gap`.
+   ⚠️ BY-EAR: floor-ALONE reads "bland, messy between yellows/greens" — it's a blunt safety net, SUPERSEDED by #3.
+3. **Triplet phase band** (`onset_phase_calib` optional 3rd element `b_trip`): applied to the triplet-only frames
+   (`decode_defaults.triplet_band_positions` = {2,4,8,10}@subdiv=12, empty on the 16th grid). Single-sourced with the
+   tau path via `decode_defaults.phase_calib_offset`. Default `b_trip=0` (off; canonical stays `(0.0,1.0)`).
+   **BY-EAR WON:** at `b_trip=0.7` triplet-occupancy 0.107→0.390 (human 0.40–0.57), "more committal to greens, very
+   even rhythm." Exporter: `--onset_phase_calib "0,1.0,0.7"`.
+4. **`--style` manifold density subdiv-fix** (exporter, `footspeed_floor_findings.md §1`): the manifold's
+   `E[density|·]` is a 16th-grid frac; on the 48th grid it placed ~3× too many notes. `style_density *= 4/subdiv`.
+   **BY-EAR confirmed** (pt_chaos_v2 "conditioning effective," not a wall). Bare export unaffected (source-chart density).
+5. **Groove-radar subdiv chaos** (retrain-gated, `manifold_radar_subdiv_findings.md`): `groove_radar._build_color_values`
+   is now subdiv-aware (color by quantization denominator → triplets get DDR-green 1.25 not 1.0) + `dataset.py:104`
+   threads `parser.timesteps_per_beat` (was hard-coded 4). ⚠️ **RETRAIN-GATED:** the v2 model + v1 manifold BOTH
+   trained on tpb=4 radar (verified from the cache) — do NOT rebuild the v2 cache + reuse the current checkpoint, and
+   do NOT refit the manifold (it would DE-SYNC from the model). Refit + subdiv-tagging is bundled with the next retrain.
 
-## THE OPEN FORK / NEXT ACTION
-1. **Governor subdiv-recalibration (the binding blocker before deploy).** The §8 decode governors
-   (`max_jack_run`, fatigue/stamina, hold_stream) compute `frame_hz = BPM·4/60` and reason in FRAMES assuming a frame
-   = a 16th. On the 48th grid a frame is 1/12 beat (3× finer), so jack-adjacency, fatigue/stamina rates, and the hard
-   caps are ~3× miscalibrated — the user's "playability constraints kinda fell apart." **Thread `subdiv` into `frame_hz`
-   (`BPM·subdiv/60`) and the constraint spacings** (`conditioning-mechanics §8`; the skill's `frame_hz` "analysis-only"
-   claim was CORRECTED this session — it IS decode-critical on the finer grid). One change at a time; re-A/B by ear.
-2. **Deploy swap (only after #1).** A coordinated `conditioning-mechanics §6` + `generation-defaults §0` version bump:
-   swap the deployed checkpoint → `gen_motif_v2_48th_cont` + default `--features highres_v2`. NOT before the governors
-   are playable.
-3. **Parked leads:** (a) the retrain-HP/Optuna question (`data_layer_v2_scope.md` PARKED LEADS — Optuna deferred:
-   val_total is blind to placement; the descent is pattern-head-only, onset converged at epoch 1). (b) A triplet phase
-   band for the songs that still hedge onto duple-16ths (First of the Year gen 0.14 vs human 0.40) — only if the
-   governor re-tune doesn't lift it. (c) The seq-onset retrain (musicality cliff, [[good-settings-region]]) — separate.
+## THE OPEN FORK / NEXT ACTIONS (in order)
+1. **★ NEXT: the no-fast-jump cap** (`footspeed_floor_findings.md §4` — diagnosed, ready to build). BY-EAR on the
+   triplet band: fast sub-16th **JUMPS** evade playability — the fatigue governor governs WHICH-panels not WHETHER, and
+   there is NO hard cap on jumps at fast spacing (the two-foot analog of `max_jack_run`). At 14.5 n/s a jump
+   (`D+U→L+R` in 69ms) is unsteppable; the floor allows 2-frame gaps and `max_jack_run` is same-panel-only.
+   **FIX (user-approved direction):** forbid patterns with ≥2 fresh presses when `since_onset < f16` (sub-16th) →
+   forces a playable single, KEEPS the onset (user: "don't remove pink notes, the fatigue system needs another look").
+   v1 byte-identical (`f16=1` → `gap<1` never). One change, re-A/B by ear. (pink=48th {1,5,7,11}; green=12th {4,8}.)
+2. **Hold-stream gate on freeze=high v2** (NEW, `playtest_log.md`): user "hold-stream gate is broken" on *Watch Out*
+   (`--style stream=high,freeze=high`). `freeze=high` floods holds + `stream=high` floods density; the recalibrated
+   `hold_stream_win·f16` gate mishandles the combo on the 48th grid. Needs its own inspection (dump the chart first).
+3. **Deploy swap** (after 1–2 land + by-ear): coordinated `conditioning-mechanics §6` + `generation-defaults §0`
+   version bump → checkpoint `gen_motif_v2_48th_cont` + default `--features highres_v2`. Consider making `b_trip=0.7`
+   a v2 default (it WON by ear) — but only after no-fast-jump makes the triplet set fully playable.
+4. **Parked:** the manifold refit + groove-radar retrain (bundled, item 5 above); the seq-onset retrain
+   ([[good-settings-region]], separate).
 
 ## AWAITING USER
-- **Nothing pending a user verdict.** The Phase-6 playtest is DONE and logged. The next work (governor recalibration)
-  is Claude-side; a re-A/B playtest of the recalibrated governors on the 48th grid will be the next user touchpoint.
+- **Nothing pending a verdict.** This session's playtests are logged (`playtest_log.md` top). The no-fast-jump re-A/B
+  will be the next user touchpoint. pt_chaos_v2 (Grand Chariot, Take It) was the WIN; pt_surprise_v2 Watch Out flagged
+  the hold-stream bug; Giudecca was an audio/song non-issue.
 
-## CANONICAL EXPORT DEFAULTS (the deployed v1 config — VALIDATED by `/refresh`; UNCHANGED by v2)
+## CANONICAL EXPORT DEFAULTS (the DEPLOYED v1 config — VALIDATED by `tools/check_export_defaults.py`; UNCHANGED by v2)
 The bare `export_typed_samples.py` run reproduces what the user plays. These MUST equal the script's argparse
-defaults — `tools/check_export_defaults.py` FAILS the refresh if they drift. **Permanent section — keep in every rewrite.**
-
+defaults. **Permanent section — keep in every rewrite.**
 <!-- CANONICAL-EXPORT-DEFAULTS:START (do NOT hand-edit values; re-run tools/check_export_defaults.py after a change) -->
 ```
 checkpoint = checkpoints/gen_motif_full_fixed/best_val.pt
@@ -75,44 +91,27 @@ harm_quiet_q = 40.0
 guidance = 1.0
 ```
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
-
-NOTE: the v2 export is a SEPARATE regime — `--features highres_v2` + a v2 checkpoint (`gen_motif_v2_48th_cont`) + the
-`for_v2()` parser (auto-selected by the exporter now). It uses the 48th-grid writer + `V2_MSL=5400`. Do NOT mix
-`highres_v2` with the v1 checkpoint, or a v1 checkpoint with the v2 cache (grid mismatch). The canonical block above is
-the DEPLOYED v1 config and stays authoritative until the deploy swap (fork item 2).
-
-Also shipped earlier (independent of v2): the CHEAP inference-gate reach win — `StepManiaParser.for_inference()`
-(BPM `[40,320]`, length `[30,600]s`, gimmick guard) + `export_typed_samples.py --relax_gates`.
-
-## v2 EXPORT — the exact invocation (reproduce the Phase-6 set)
-```
-python experiments/generation_typed/export_typed_samples.py --data_dir data --audio_dir data \
-  --checkpoint checkpoints/gen_motif_v2_48th_cont/best_val.pt --features highres_v2 \
-  --song_filter "first of the year,my christmas list" --hardest --num_songs 2 \
-  --out_dir outputs/meter_triplet_test_v2 --install --songs_dir /home/ybx/sm-generated
-```
-The exporter auto-raises `--max_len`→5400 and `msl`→5400 for `highres_v2`. Installed set: `~/sm-generated/
-meter_triplet_test_v2/` (A/B vs the v1 `meter_triplet_test/`). ⚠️ StepMania CACHES the song list — after re-installing a
-folder, clear `~/.stepmania-5.1/Cache/Songs/*<setname>*` + `Cache/index.cache` and restart the game (done this session).
+NOTE: v2 is a SEPARATE regime — `--features highres_v2` + `gen_motif_v2_48th_cont` + `for_v2()` + the 48th `sm_writer`
++ `V2_MSL=5400`. New v2 decode knobs (all default to a v1 no-op): `--min_onset_gap` (None→auto 2 on v2), the triplet
+band via `--onset_phase_calib "0,1.0,b_trip"` (b_trip default 0). Do NOT mix `highres_v2` with the v1 checkpoint.
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- Branch **`feat/data-layer-v2`** (off `feat/inference-gate-relaxation`, off `main`; `main` IS an ancestor). This
-  session added `837c1ed` (phase-6 tooling + probe) + this docs(refresh) commit. A PR `feat/data-layer-v2 → main` is
-  opened as the final refresh step (merging the v2 build; deploy is a SEPARATE later step). **Verify PR state via `gh`.**
-- Gitignored / not committed: `train_v2_48th*.log`, `probe_v2grid.log`, `cache/samples_v3_48th/`,
-  `cache/seqctx_frozenh_v2_*.npz`, `outputs/`, `transcripts/`.
+- Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). 4 commits this session (above).
+  The `/refresh` docs commit + PR are the last steps. **Verify PR state via `gh`.**
+- Gitignored / not committed: `outputs/` (all playtest sets incl. pt_chaos_v2/pt_surprise_v2/footspeed_new/
+  triplet_band_new), `transcripts/`, scratchpad probes.
 
 ## READ-FIRST (in order)
-`notes/data_layer_v2_scope.md` (per-phase status incl. Phase 6 PASSED + PARKED LEADS) → lineage
-`meter-grid-arc.md` (the meter tax → build arc → Phase 6 pass + the two harness-bug catches) → `conditioning-mechanics
-§8` (the governors that need the subdiv-recalibration — the `frame_hz` correction) → `generation-defaults §0` (v1
-canonical + the `highres_v2` deploy-candidate regime) → `notes/playtest_log.md` (the Phase-6 verdict). Load-bearing
-skills: **conditioning-mechanics §6/§8**, **generation-defaults §0**, **experiment-design** (the HARNESS-first Rule 7 —
-it's what caught BOTH Phase-6 export bugs: the hard-16th writer AND the msl truncation the user flagged as 150-vs-450).
+`notes/footspeed_floor_findings.md` (the floor + triplet band + the no-fast-jump diagnosis = the NEXT action) →
+`notes/manifold_radar_subdiv_findings.md` (why the refit is DEFERRED, not done) → `conditioning-mechanics §8` (the
+recalibrated governors + the fast-jump hole) → `generation-defaults §0/§1a` (v1 canonical + the v2 knobs) →
+`notes/playtest_log.md` (this session's by-ear WIN + the Watch Out hold-stream bug) → lineage
+`experiment_lineage/meter-grid-arc.md`. Load-bearing skills: **conditioning-mechanics §6/§8, generation-defaults,
+experiment-design** (Rule 7 harness-first + "verify the coupling before asserting" — it caught the manifold-refit
+regression this session).
 
 ## DISCIPLINE
-**The next lever (governor recalibration) needs a BY-EAR re-A/B** — playability is a play-feel property. **Verify
-volatile state at read time** (checkpoint val, PR status, StepMania cache) — never trust a number written here as
-current. **DELETE the cache dir on any feature-CONFIG change** ([[dataset-cache-footgun]]). **Don't pair `highres_v2`
-with the v1 checkpoint.** One change at a time. Match the verb to the evidence ([[claim-precision]]). HARNESS-first when
-a result looks wrong (the 150-vs-450 taps was a truncation bug, not the model — the user's instinct was right).
+**The no-fast-jump lever needs a BY-EAR re-A/B** (playability = play-feel). **Keep the note, fix the footing** (user:
+don't remove pink notes). **subdiv=4 must stay byte-identical** (test every v2 decode change against v1). **Don't
+rebuild the v2 cache + reuse the current checkpoint** (radar de-sync). One change at a time. Match the verb to the
+evidence ([[claim-precision]]). HARNESS/COUPLING-first when a result looks wrong.

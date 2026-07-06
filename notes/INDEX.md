@@ -310,6 +310,16 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   feature-variant CV comparison).
 
 ## 4/4 grid — meter tax + data-layer-v2 refactor (lineage `meter-grid-arc.md`)
+- `footspeed_floor_findings.md` — the v2 DECODE-PLAYABILITY pass (session 2): governor subdiv-recalib → footspeed floor
+  (`min_onset_gap`) → triplet band (`onset_phase_calib` `b_trip`) → the `--style` density fix; + the diagnosed
+  **no-fast-jump** cap (NEXT). `manifold_radar_subdiv_findings.md` — why the manifold refit is DEFERRED (retrain-gated;
+  a refit would de-sync from the tpb=4-trained model) + the subdiv-aware groove-radar chaos fix.
+- **UPDATE (2026-07-05c) — v2 DECODE-PLAYABILITY PASS DONE + BY-EAR WIN.** Branch `feat/governor-subdiv-recalib`, 4
+  commits (all subdiv=4 byte-identical): governor recalib (`frame_hz=BPM·subdiv/60`+`f16` scaling; maxJackRun 3→2) →
+  footspeed floor (kills 1-frame 48th flams, keeps triplet-16ths) + `--style` density fix (×4/subdiv) → triplet band
+  (`b_trip=0.7` BY-EAR WON: triplet-occ 0.107→0.390) → groove-radar chaos fix (RETRAIN-GATED). **pt_chaos_v2 WIN**
+  ("brand new note colors, flowy streams, conditioning effective"). NEXT = the no-fast-jump cap (fast sub-16th JUMPS
+  evade the fatigue governor) + a hold-stream-gate bug on `freeze=high` v2.
 **UPDATE (2026-07-05b) — 🎉 PHASE 6 BY-EAR PASSED → v2 = DEPLOY CANDIDATE.** Exported the two near-pure-triplet songs
 with `gen_motif_v2_48th_cont` (val 0.7435) + `--features highres_v2` + `for_v2()`; user played vs the v1 set: "it
 totally worked!!!! none of the new note frames felt random… resounding 100% success! no degradation… finally able to

@@ -8,6 +8,39 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-05 (session 2) — v2 DECODE-PLAYABILITY pass: governor recalib + floor + triplet band = a BY-EAR WIN
+
+**WHAT WAS PLAYED** — five v2 (48th-grid, `gen_motif_v2_48th_cont`) sets. Verdicts:
+- **`gov_subdiv_new` (governor recalibration) — Equinox:** "improved playability, felt more bland and poorly
+  choreographed, messy between yellows and greens" (1–2 sections still unplayable). **Christmas:** "largely the same,
+  good, still needs tuning." → the recalibrated governors work (maxJackRun 3→2) but the floor-shaped rhythm is blunt.
+- **`footspeed_new` (min_onset_gap floor) — Equinox:** "improved playability, felt more bland… messy between yellows
+  and greens." → the floor-ALONE is a crutch (its NMS arbitrarily picks yellow-vs-green in each too-close pair).
+- **`triplet_band_new` (b_trip=0.7) — Equinox:** "improved expressiveness, more committal to greens, very even
+  rhythm" ✅ — the band RESOLVES the yellow/green mush. BUT "some **pink notes** [48th] thrown in there which seemed
+  to enable the model to **evade decode playability constraints**. i don't want pink notes removed, it seems our
+  **fatigue system needs another look**." → the fast-jump hole (below).
+- **`pt_chaos_v2` (chaos=0.9,voltage=0.7,air=0.5,freeze=0.5 g1.5 + b_trip=0.7) — 🎉 the WIN.** Grand Chariot: "the
+  extra grid space definitely helped the model express itself more. i saw some **brand new note colors** i've never
+  seen anywhere before! conditioning was effective and the chart was fun." Take It: "really fun! got a couple really
+  fun **flowy streams** the model has generally struggled to produce!" → validates the 48th grid + triplet band + the
+  `--style` density fix all at once.
+- **`pt_surprise_v2` (groove_select stream, stream=high,freeze=high g1.5) — Giudecca:** "kinda weird, i think the
+  audio is largely to blame, just a weird song" (non-issue). **Watch Out:** "**hold-stream gate is broken**" → NEW
+  open thread (freeze=high floods holds + stream=high floods density; the recalibrated `hold_stream_win·f16` gate
+  mishandles the combo on the 48th grid).
+
+**COMMENTARY / DIAGNOSIS** — the fast-jump hole (`footspeed_floor_findings.md §2/§4`, ascii-dumped): the pink notes
+the user likes are **48th notes** ({1,5,7,11}); "greens" are the **12th-triplets** ({4,8}, t%12=8 = 38% of notes).
+The evasion = fast sub-16th JUMPS: the floor (`min_gap=2`) permits 2-frame gaps (14.5 n/s), and when one is a JUMP
+(`D+U→L+R` in 69ms) it's unsteppable — but the fatigue governor only re-panels (governs WHICH not WHETHER) and
+`max_jack_run` is same-panel-only, so nothing hard-caps it. Only 2 such spots in Equinox but memorable.
+
+**ACTION** — NEXT = the **no-fast-jump cap**: forbid jumps (≥2 fresh presses) at `since_onset < f16` → forces a
+playable single, KEEPS the onset (v1 byte-identical). Then inspect the Watch Out hold-stream bug. See HANDOFF.
+
+---
+
 ## 2026-07-05 — 🎉 PHASE 6 PASSED: data-layer-v2 (48th grid) REMOVES the triplet tax — v2 is a DEPLOY CANDIDATE
 
 **WHAT WAS PLAYED** — `~/sm-generated/meter_triplet_test_v2/` (v2, 48th grid, `gen_motif_v2_48th_cont` val 0.7435,

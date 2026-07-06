@@ -384,7 +384,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
-                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4, max_jack_run=None,
+                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4,
+                 min_onset_gap=None, max_jack_run=None,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
                  footswitch_pen=4.0, fatigue_cap=30.0, footswitch=True,
@@ -477,6 +478,7 @@ class LayeredTypedChartGenerator(nn.Module):
         do_cfg = (guidance_scale != 1.0) and (radar is not None or style is not None or motif is not None or figure is not None)  # amplify radar/style/motif/figure conditioning
         if onset_override is not None:
             onset = onset_override.bool().to(device)
+            p = None                                          # no onset probs under override (footspeed-floor skipped)
             p_onset = None                                    # no probs under override -> stamina gate skipped
         else:
             ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif)
@@ -491,15 +493,14 @@ class LayeredTypedChartGenerator(nn.Module):
                 pen = torch.where(ph == 0, 0.0, torch.where(ph == subdiv // 2, onset_phase_penalty, 2.0 * onset_phase_penalty))
                 ol = ol - pen.unsqueeze(0)                         # (T,) broadcast over batch
             if onset_phase_calib is not None:
-                # per-phase calibration offset (b8 on 8th frames, b16 on 16th frames), ADDED to the onset
-                # logits, then the usual per-song threshold runs on the recalibrated probs. Corrects the
-                # model's systematic 16th under-confidence so the 16th COUNT floats with the audio (chaotic
-                # song -> many 16ths, calm song -> none), per-song-normalized (unlike a flat quota). The
-                # caller must compute its threshold from the SAME offset logits. See diag_song_chaos.py.
-                b8, b16 = onset_phase_calib
-                ph = torch.arange(T, device=device) % subdiv
-                e8, s16a, s16b = subdiv // 2, subdiv // 4, 3 * subdiv // 4  # == decode_defaults.phase_band_positions(subdiv); tau side MUST match
-                off = torch.where(ph == e8, float(b8), torch.where((ph == s16a) | (ph == s16b), float(b16), 0.0))
+                # per-phase calibration offset (b8 on 8th frames, b16 on 16th frames, optional b_trip on the triplet
+                # band {2,4,8,10}@subdiv=12), ADDED to the onset logits, then the usual per-song threshold runs on
+                # the recalibrated probs. Corrects the model's systematic under-confidence so the COUNT floats with
+                # the audio (chaotic/triplet song -> many, calm -> none), per-song-normalized (unlike a flat quota).
+                # SINGLE-SOURCED with the tau side via decode_defaults.phase_calib_offset -> they cannot drift; the
+                # caller must compute its threshold from the SAME offset. See conditioning-mechanics §6.
+                from .decode_defaults import phase_calib_offset
+                off = phase_calib_offset(T, onset_phase_calib, subdiv, device)
                 ol = ol + off.unsqueeze(0)
             if onset_logit_offset is not None:
                 # per-FRAME onset logit offset (B,T) or (T,) — content-driven calibration (e.g. the
@@ -537,6 +538,38 @@ class LayeredTypedChartGenerator(nn.Module):
         states_tab = torch.arange(1, NUM_PATTERNS + 1, device=device)
         panel_bits = ((states_tab.unsqueeze(-1) >> torch.arange(NUM_PANELS, device=device)) & 1)  # (15,4)
 
+        # SUBDIV-AWARE decode (data-layer-v2): a frame is 1/subdiv beat (subdiv=4 -> legacy 16th grid; 12 -> 48th
+        # grid). The §8 governors + hold-stream window reason in FRAMES and must scale with the grid, or they are
+        # ~subdiv/4x miscalibrated on the finer grid (the "playability fell apart" report). Two frame-scales:
+        #   frame_hz / tau_frames / stamina_decay use FRAMES-PER-BEAT = subdiv (below);
+        #   f16 = FRAMES-PER-16TH (=subdiv//4) rescales the INTEGER gap/window thresholds that encode 16th/8th
+        #   adjacency (since_onset, free_gap bands, jack_max_gap, smoothing windows).
+        # At subdiv=4 (f16=1, subdiv=4) every governor below is byte-identical to the pre-v2 hard-coded math.
+        f16 = max(1, subdiv // 4)                                             # frames per 16th (gap/window scale)
+
+        # FOOTSPEED FLOOR (data-layer-v2): a decode-time minimum inter-onset SPACING — the timing-domain,
+        # panel-agnostic sibling of max_jack_run. The 48th grid made SUB-16TH spacings reachable, so the onset head
+        # can place a duple-16th (t%12==3) and an audio-driven TRIPLET (t%12 in {2,4}) one frame (34ms @145bpm =
+        # 29 notes/s) apart — an unsteppable flam, often a max-distance move (D->U). max_jack_run misses it (it caps
+        # SAME-panel runs; these are cross-panel), fatigue/stamina are per-foot/too-slow for a 2-note burst. Enforce a
+        # min pairwise gap of `min_onset_gap` FRAMES on the precomputed (audio-only, non-causal) onset tensor via NMS:
+        # in each too-close pair keep the higher-p_onset note (the one the audio supports), drop the weaker hedge note.
+        # Default: 2 frames on the 48th grid (forbids 1-frame 48ths, PRESERVES 2-frame triplet-16ths — the v2 win),
+        # 1 on the 16th grid (gap>=1 always -> NO-OP, byte-identical to v1). Skipped under onset_override (caller owns
+        # onsets). See notes/footspeed_floor_findings.md + conditioning-mechanics §8.
+        min_gap = int(min_onset_gap) if min_onset_gap is not None else (2 if subdiv >= 12 else 1)
+        if min_gap > 1 and onset_override is None and p is not None:
+            for b in range(B):
+                kept = -10**9                                                 # frame of the last KEPT onset
+                for t in onset[b].nonzero(as_tuple=True)[0].tolist():         # ascending onset frames
+                    if (t - kept) < min_gap:                                  # collision with the last kept note
+                        if float(p[b, t]) > float(p[b, kept]):               # keep the more audio-salient of the two
+                            onset[b, kept] = False; kept = t                  # promote t, drop the earlier weaker note
+                        else:
+                            onset[b, t] = False                               # drop t (weaker hedge note)
+                    else:
+                        kept = t
+
         # HOLD-IN-STREAM suppression (type-head lever; decoupled from onset/tau -> changes tap-vs-hold ONLY, never
         # WHERE/HOW-MANY notes). The type head opens hold-heads in dense STREAM sections a human keeps hold-free
         # (probe_stream_holdjack.py: gen hold-rate 18% vs real ~0% in real-stream frames); the pinned foot then
@@ -546,7 +579,7 @@ class LayeredTypedChartGenerator(nn.Module):
         # musical ones) are untouched BY CONSTRUCTION; only genuine dense streams are suppressed.
         stream_gate = None
         if hold_stream_penalty:
-            win = max(1, int(hold_stream_win))
+            win = max(1, int(hold_stream_win) * f16)                            # frames -> subdiv-scaled (measure-ish span)
             of = onset.float().unsqueeze(1)                                      # (B,1,T)
             sg = torch.nn.functional.avg_pool1d(of, win, stride=1, padding=win // 2, count_include_pad=False)
             dens = sg.squeeze(1)[:, :T]                                          # (B,T) local onset fraction in [0,1]
@@ -581,15 +614,17 @@ class LayeredTypedChartGenerator(nn.Module):
         # FOOT-EXERTION soft jack governor (graded, BPM-aware): instead of a hard per-spacing cap, accumulate an
         # exertion E per same-panel run = sum over repeats of (press_rate / jack_free_rate); penalty to EXTEND the
         # run = jack_penalty * E. Escalates with run LENGTH and repeat RATE (Hz, from BPM x spacing), so it gates
-        # unnatural streams while a short/justified jack (incl. a 2-note 16th) survives. frame_hz = 16ths/sec.
-        frame_hz = (float(bpm) * 4.0 / 60.0) if ((jack_penalty or fatigue_penalty) and bpm) else None
+        # unnatural streams while a short/justified jack (incl. a 2-note 16th) survives. frame_hz = FRAMES/sec
+        # (= BPM*subdiv/60; subdiv frames per beat). Press rate = frame_hz/gap_frames is grid-INVARIANT (both scale
+        # with subdiv), so the exertion accumulators + their caps (fatigue_free/cap, stamina_ceiling) need no rescale.
+        frame_hz = (float(bpm) * float(subdiv) / 60.0) if ((jack_penalty or fatigue_penalty) and bpm) else None
         jack_exertion = torch.zeros(B, device=device)                        # accumulated foot exertion of the run
         # PER-FOOT FATIGUE model (generalizes the single-foot jack governor: jack = one foot stays & re-hits).
         # Two feet with positions (= body orientation) + exertion accumulators that DECAY (exp, tau in beats).
         # Per note we ASSIGN arrow(s) to feet at MIN added exertion (crossovers when cheaper, no surcharge);
         # a foot that STAYS & re-hits costs jack_weight*rate, one that MOVES costs travel_weight*dist*rate.
         fatigue_on = bool(fatigue_penalty) and frame_hz is not None
-        tau_frames = max(float(fatigue_tau) * 4.0, 1e-3)                      # tau beats -> 16th frames
+        tau_frames = max(float(fatigue_tau) * float(subdiv), 1e-3)           # tau beats -> frames (subdiv/beat)
         _pos = torch.tensor(PANEL_POS, dtype=torch.float32, device=device)  # L,D,U,R cross coords (shared foot_model)
         PAD_DIST = torch.cdist(_pos, _pos)                                   # (4,4) Euclidean foot-travel
         foot_panel = torch.full((B, 2), -1, dtype=torch.long, device=device)  # (left,right) current panel or -1
@@ -603,7 +638,7 @@ class LayeredTypedChartGenerator(nn.Module):
         # (coherent thinning, a CEILING -- never adds notes). Needs the foot model for the cost signal; skipped
         # under onset_override (caller owns the onsets). See notes/foot_fatigue_design.md (two-timescale plan).
         stamina_on = (stamina_ceiling is not None) and fatigue_on and (p_onset is not None)
-        stamina_decay = float(np.exp(-1.0 / max(float(stamina_tau) * 4.0, 1e-3)))   # per-16th-frame slow decay
+        stamina_decay = float(np.exp(-1.0 / max(float(stamina_tau) * float(subdiv), 1e-3)))   # per-frame decay (subdiv/beat)
         E_slow = torch.zeros(B, device=device)                               # accumulated sustained workload
         # STAGE-3 ARC: the stamina ceiling BREATHES with a phrase-smoothed audio-energy envelope. High energy
         # (climax) -> high ceiling -> stamina doesn't thin (the spicy notes survive); low energy (verse) -> low
@@ -613,7 +648,7 @@ class LayeredTypedChartGenerator(nn.Module):
         if stamina_on:
             ceiling_t = torch.full((B, T), float(stamina_ceiling), device=device)
             if stamina_breathe and stamina_breathe > 0:
-                w = max(int(stamina_breathe_win), 1)
+                w = max(int(stamina_breathe_win) * f16, 1)                    # phrase window: frames -> subdiv-scaled
                 env = torch.nn.functional.avg_pool1d(p_onset.unsqueeze(1), kernel_size=2 * w + 1,
                                                      stride=1, padding=w, count_include_pad=False).squeeze(1)  # (B,T) phrase energy
                 if lengths is not None:  # z-normalize over VALID frames per song (pad frames excluded)
@@ -678,8 +713,8 @@ class LayeredTypedChartGenerator(nn.Module):
                 pat_logits = pat_logits.masked_fill(forbid, float("-inf"))
             if no_cross_during_hold:  # free foot fast-crossing panels while a hold pins the other foot (un-danceable)
                 in_hold = (free_last >= 0) & held_start.any(1)
-                g16 = in_hold & (free_gap <= 1)   # 16th gap (worst): forbid ALL different-panel singles (allow jack)
-                g8 = in_hold & (free_gap == 2)    # 8th gap: forbid only the OPPOSITE single (dist-2 cross)
+                g16 = in_hold & (free_gap <= f16)   # 16th gap (worst): forbid ALL different-panel singles (allow jack)
+                g8 = in_hold & (free_gap > f16) & (free_gap <= subdiv // 2)  # 8th gap: forbid only the OPPOSITE single (dist-2 cross)
                 SINGLE_IDX = (1 << torch.arange(NUM_PANELS, device=device)) - 1  # single-panel pattern idx per panel
                 if g16.any():
                     rows = g16.nonzero(as_tuple=True)[0]
@@ -691,7 +726,7 @@ class LayeredTypedChartGenerator(nn.Module):
                     rows = g8.nonzero(as_tuple=True)[0]
                     pat_logits[rows, (1 << OPP[free_last[rows]]) - 1] = float("-inf")
             if max_jack_run is not None:  # H13 exertion: forbid a FRESH single press that extends a fast jack
-                at_cap = (since_onset == 1) & (jack_panel >= 0) & (jack_len >= max_jack_run)  # (B,)
+                at_cap = (since_onset <= f16) & (jack_panel >= 0) & (jack_len >= max_jack_run)  # (B,) 16th-adj-or-faster
                 if at_cap.any():
                     fresh = panel_bits.unsqueeze(0).bool() & (~held).unsqueeze(1)             # (B,15,4) fresh per pattern
                     on_jack = fresh.gather(2, jack_panel.clamp(min=0).view(B, 1, 1)
@@ -853,11 +888,11 @@ class LayeredTypedChartGenerator(nn.Module):
             fsp = torch.where(nfresh == 1, fresh_press.float().argmax(1),       # panel of the lone fresh press, else -1
                               torch.full((B,), -1, dtype=torch.long, device=device))
             is_fs = on & (nfresh == 1)                                          # exactly one fresh press = a single
-            extend = is_fs & (since_onset == 1) & (jack_panel == fsp)           # reads start-of-frame since_onset
+            extend = is_fs & (since_onset <= f16) & (jack_panel == fsp)         # 16th-adj-or-faster; reads start-of-frame since_onset
             jack_len = torch.where(is_fs, torch.where(extend, jack_len + 1, torch.ones_like(jack_len)), jack_len)
             if frame_hz is not None:  # foot-exertion accumulator: += rate-cost on a same-panel repeat (any spacing
                 cost_ = (frame_hz / since_onset.float().clamp(min=1)) / jack_free_rate     # up to jack_max_gap); reset
-                same_run = is_fs & (jack_panel == fsp) & (since_onset <= jack_max_gap)     # on a NEW single or a jump;
+                same_run = is_fs & (jack_panel == fsp) & (since_onset <= jack_max_gap * f16)  # on a NEW single or a jump;
                 jack_exertion = torch.where(same_run, jack_exertion + cost_,               # PERSIST across empty frames
                                   torch.where(on, torch.zeros_like(jack_exertion), jack_exertion))
             jack_panel = torch.where(is_fs, fsp, jack_panel)

@@ -137,10 +137,14 @@ checkpoint exists yet). Chain believed → learned:
   (2) the exporter read the v1 config `msl=1440` → clipped every v2 song to 120 beats/⅓ (the USER caught it by tap
   count 150 vs 450) → use `V2_MSL=5400`. Method win: the user's "150 vs 450 taps" was a HARNESS smell, not a model
   defect — isolated parser (fine, 443 notes on `for_v2`) from export (the truncator) before fixing.
-- **Current state:** BUILD ARC COMPLETE, v2 = DEPLOY CANDIDATE (committed `837c1ed`). **OPEN NEXT: governor
-  subdiv-recalibration** — the §8 decode governors are `frame_hz=BPM·4/60`+subdiv-relative, ~3× off on the 48th grid
-  ("playability constraints kinda fell apart"); thread `subdiv` into `frame_hz`+caps (cond-mech §8) BEFORE the deploy
-  swap (checkpoint + default `--features`). Full per-phase status: `notes/data_layer_v2_scope.md`.
+- **v2 DECODE-PLAYABILITY PASS ✅ DONE (2026-07-05 session 2, branch `feat/governor-subdiv-recalib`, `notes/footspeed_floor_findings.md` + `manifold_radar_subdiv_findings.md`).** 4 commits, all subdiv=4 BYTE-IDENTICAL (each proven against v1 before committing — the discipline that de-risked every change):
+  - `33de530` **governor subdiv-recalib:** threaded `subdiv` (`frame_hz=BPM·subdiv/60`, `tau_frames/stamina_decay·subdiv`, integer gap/window thresholds ×`f16=subdiv//4`). KEY insight: exertion accumulators/caps need NO rescale (press-rate=frame_hz/gap is grid-invariant). BY-EAR: maxJackRun 3→2.
+  - `63125eb` **footspeed floor** (`min_onset_gap` NMS refractory on the precomputed onset tensor; auto=2 on 48th kills 1-frame 48th flams, keeps 2-frame triplet-16ths) + **`--style` density fix** (`style_density*=4/subdiv` — the 16th-grid manifold frac placed 3× too many notes). Floor-ALONE by-ear = "bland/messy" (a blunt crutch, superseded by ↓).
+  - `46a25b4` **triplet band** (`onset_phase_calib` 3rd elem `b_trip` on `triplet_band_positions`={2,4,8,10}@12; single-sourced with tau via `phase_calib_offset`). **`b_trip=0.7` BY-EAR WON:** triplet-occ 0.107→0.390 ≈ human, "committal to greens, even rhythm."
+  - `ed26aa6` **groove-radar chaos** subdiv-aware (color by quantization denominator → triplet-green 1.25; `dataset.py:104` threads parser tpb). **⚠️ RETRAIN-GATED.**
+- **Methodology wins this session:** (1) **verified the coupling before acting** — I nearly refit the manifold, but traced that the v2 model + v1 manifold BOTH trained on tpb=4 radar (read from the cache) → a refit would DE-SYNC = a regression, not a fix. Refit DEFERRED to the retrain. (2) **Walked back my own "refit fixes chaos"** — tracing showed the hard-coded color-map (triplets → 1.0 on BOTH grids), not the parse grid, was the bottleneck (a refit alone = a no-op). (3) **ascii-dump-first for every by-ear complaint** (footspeed flams; the fast-jump hole) — located the exact spots + mechanism before proposing a fix.
+- **BY-EAR WIN (`playtest_log.md`):** pt_chaos_v2 (Grand Chariot "brand new note colors… conditioning effective", Take It "flowy streams") validates the grid+band+density-fix together.
+- **Current state / OPEN FORK:** **NEXT = the no-fast-jump cap** — fast sub-16th JUMPS evade playability (the fatigue governor governs WHICH-panels not WHETHER; `max_jack_run` is same-panel-only → no two-foot hard cap). FIX = forbid ≥2-fresh-press patterns at `since_onset<f16` → force a playable single, KEEP the onset (user: "don't remove pink notes [=48th]"). **2nd open:** a hold-stream-gate bug on `freeze=high` v2 (Watch Out). THEN the deploy swap (consider `b_trip=0.7` a v2 default). Full status: `notes/data_layer_v2_scope.md`.
 
 ## Skills in play
 `experiment-design` (this arc is a WIN case — mechanism-grounded metric predicts the ear; harness/units bugs caught

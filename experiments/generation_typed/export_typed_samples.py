@@ -235,6 +235,10 @@ def parse_args():
     p.add_argument('--max_jack_run', type=int, default=CANONICAL_DECODE['max_jack_run'],
                    help='HARD 16th-jack cap: max consecutive same-panel 16th-adjacent presses. =2 (default, '
                         'user-approved) allows a justified 2-note 16th jack, hard-forbids 3+. 0/negative = off.')
+    p.add_argument('--min_onset_gap', type=int, default=None,
+                   help='FOOTSPEED FLOOR (frames): min pairwise spacing between onsets; the timing-domain sibling of '
+                        '--max_jack_run. None (default) = auto (2 on the 48th grid -> forbids 1-frame 48th flams but '
+                        'keeps 2-frame triplet-16ths; 1 on the 16th grid = no-op). Raise to 3 to also drop 24ths.')
     p.add_argument('--jack_penalty', type=float, default=0.0,
                    help='[DEPRECATED] OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
                         'generalizes it), so default 0 = off. Set >0 only to use the jack governor INSTEAD of fatigue. '
@@ -566,6 +570,9 @@ def main():
             tvec, tinfo = manifold.build_target(args.style, diff_idx)
             radar_for_gen = torch.from_numpy(tvec).unsqueeze(0).to(device)
             style_density = tinfo['density']     # SOURCE-CHART-FREE density target (difficulty + style)
+            if style_density is not None and subdiv != 4:  # the manifold is fit on the 16th grid (density = frac of
+                style_density *= 4.0 / subdiv    # 16th-frames); on the finer v2 grid the SAME notes/beat is a smaller
+                # frame-fraction, so scale by 4/subdiv (=1/3 on the 48th grid) or --style over-places ~subdiv/4x.
             if exported == 0:  # print the resolved target once (it varies slightly by difficulty)
                 print(f"  -> target ({DIFFICULTY_NAMES[diff_idx]}): "
                       + " ".join(f"{d}={tvec[k]:.2f}" for k, d in enumerate(RADAR_DIMS))
@@ -623,6 +630,7 @@ def main():
                           pattern_sample=True, pattern_temperature=args.pattern_temperature,
                           repetition_penalty=args.repetition_penalty,
                           max_jack_run=(args.max_jack_run if args.max_jack_run and args.max_jack_run > 0 else None),
+                          min_onset_gap=args.min_onset_gap,  # footspeed floor (frames); None -> auto per subdiv (§8)
                           jack_penalty=(args.jack_penalty if args.jack_penalty and args.jack_penalty > 0 else None),
                           fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
                           fatigue_free=args.fatigue_free,

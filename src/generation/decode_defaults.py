@@ -65,29 +65,61 @@ def phase_band_positions(subdiv=4):
       - 8th  = the beat midpoint             = subdiv//2      (2 at subdiv=4; 6 at subdiv=12)
       - 16th = the quarter-beat off-positions = {subdiv//4, 3*subdiv//4}  ({1,3} at subdiv=4; {3,9} at subdiv=12)
     At subdiv=4 this is byte-identical to the old hard-coded {2} / {1,3}. NOTE (data-layer-v2, Phase 5): on the 48th
-    grid the TRIPLET subdivisions (e.g. t%12 in {2,4,8,10}) are in NONE of these three bands — the 16th-unlock is a
-    16th lever and must not silently boost triplets (that would be a new, unvalidated lever). Triplet placement comes
-    from the model's learned weights, not a decode nudge; a triplet phase band is a deliberate follow-up gated on the
-    Phase-6 by-ear result. See notes/data_layer_v2_scope.md / conditioning-mechanics §6.
+    grid the TRIPLET subdivisions (t%12 in {2,4,8,10}) are in NONE of these three bands — the 16th-unlock is a 16th
+    lever and must not silently boost triplets. Triplet placement comes from the model's learned weights; the OPT-IN
+    triplet band (`triplet_band_positions`, the 3rd element of `onset_phase_calib`, default 0) is the deliberate
+    follow-up lever, by-ear-gated. See notes/footspeed_floor_findings.md / conditioning-mechanics §6.
     """
     return subdiv // 2, (subdiv // 4, 3 * subdiv // 4)
 
 
+def triplet_band_positions(subdiv=4):
+    """The TRIPLET-only within-beat phase indices (the 6-per-beat positions NOT shared with the duple grid), for a
+    `subdiv`-per-beat grid. Empty unless subdiv is divisible by 6 (triplets aren't representable otherwise — the
+    16th grid subdiv=4 -> `()`). At subdiv=12 (48th grid): **{2,4,8,10}** = the 6 positions {0,2,4,6,8,10} minus the
+    beat (0) and the duple 8th (subdiv//2=6). These get NO band from `phase_band_positions` (the Phase-5 no-triplet-
+    band deferral). A triplet-calib offset on them (the optional 3rd element of `onset_phase_calib`) lets the model
+    COMMIT to triplets where the audio affords them, resolving the duple/triplet HEDGE that under-places triplets
+    (First of the Year gen occ 0.14 vs human 0.40). A NEW, by-ear-gated lever — default 0 (off). See
+    notes/footspeed_floor_findings.md / conditioning-mechanics §6."""
+    if subdiv % 6 != 0:
+        return ()
+    step = subdiv // 6
+    e8 = subdiv // 2
+    return tuple(k * step for k in range(1, 6) if k * step != e8)
+
+
+def phase_calib_offset(T, phase_calib, subdiv=4, device=None):
+    """The (T,) per-phase onset-logit offset for `onset_phase_calib = (b8, b16[, b_trip])` — the SINGLE source used
+    by BOTH `apply_phase_calib` (tau side) and `generate()` (decode side), so they cannot drift. `b8` -> 8th frames,
+    `b16` -> the two 16th-offbeat frames, optional `b_trip` -> the triplet-only frames (`triplet_band_positions`;
+    empty on the 16th grid). Returns zeros when phase_calib is None."""
+    import torch
+    if phase_calib is None:
+        return torch.zeros(T, device=device)
+    b8, b16 = float(phase_calib[0]), float(phase_calib[1])
+    b_trip = float(phase_calib[2]) if len(phase_calib) > 2 else 0.0
+    e8, (s16a, s16b) = phase_band_positions(subdiv)
+    ph = torch.arange(T, device=device) % subdiv
+    off = torch.where(ph == e8, b8, torch.where((ph == s16a) | (ph == s16b), b16, 0.0))
+    if b_trip:  # OPT-IN triplet band (subdiv%6==0); overrides the base offset on the triplet-only frames
+        for tp in triplet_band_positions(subdiv):
+            off = torch.where(ph == tp, b_trip, off)
+    return off
+
+
 def apply_phase_calib(onset_logits, phase_calib, subdiv=4):
-    """Add the per-phase 16th-unlock offset to a (T,) onset-logit tensor BEFORE the tau quantile.
+    """Add the per-phase 16th-unlock (+ optional triplet-band) offset to a (T,) onset-logit tensor BEFORE the tau
+    quantile.
 
     The phase grid (frame index t, `subdiv` timesteps/beat — 4=16th grid, 12=48th grid): the 8th and 16th-offbeat
-    positions come from `phase_band_positions(subdiv)`; the strong beat (t%subdiv==0) and any triplet subdivisions
-    are untouched. This offset MUST be applied identically (a) here, before the density quantile that sets tau, and
-    (b) inside `generate()` (via the `onset_phase_calib` kwarg, passed the SAME `subdiv`); if tau is computed WITHOUT
-    it, the boosted 16ths flood past the threshold (conditioning-mechanics §6 / generation-defaults §1a). Returns the
-    logits unchanged when phase_calib is None.
+    positions come from `phase_band_positions(subdiv)`; the strong beat (t%subdiv==0) is untouched; the TRIPLET
+    positions (`triplet_band_positions`) are untouched UNLESS a 3rd `b_trip` element is given. This offset MUST be
+    applied identically (a) here, before the density quantile that sets tau, and (b) inside `generate()` (via the
+    `onset_phase_calib` kwarg, passed the SAME `subdiv`); if tau is computed WITHOUT it, the boosted onsets flood
+    past the threshold (conditioning-mechanics §6 / generation-defaults §1a). Returns the logits unchanged when
+    phase_calib is None.
     """
     if phase_calib is None:
         return onset_logits
-    import torch
-    b8, b16 = phase_calib
-    e8, (s16a, s16b) = phase_band_positions(subdiv)
-    ph = torch.arange(onset_logits.shape[0], device=onset_logits.device) % subdiv
-    return onset_logits + torch.where(ph == e8, float(b8),
-                                      torch.where((ph == s16a) | (ph == s16b), float(b16), 0.0))
+    return onset_logits + phase_calib_offset(onset_logits.shape[0], phase_calib, subdiv, onset_logits.device)
