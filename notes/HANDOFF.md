@@ -8,17 +8,27 @@ knob-tuning is diminishing returns. **Do NOT initiate the parked research** (goo
 GDL/meter-equivariance retrain, seq-onset retrain); redirect tangents to the release checklist. Un-park ONLY on the
 user's literal phrase **"the times have changed."**
 
-This session (before the ship decision): shipped the **no-fast-jump cap** (by-ear PASSED), a PARTIAL **hold-stream
-subdiv fix** (real fix parked), and found **b_trip 0.7-vs-1.0 is song-dependent/inconclusive** — which is what tipped
-the call to ship rather than keep tuning.
+**LATEST session (2026-07-06b) — ship checklist #2/#3 executed** (`notes/v2_safety_envelope_findings.md`; all
+UNCOMMITTED on `feat/governor-subdiv-recalib`): built the **b_trip auto-switch** (`--auto_b_trip`), characterized the
+**safe-settings envelope** (a 5-arm × 12-song v2 sweep — playability ROCK-SOLID across the whole range), and FIXED a
+**gate bug** the user flagged (`--relax_gates` was a no-op on v2 → widened `INFERENCE_GATES` now the v2 export
+default, +55% reach). ⚠️ Two honest results: the auto-switch is SAFE but NOT a clean win (the ρ+0.47 audio detector
+fires on only 3/6 chart-triplet songs → **auto-vs-global is a by-ear tradeoff**, my first 2-song "auto dominates" was
+overturned by the widened re-run); and `--style chaos/freeze` opens big dead gaps on long/sparse songs.
 
 ## WHERE WE ARE
 - **Deployed model STILL v1** = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim, 16th grid). Canonical v1
   decode defaults UNCHANGED (block below; `tools/check_export_defaults.py` passes). Nothing v2 is deployed yet.
 - **v2 deploy candidate** = `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (val 0.7435), `--features highres_v2`.
-- **This session's 4 commits on branch `feat/governor-subdiv-recalib`** (verify via `git log`): `33de530` governor
+- **Prior session's 4 commits on `feat/governor-subdiv-recalib`** (verify via `git log`): `33de530` governor
   subdiv-recalibration → `63125eb` footspeed floor + `--style` density fix → `46a25b4` triplet phase band →
   `ed26aa6` groove-radar subdiv chaos (retrain-gated). All subdiv=4 BYTE-IDENTICAL (v1 untouched).
+- **LATEST session's changes are UNCOMMITTED** (working tree on the same branch): NEW `src/data/meter_detect.py`
+  (audio meter detector), `experiments/generation_typed/analyze_v2_envelope.py` (v2-aware envelope analyzer),
+  `notes/v2_safety_envelope_findings.md`; MODIFIED `export_typed_samples.py` (`--auto_b_trip`/`--triple_pref_thresh`
+  switch + `INFERENCE_GATES` default-widen for v2 + `--strict_gates`), `src/data/stepmania_parser.py`
+  (`INFERENCE_GATES`), `probe_meter_equivariant_sb.py` (imports the shared detector). Canonical decode defaults
+  UNCHANGED (`check_export_defaults.py` still 21 ✓; the switch is opt-in, the gate change is inference-path only).
 
 ## WHAT SHIPPED THIS SESSION (all in `generate()` / the exporter / groove_radar; v1 byte-identical)
 1. **Governor subdiv-recalibration** (`conditioning-mechanics §8`): the §8 governors reasoned in FRAMES assuming a
@@ -57,22 +67,35 @@ the call to ship rather than keep tuning.
    (`--onset_phase_calib "0,1.0,0.7"`; song-dependent, 0.7 is the gentle default — 1.0 adds triplet busyness on duple
    songs). Re-point the CANONICAL EXPORT DEFAULTS block below + re-run `tools/check_export_defaults.py`.
    ⚠️ The groove-radar chaos refit stays RETRAIN-GATED (do NOT refit the manifold; `manifold_radar_subdiv_findings.md`).
+   ✅ Song-REACH is already handled: v2 export now DEFAULTS to the widened `INFERENCE_GATES` (bpm[40,320]/len[30,600]/
+   simul4/gimmick), +55% val reach (532→822); `--strict_gates` reverts. So the deployed v2 can chart far more songs.
 2. **Decide the hold-stream edge.** The `freeze=high` v2 free-foot-stream-under-hold defect is PARTIAL-fixed only
    (`footspeed_floor_findings.md §5/§5b`; real fix DESIGNED + PARKED = position-based `stamina_hold_bump`, ~6 lines).
    SHIP decision: does this freeze=high-only edge block v1.0.0, or ship as a documented known-limitation? (Lean: ship
    it — it only bites the extreme `--style freeze=high` combo; the parked fix is ready if a user hits it.)
-3. **Safe-settings envelope + guide.** Characterize "the settings most pad players would ever actually attempt" (a
-   conservative region) and write the user guide. Optional nicety (NOT required): auto-`b_trip` per-song from the
-   subdivision statistic (SB DFT ρ+0.47) — triplet songs get the band, duple songs don't.
+3. **Safe-settings envelope — ✅ CHARACTERIZED (2026-07-06b), guide still TO WRITE.** The 5-arm × 12-song v2 sweep
+   (`analyze_v2_envelope.py`, `notes/v2_safety_envelope_findings.md`) established: **playability is rock-solid across
+   the whole range** (0 fast-jumps/flams, jack ≤2, no smear) → the zone EXISTS. DEFAULT (bare) is clean; `--style
+   chaos/freeze` is a use-with-care edge (24–28-beat dead gaps on long/sparse songs). The guide can be written on
+   this. **The auto-`b_trip` nicety is BUILT** (`--auto_b_trip`, opt-in) BUT is SAFE-not-clean-win — the ρ+0.47
+   detector fires on only 3/6 chart-triplet songs, so **auto-vs-global b_trip is an OPEN BY-EAR call** (pack
+   `~/sm-generated/v2byear_*`, the Sway/Parousia A/B). It never harms duple songs, so it's shippable either way.
+   NOTE: the deploy-swap (#1) can set `--auto_b_trip` OR a fixed `b_trip=0.7` as the v2 default — the by-ear verdict
+   decides which.
 4. **Release:** clean up, cut the `v1.0.0` tag, host, announce ([[marketing-track]]; adapt `RELEASE_CRITERIA.md`).
 5. **PARKED — do NOT start without "the times have changed":** the position-based hold-stream fix (§5b); the manifold
    refit + groove-radar retrain (bundled); the seq-onset retrain (the note-context placement ceiling); the
    good-settings tolerance formula ([[good-settings-region]]); GDL/meter-equivariance ([[meter-4-4-grid]]).
 
 ## AWAITING USER
-- **Nothing blocking.** The b_trip A/B is installed (`~/sm-generated/gc_similar_bpm20_v2_full` = 0.7 vs
-  `gc_similar_bpm20_v2_btrip10` = 1.0) but the verdict was "inconclusive/song-dependent" → resolved by shipping 0.7 as
-  the default. Next user touchpoints are ship-checklist reviews (the deploy-swap diff, the guide), not a playtest gate.
+- **BY-EAR: auto-vs-global b_trip** — pack `~/sm-generated/v2byear_01..09` (tagged titles). The key A/B is
+  **03 vs 04 (Sway)** and **05 vs 06 (Parousia)**: band-OFF (`auto`, detector said duple) vs band-FORCED-ON
+  (`global`). If forcing triplets sounds BETTER → the detector missed, favor `global b_trip=0.7`; if band-off
+  sounds right → the audio really is duple, favor `--auto_b_trip`. Also 09 = After The Rain under chaos (does the
+  ~28-beat dead gap sound broken?). Log to `notes/playtest_log.md`. This decides the v2 default b_trip in the swap.
+- **COMMIT DECISION:** the session's code (switch + gate fix + analyzer + findings note) is uncommitted on
+  `feat/governor-subdiv-recalib`. This refresh's DOCS are committed separately (docs branch, per the refresh cycle);
+  the CODE awaits the user's go-ahead to commit.
 
 ## CANONICAL EXPORT DEFAULTS (the DEPLOYED v1 config — VALIDATED by `tools/check_export_defaults.py`; UNCHANGED by v2)
 The bare `export_typed_samples.py` run reproduces what the user plays. These MUST equal the script's argparse
@@ -104,21 +127,25 @@ guidance = 1.0
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 NOTE: v2 is a SEPARATE regime — `--features highres_v2` + `gen_motif_v2_48th_cont` + `for_v2()` + the 48th `sm_writer`
 + `V2_MSL=5400`. New v2 decode knobs (all default to a v1 no-op): `--min_onset_gap` (None→auto 2 on v2), the triplet
-band via `--onset_phase_calib "0,1.0,b_trip"` (b_trip default 0). Do NOT mix `highres_v2` with the v1 checkpoint.
+band via `--onset_phase_calib "0,1.0,b_trip"` (b_trip default 0), and `--auto_b_trip` (opt-in per-song triplet band,
+keyed on the audio meter detector). v2 export uses the WIDENED `INFERENCE_GATES` by default (`--strict_gates`
+reverts). Do NOT mix `highres_v2` with the v1 checkpoint.
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). This session added `df39c3c`
-  (no-fast-jump cap) + `e964b1f` (hold-stream subdiv fix) + the `/refresh` docs commit. **Verify PR state via `gh`.**
-  The DEPLOY SWAP (ship checklist #1) is a NEW code change not yet made.
-- Gitignored / not committed: `outputs/` (all playtest sets incl. gc_similar_bpm20_v2_full / _btrip10, nofastjump_ab,
-  watchout_holdfix), `transcripts/`, scratchpad probes.
+- Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). **Verify PR state via `gh`.**
+  The LATEST session's code (meter_detect.py, analyze_v2_envelope.py, the `--auto_b_trip` switch, the `INFERENCE_GATES`
+  gate fix, the findings note) is **UNCOMMITTED** in the working tree (awaiting user go-ahead). This refresh's DOCS
+  land on a separate `docs/...` branch. The DEPLOY SWAP (ship checklist #1) is a NEW code change not yet made.
+- Gitignored / not committed: `outputs/` (incl. `outputs/v2_sweep/*` the safety sweep), `transcripts/`, scratchpad
+  probes. Installed by-ear pack: `~/sm-generated/v2byear_01..09`.
 
 ## READ-FIRST (in order)
 Memory **[[ship-mode-park-research]]** (the operative directive) → **this checklist above** → `generation-defaults §0`
 (the deploy-swap targets: v2 checkpoint/features/knobs) → `conditioning-mechanics §6/§7/§8` (the v2 decode levers +
 the hold-stream partial fix + stamina-is-ON correction) → `notes/footspeed_floor_findings.md §4/§5/§5b` (no-fast-jump
-= shipped; hold-stream = partial + the PARKED fix design) → `notes/playtest_log.md` (the by-ear record incl. the
-b_trip inconclusive verdict) → lineage `experiment_lineage/meter-grid-arc.md`. Load-bearing skills:
+= shipped; hold-stream = partial + the PARKED fix design) → **`notes/v2_safety_envelope_findings.md`** (the LATEST
+session: the safety sweep, the switch, the gate fix, the auto-vs-global open question) → `notes/playtest_log.md`
+(the by-ear record) → lineage `experiment_lineage/meter-grid-arc.md` (§Session 4). Load-bearing skills:
 **generation-defaults, conditioning-mechanics §6/§8, experiment-design** (the ship-vs-tune call = a Rule-"is this the
 right investment" judgment).
 

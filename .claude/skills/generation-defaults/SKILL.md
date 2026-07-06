@@ -168,6 +168,22 @@ any playtest set drawn by filter; PR #61). `--chaos_onset_gate GAIN` is **EXPERI
 audio-keyed off-beat gate (`decode_harness.chaos_onset_gate_offset`) that Phase-0 showed can't separate expressive
 16ths from smear ones (`notes/chaos_onset_gate_scope.md`); default 0 = off; do NOT use it in a canonical run.
 
+**v2 gate reach (2026-07-06):** the v2 export path (`--features highres_v2`) now uses the **widened INFERENCE_GATES
+by DEFAULT** (`src/data/stepmania_parser.py`: bpm [40,320], length [30,600]s, `max_simultaneous=4` = admits
+hand/quad charts, gimmick guard on) — vs the narrow TRAINING gates [60,200]/[75,130]/simul2. Fixes a bug where
+`--relax_gates` was a silent no-op on v2 (the `if subdiv==12` branch was unconditional); +55% val reach (532→822).
+`--strict_gates` reverts to the narrow gates (to reproduce a pre-fix v2 run). Training's `for_v2()` default stays
+narrow (the v2 training cache is untouched). v1 export is unchanged (still `--relax_gates`-gated → `for_inference()`).
+
+**`--auto_b_trip` — the duple/triplet SWITCH (2026-07-06, OPT-IN, v2 only; `notes/v2_safety_envelope_findings.md`):**
+applies the triplet phase band (`b_trip` = the 3rd `--onset_phase_calib` element, default 0.7) ONLY to triplet-feel
+songs, per an AUDIO meter detector (`src/data/meter_detect.py` `detect_triple_pref`; `triple_pref > --triple_pref_
+thresh`, default 0). Duple songs → `b_trip=0` (no band, no busyness). Feeds the SAME per-song calib to BOTH the tau
+path and `generate()`. v1 (16th grid) = no-op (empty triplet band). **SAFE but NOT a clean win:** the ρ+0.47 detector
+fired on only 3/6 chart-triplet songs in the sweep (missed Sway tf0.61) → `auto` under-helps missed triplets while
+keeping duple perfectly clean; `global b_trip=0.7` helps all triplets but adds slight duple busyness. auto-vs-global
+is a BY-EAR call, not offline-decidable. Default OFF (canonical unchanged, `check_export_defaults.py` still 21 ✓).
+
 ## PRE-FLIGHT CHECKLIST (run before any generate/probe/export)
 1. **Model:** `gen_motif_full_fixed`, `audio_dim=42`? (NOT gen_style/gen_stage1.)
 2. **Features:** `highres` config (4 flags on) + `cache/samples_v3`? (NOT samples_v2/samples.)

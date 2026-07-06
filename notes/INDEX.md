@@ -310,6 +310,20 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   feature-variant CV comparison).
 
 ## 4/4 grid — meter tax + data-layer-v2 refactor (lineage `meter-grid-arc.md`)
+- **UPDATE (2026-07-06b) — v2 SAFETY-SETTINGS ENVELOPE (ship #3) + the duple/triplet b_trip AUTO-SWITCH +
+  a GATE-BUG FIX.** New: `v2_safety_envelope_findings.md`, `experiments/generation_typed/analyze_v2_envelope.py`
+  (v2-aware, 48th grid), `src/data/meter_detect.py` (the audio meter detector extracted from
+  `probe_meter_equivariant_sb.py`). Built `--auto_b_trip` (per-song triplet band, keyed on `triple_pref>thresh`;
+  v1 no-op; opt-in). **5-arm × 12-song sweep result: playability ROCK-SOLID across the whole range** (0
+  fast-jumps/flams, max jack ≤2, no off-grid smear) → the safety zone EXISTS. **BUT the switch is SAFE, not
+  strictly-best** — the ρ+0.47 detector fired on only 3/6 chart-triplet songs (missed Sway tf0.61, After The Rain,
+  Parousia), so `auto` (clean duple + partial triplet help) vs `global 0.7` (all triplets + slight duple busyness)
+  is a **by-ear tradeoff, not an offline verdict** (my first 2-song "auto strictly dominates" was OVERTURNED by the
+  widened 6-triplet re-run). `--style chaos/freeze` opens big dead gaps (24–28 beats) on long/sparse songs.
+  **GATE BUG FIXED:** `--relax_gates` was a silent no-op on the v2 export path (narrow TRAINING gates leaked into
+  inference — bpm/length/`max_simultaneous=2`) → shared `INFERENCE_GATES` in `stepmania_parser.py`, widened is now
+  the v2 export DEFAULT (`--strict_gates` reverts); **+55% val reach (532→822)**. By-ear pack in `~/sm-generated/
+  v2byear_*` (the Sway/Parousia auto-vs-global A/B). Open: the auto-vs-global by-ear call; then the deploy-swap.
 - `footspeed_floor_findings.md` — the v2 DECODE-PLAYABILITY pass (session 2): governor subdiv-recalib → footspeed floor
   (`min_onset_gap`) → triplet band (`onset_phase_calib` `b_trip`) → the `--style` density fix; + the diagnosed
   **no-fast-jump** cap (NEXT). `manifold_radar_subdiv_findings.md` — why the manifold refit is DEFERRED (retrain-gated;
