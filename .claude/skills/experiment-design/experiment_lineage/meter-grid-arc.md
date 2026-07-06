@@ -146,6 +146,28 @@ checkpoint exists yet). Chain believed → learned:
 - **BY-EAR WIN (`playtest_log.md`):** pt_chaos_v2 (Grand Chariot "brand new note colors… conditioning effective", Take It "flowy streams") validates the grid+band+density-fix together.
 - **Current state / OPEN FORK:** **NEXT = the no-fast-jump cap** — fast sub-16th JUMPS evade playability (the fatigue governor governs WHICH-panels not WHETHER; `max_jack_run` is same-panel-only → no two-foot hard cap). FIX = forbid ≥2-fresh-press patterns at `since_onset<f16` → force a playable single, KEEP the onset (user: "don't remove pink notes [=48th]"). **2nd open:** a hold-stream-gate bug on `freeze=high` v2 (Watch Out). THEN the deploy swap (consider `b_trip=0.7` a v2 default). Full status: `notes/data_layer_v2_scope.md`.
 
+## Session 3 (2026-07-06) — v2 decode-playability finish + the SHIP pivot
+Believed → learned, three sub-threads then a strategic call:
+- **no-fast-jump cap** (sub-16th two-foot JUMPs uncapped): BUILT (`df39c3c`), by-ear PASSED (capped≈uncapped, the
+  uncapped arm exposed a "silly" 3-jump-jack). Method keeper: a hard `masked_fill(-inf)` was needed because the
+  fatigue governor is a soft re-router that a 2-note jump splits across both feet → never trips.
+- **hold-stream "broken" on freeze=high** — the arc's cautionary tale, **mis-analyzed TWICE**: (1) blamed a `dens`
+  frame-fraction subdiv bug (real, `e964b1f`, but only HALVED it); (2) declared it fixed on a PROXY metric
+  (holds-in-dense-frames), then on a too-narrow metric (pure-16th runs) — both said "clean" while the user's ear said
+  "stream in a hold." **Root, found only by DUMPING THE RAW GRID:** 5–6 beat holds with a sustained one-foot 8th
+  stream under them. Two attribution corrections: (a) match the metric to the FELT property (a hold in a dense SECTION
+  ≠ a stream UNDER a hold); (b) **"stamina is off by default" was FALSE** — `CANONICAL_DECODE["stamina_ceiling"]=50`,
+  it was ON the whole time and thins by SALIENCE so it can't shed a LOUD stream (skill text corrected). Real fix
+  (position-based `stamina_hold_bump`) DESIGNED + PARKED (`footspeed_floor_findings.md §5b`).
+- **b_trip 0.7 vs 1.0**: measured 1.0 triples committed triplets (1.4→4%) but mostly 16th→triplet (pink barely drops)
+  → by-ear **inconclusive / song-dependent** — the diagnostic that tipped the call: a GLOBAL phase knob can't be
+  per-song-optimal because fine placement is note-context (the seq-onset ceiling), so tuning it is at its ceiling.
+- **★ STRATEGIC PIVOT → SHIP.** /experiment-design read (user agreed): the "onset allocation undertuned" gap = the
+  note-context placement CEILING (retrain-bound), not an untuned knob. Ship v1.0.0, deploy-swap v2, write the
+  safe-settings guide; PARK the research (tolerance formula = already weak; GDL/equivariance = premature; seq-onset
+  retrain = the correct-but-deferred fix). Un-park trigger: user says "the times have changed." Memory
+  [[ship-mode-park-research]]. **This arc is now PARKED** (its GDL/meter-equivariance deep-math end).
+
 ## Skills in play
 `experiment-design` (this arc is a WIN case — mechanism-grounded metric predicts the ear; harness/units bugs caught
 first) · `conditioning-mechanics` §6 (the `t%4` phase grid this questions; the refactor re-indexes it) ·

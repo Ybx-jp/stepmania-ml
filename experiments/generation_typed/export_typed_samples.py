@@ -239,6 +239,12 @@ def parse_args():
                    help='FOOTSPEED FLOOR (frames): min pairwise spacing between onsets; the timing-domain sibling of '
                         '--max_jack_run. None (default) = auto (2 on the 48th grid -> forbids 1-frame 48th flams but '
                         'keeps 2-frame triplet-16ths; 1 on the 16th grid = no-op). Raise to 3 to also drop 24ths.')
+    p.add_argument('--no_fast_jump', action=argparse.BooleanOptionalAction, default=True,
+                   help='NO FAST-JUMP CAP (default ON): forbid a >=2-fresh-press JUMP at SUB-16th spacing '
+                        '(since_onset < frames-per-16th; a 24th/48th gap on the 48th grid) -> forces a playable '
+                        'SINGLE but KEEPS the onset. The two-foot sibling of --max_jack_run; closes the hole where a '
+                        'sub-16th jump (D+U->L+R in ~69ms) evades the fatigue governor. v1 (16th grid) = no-op. '
+                        'Pass --no-no_fast_jump to A/B the uncapped (unsteppable) version by ear.')
     p.add_argument('--jack_penalty', type=float, default=0.0,
                    help='[DEPRECATED] OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
                         'generalizes it), so default 0 = off. Set >0 only to use the jack governor INSTEAD of fatigue. '
@@ -285,6 +291,10 @@ def parse_args():
                    help='A/B: emit the "Edit" arm with footswitch FLIPPED vs the default, for a shared-RNG '
                         'footswitch on/off diagnostic — runs that VANISH depended on footswitch relief; runs that '
                         'PERSIST are intrinsic jacks (excessive voltage).')
+    p.add_argument('--ab_no_fast_jump', action='store_true',
+                   help='A/B: emit the "Edit" arm with the no-fast-jump cap FLIPPED vs the default (ON), for a '
+                        'shared-RNG by-ear diagnostic on the v2 48th grid — Challenge = capped (jumps forced to '
+                        'playable singles), Edit = uncapped (the sub-16th jumps restored). v1 grid: both arms identical.')
     p.add_argument('--harm_calib', type=float, default=0.0,
                    help='[STEP-1 phrase calibrator] sparse-harm-in-quiet onset logit boost (gain·quiet_gate·harm) '
                         'so the head allocates for a sparse melodic/harmonic event in a quiet phrase (the HSL '
@@ -631,6 +641,7 @@ def main():
                           repetition_penalty=args.repetition_penalty,
                           max_jack_run=(args.max_jack_run if args.max_jack_run and args.max_jack_run > 0 else None),
                           min_onset_gap=args.min_onset_gap,  # footspeed floor (frames); None -> auto per subdiv (§8)
+                          no_fast_jump=args.no_fast_jump,  # forbid >=2-fresh JUMP at sub-16th spacing (v1 no-op; §8b/§8d)
                           jack_penalty=(args.jack_penalty if args.jack_penalty and args.jack_penalty > 0 else None),
                           fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
                           fatigue_free=args.fatigue_free,
@@ -681,6 +692,8 @@ def main():
             ab_overrides['hold_stream_penalty'] = args.ab_hold_stream
         if args.ab_footswitch:
             ab_overrides['footswitch'] = not args.footswitch   # Edit arm = the opposite of the (default OFF) baseline
+        if args.ab_no_fast_jump:
+            ab_overrides['no_fast_jump'] = not args.no_fast_jump  # Edit arm = uncapped (sub-16th jumps restored)
         if ab_overrides:  # A/B: second "Edit" arm, shared-RNG with Challenge (only the override differs)
             ab_kwargs = dict(gen_kwargs); ab_kwargs.update(ab_overrides)
             torch.set_rng_state(_ab_rng)                       # restore -> same draws as the baseline arm

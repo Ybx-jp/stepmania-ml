@@ -1,11 +1,16 @@
-# HANDOFF — data-layer-v2 DECODE-PLAYABILITY pass done + BY-EAR WON. Next = the no-fast-jump cap.
+# HANDOFF — ★ SHIP MODE: cut v1.0.0 (deploy-swap v2 + guide). Research PARKED. Don't wander.
 
-**Written 2026-07-05 (session 2) for the next Claude.** The v2 48th-grid model was a deploy candidate but its
-decode governors were miscalibrated on the finer grid. This session **recalibrated the governors, added a footspeed
-floor + a triplet phase band, fixed the `--style` manifold density, and fixed (retrain-gated) the groove-radar
-triplet-chaos measurement** — then playtested. Result: **a big expressive WIN by ear** ("brand new note colors,"
-"flowy streams," "conditioning effective"), with ONE diagnosed remaining playability hole (fast jumps) queued as the
-next action, and a second (hold-stream gate on freeze=high) freshly reported.
+**Written 2026-07-06 for the next Claude. THE PROJECT IS IN SHIP MODE** (user decision — memory
+[[ship-mode-park-research]]): clean up, cut **v1.0.0** (tags `0.1.0`/`0.2.0` already exist), host, announce, move on.
+The v2 48th-grid model is "a full step better in expressiveness… already pretty incredible." The remaining gap ("onset
+allocation undertuned") is the **note-context PLACEMENT CEILING** — a RETRAIN problem, not a decode-tune — so more
+knob-tuning is diminishing returns. **Do NOT initiate the parked research** (good-settings tolerance formula,
+GDL/meter-equivariance retrain, seq-onset retrain); redirect tangents to the release checklist. Un-park ONLY on the
+user's literal phrase **"the times have changed."**
+
+This session (before the ship decision): shipped the **no-fast-jump cap** (by-ear PASSED), a PARTIAL **hold-stream
+subdiv fix** (real fix parked), and found **b_trip 0.7-vs-1.0 is song-dependent/inconclusive** — which is what tipped
+the call to ship rather than keep tuning.
 
 ## WHERE WE ARE
 - **Deployed model STILL v1** = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim, 16th grid). Canonical v1
@@ -35,33 +40,39 @@ next action, and a second (hold-stream gate on freeze=high) freshly reported.
 4. **`--style` manifold density subdiv-fix** (exporter, `footspeed_floor_findings.md §1`): the manifold's
    `E[density|·]` is a 16th-grid frac; on the 48th grid it placed ~3× too many notes. `style_density *= 4/subdiv`.
    **BY-EAR confirmed** (pt_chaos_v2 "conditioning effective," not a wall). Bare export unaffected (source-chart density).
+6. **No-fast-jump cap** (`no_fast_jump`, default ON; `conditioning-mechanics §8d`, `footspeed_floor_findings.md §4`):
+   in `generate()` after `max_jack_run` — when `since_onset < f16` (strictly sub-16th) forbid `fresh_cnt ≥ 2`
+   patterns → the two-foot-jump sibling of `max_jack_run`. Forces a playable single, KEEPS the onset; causal
+   (trailing-note-only, leader jump survives). v1 byte-identical (`f16=1`). **BY-EAR PASSED.**
 5. **Groove-radar subdiv chaos** (retrain-gated, `manifold_radar_subdiv_findings.md`): `groove_radar._build_color_values`
    is now subdiv-aware (color by quantization denominator → triplets get DDR-green 1.25 not 1.0) + `dataset.py:104`
    threads `parser.timesteps_per_beat` (was hard-coded 4). ⚠️ **RETRAIN-GATED:** the v2 model + v1 manifold BOTH
    trained on tpb=4 radar (verified from the cache) — do NOT rebuild the v2 cache + reuse the current checkpoint, and
    do NOT refit the manifold (it would DE-SYNC from the model). Refit + subdiv-tagging is bundled with the next retrain.
 
-## THE OPEN FORK / NEXT ACTIONS (in order)
-1. **★ NEXT: the no-fast-jump cap** (`footspeed_floor_findings.md §4` — diagnosed, ready to build). BY-EAR on the
-   triplet band: fast sub-16th **JUMPS** evade playability — the fatigue governor governs WHICH-panels not WHETHER, and
-   there is NO hard cap on jumps at fast spacing (the two-foot analog of `max_jack_run`). At 14.5 n/s a jump
-   (`D+U→L+R` in 69ms) is unsteppable; the floor allows 2-frame gaps and `max_jack_run` is same-panel-only.
-   **FIX (user-approved direction):** forbid patterns with ≥2 fresh presses when `since_onset < f16` (sub-16th) →
-   forces a playable single, KEEPS the onset (user: "don't remove pink notes, the fatigue system needs another look").
-   v1 byte-identical (`f16=1` → `gap<1` never). One change, re-A/B by ear. (pink=48th {1,5,7,11}; green=12th {4,8}.)
-2. **Hold-stream gate on freeze=high v2** (NEW, `playtest_log.md`): user "hold-stream gate is broken" on *Watch Out*
-   (`--style stream=high,freeze=high`). `freeze=high` floods holds + `stream=high` floods density; the recalibrated
-   `hold_stream_win·f16` gate mishandles the combo on the 48th grid. Needs its own inspection (dump the chart first).
-3. **Deploy swap** (after 1–2 land + by-ear): coordinated `conditioning-mechanics §6` + `generation-defaults §0`
-   version bump → checkpoint `gen_motif_v2_48th_cont` + default `--features highres_v2`. Consider making `b_trip=0.7`
-   a v2 default (it WON by ear) — but only after no-fast-jump makes the triplet set fully playable.
-4. **Parked:** the manifold refit + groove-radar retrain (bundled, item 5 above); the seq-onset retrain
-   ([[good-settings-region]], separate).
+## THE v1.0.0 SHIP CHECKLIST (this is the active work — see [[ship-mode-park-research]])
+1. **★ DEPLOY SWAP — make v2 the default.** Coordinated bump in `generation-defaults §0` + `conditioning-mechanics §6`
+   + `export_typed_samples.py` argparse: default checkpoint → `gen_motif_v2_48th_cont`, default `--features highres_v2`,
+   `--min_onset_gap` auto (already), `no_fast_jump` on (already), and set **`b_trip=0.7` as the v2 default**
+   (`--onset_phase_calib "0,1.0,0.7"`; song-dependent, 0.7 is the gentle default — 1.0 adds triplet busyness on duple
+   songs). Re-point the CANONICAL EXPORT DEFAULTS block below + re-run `tools/check_export_defaults.py`.
+   ⚠️ The groove-radar chaos refit stays RETRAIN-GATED (do NOT refit the manifold; `manifold_radar_subdiv_findings.md`).
+2. **Decide the hold-stream edge.** The `freeze=high` v2 free-foot-stream-under-hold defect is PARTIAL-fixed only
+   (`footspeed_floor_findings.md §5/§5b`; real fix DESIGNED + PARKED = position-based `stamina_hold_bump`, ~6 lines).
+   SHIP decision: does this freeze=high-only edge block v1.0.0, or ship as a documented known-limitation? (Lean: ship
+   it — it only bites the extreme `--style freeze=high` combo; the parked fix is ready if a user hits it.)
+3. **Safe-settings envelope + guide.** Characterize "the settings most pad players would ever actually attempt" (a
+   conservative region) and write the user guide. Optional nicety (NOT required): auto-`b_trip` per-song from the
+   subdivision statistic (SB DFT ρ+0.47) — triplet songs get the band, duple songs don't.
+4. **Release:** clean up, cut the `v1.0.0` tag, host, announce ([[marketing-track]]; adapt `RELEASE_CRITERIA.md`).
+5. **PARKED — do NOT start without "the times have changed":** the position-based hold-stream fix (§5b); the manifold
+   refit + groove-radar retrain (bundled); the seq-onset retrain (the note-context placement ceiling); the
+   good-settings tolerance formula ([[good-settings-region]]); GDL/meter-equivariance ([[meter-4-4-grid]]).
 
 ## AWAITING USER
-- **Nothing pending a verdict.** This session's playtests are logged (`playtest_log.md` top). The no-fast-jump re-A/B
-  will be the next user touchpoint. pt_chaos_v2 (Grand Chariot, Take It) was the WIN; pt_surprise_v2 Watch Out flagged
-  the hold-stream bug; Giudecca was an audio/song non-issue.
+- **Nothing blocking.** The b_trip A/B is installed (`~/sm-generated/gc_similar_bpm20_v2_full` = 0.7 vs
+  `gc_similar_bpm20_v2_btrip10` = 1.0) but the verdict was "inconclusive/song-dependent" → resolved by shipping 0.7 as
+  the default. Next user touchpoints are ship-checklist reviews (the deploy-swap diff, the guide), not a playtest gate.
 
 ## CANONICAL EXPORT DEFAULTS (the DEPLOYED v1 config — VALIDATED by `tools/check_export_defaults.py`; UNCHANGED by v2)
 The bare `export_typed_samples.py` run reproduces what the user plays. These MUST equal the script's argparse
@@ -96,22 +107,25 @@ NOTE: v2 is a SEPARATE regime — `--features highres_v2` + `gen_motif_v2_48th_c
 band via `--onset_phase_calib "0,1.0,b_trip"` (b_trip default 0). Do NOT mix `highres_v2` with the v1 checkpoint.
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). 4 commits this session (above).
-  The `/refresh` docs commit + PR are the last steps. **Verify PR state via `gh`.**
-- Gitignored / not committed: `outputs/` (all playtest sets incl. pt_chaos_v2/pt_surprise_v2/footspeed_new/
-  triplet_band_new), `transcripts/`, scratchpad probes.
+- Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). This session added `df39c3c`
+  (no-fast-jump cap) + `e964b1f` (hold-stream subdiv fix) + the `/refresh` docs commit. **Verify PR state via `gh`.**
+  The DEPLOY SWAP (ship checklist #1) is a NEW code change not yet made.
+- Gitignored / not committed: `outputs/` (all playtest sets incl. gc_similar_bpm20_v2_full / _btrip10, nofastjump_ab,
+  watchout_holdfix), `transcripts/`, scratchpad probes.
 
 ## READ-FIRST (in order)
-`notes/footspeed_floor_findings.md` (the floor + triplet band + the no-fast-jump diagnosis = the NEXT action) →
-`notes/manifold_radar_subdiv_findings.md` (why the refit is DEFERRED, not done) → `conditioning-mechanics §8` (the
-recalibrated governors + the fast-jump hole) → `generation-defaults §0/§1a` (v1 canonical + the v2 knobs) →
-`notes/playtest_log.md` (this session's by-ear WIN + the Watch Out hold-stream bug) → lineage
-`experiment_lineage/meter-grid-arc.md`. Load-bearing skills: **conditioning-mechanics §6/§8, generation-defaults,
-experiment-design** (Rule 7 harness-first + "verify the coupling before asserting" — it caught the manifold-refit
-regression this session).
+Memory **[[ship-mode-park-research]]** (the operative directive) → **this checklist above** → `generation-defaults §0`
+(the deploy-swap targets: v2 checkpoint/features/knobs) → `conditioning-mechanics §6/§7/§8` (the v2 decode levers +
+the hold-stream partial fix + stamina-is-ON correction) → `notes/footspeed_floor_findings.md §4/§5/§5b` (no-fast-jump
+= shipped; hold-stream = partial + the PARKED fix design) → `notes/playtest_log.md` (the by-ear record incl. the
+b_trip inconclusive verdict) → lineage `experiment_lineage/meter-grid-arc.md`. Load-bearing skills:
+**generation-defaults, conditioning-mechanics §6/§8, experiment-design** (the ship-vs-tune call = a Rule-"is this the
+right investment" judgment).
 
 ## DISCIPLINE
-**The no-fast-jump lever needs a BY-EAR re-A/B** (playability = play-feel). **Keep the note, fix the footing** (user:
-don't remove pink notes). **subdiv=4 must stay byte-identical** (test every v2 decode change against v1). **Don't
-rebuild the v2 cache + reuse the current checkpoint** (radar de-sync). One change at a time. Match the verb to the
-evidence ([[claim-precision]]). HARNESS/COUPLING-first when a result looks wrong.
+**SHIP MODE: don't wander into parked research** ([[ship-mode-park-research]]; un-park only on "the times have
+changed"). **Match the metric to the FELT property** (the hold-stream defect was mis-analyzed TWICE by trusting an
+aggregate over the raw grid — dump the grid). **Stamina is ON canonically (ceiling 50), NOT off** (the skill text
+that said "off" burned a session — corrected `conditioning-mechanics §8c`). **subdiv=4 must stay byte-identical** on
+any v2 decode change. **Don't rebuild the v2 cache + reuse the current checkpoint** (radar de-sync). One change at a
+time; match the verb to the evidence ([[claim-precision]]); HARNESS/COUPLING-first when a result looks wrong.

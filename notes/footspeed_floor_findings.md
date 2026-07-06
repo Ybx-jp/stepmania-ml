@@ -61,3 +61,112 @@ committed-triplet feel read musical, and is 0.7 the right knee or should it go h
 
 **Awaiting user:** by-ear A/B of the footspeed floor — installed `~/sm-generated/footspeed_new` (floor on) vs
 `gov_subdiv_new` (recalibrated governor, floor off).
+
+## 4. No fast-jump cap — the two-foot sibling of `max_jack_run` (BUILT, #3 of the fork)
+**By-ear (`triplet_band_new`, Equinox):** with the triplet band ON, the user liked the new **pink notes** (48ths,
+{1,5,7,11}) but flagged that "some of them seemed to enable the model to **evade decode playability constraints** …
+the fatigue system needs another look" — and explicitly "**don't remove pink notes**." So the fix must KEEP the
+onset and fix the FOOTING, not thin the note (that rules out raising `min_onset_gap`).
+**Diagnosis (`conditioning-mechanics §8d`, ascii-dumped):** a **JUMP (≥2 fresh presses) at SUB-16th spacing** is the
+uncapped hole. The footspeed floor (#2) permits 2-frame gaps (a 24th, ~14.5 n/s); when one of those is a jump
+(`D+U→L+R` in ~69 ms) the body can't lift+re-place two feet in time. Nothing else forbids it: the fatigue governor
+governs WHICH-panels not WHETHER (it just re-routes, and a 2-note jump splits load across both feet so neither foot's
+exertion accumulator trips), and `max_jack_run` caps only SAME-panel runs (`on_jack`).
+**Fix — `no_fast_jump` (default ON), a pattern-logit hard cap in `generate()`** (right after the `max_jack_run`
+block): when `since_onset < f16` (strictly sub-16th — a 24th/48th gap), forbid every pattern whose fresh-press count
+(`(panel_bits & ~held).sum` — the same idiom as `no_jump_during_hold`) is ≥2. Singles have `fresh_cnt ≤ 1` → never
+masked, so the fast note is spent as a **playable single and the onset is KEPT**. Pure frame-count gate
+(tempo-independent, like `min_onset_gap`); **v1 (`f16=1`) can never fire** (`since_onset ≥ 1` ⇒ `< 1` impossible) →
+**byte-identical**.
+- **Smoke-verified** (`scratchpad/smoke_nofastjump.py`, synthetic model biased hard toward the L+R jump, onsets every
+  2 frames, pure taps): subdiv=4 → all 12 jumps KEPT (branch skipped); subdiv=12 → the phrase-opening jump (gap 99)
+  kept, every subsequent 24th-spaced jump forced to a single, onset kept, **0 sub-16th jump violations**. The toggle
+  flips cleanly (`no_fast_jump=False` restores all jumps).
+- Exporter: `--no_fast_jump/--no-no_fast_jump` (default ON) + `--ab_no_fast_jump` (shared-RNG "Edit" arm = uncapped,
+  for the by-ear A/B). `tools/check_export_defaults.py` still ALIGNED (v2-only lever, outside the v1 canonical block).
+
+**✅ BY-EAR PASSED (2026-07-05, `nofastjump_ab`, Equinox `b_trip=0.7` + `--ab_no_fast_jump`, shared RNG):** the capped
+(Challenge) and uncapped (Edit) arms read "basically the same" — the cap dulled NOTHING of the pink-note
+expressiveness — and the uncapped arm exposed exactly the pathology the cap targets: a **3-jump-jack in sub-16th
+space** ("just silly", physically unsteppable). Invisible when not needed, decisive when it is. Default stays ON.
+The trailing-note-only mechanism (leader jump survives, every sub-16th note after it → single; rolling backward gap,
+NOT f16-cell binning) matched the user's play-feel. Cap = the third and final v2 playability sibling
+(`max_jack_run` same-panel / `min_onset_gap` timing-floor / `no_fast_jump` two-foot-jump).
+
+## 5. Hold-stream gate — DEAD on the 48th grid (FIXED); the mirror of the `--style` density bug
+**By-ear (`pt_surprise_v2`, Watch Out Pt.2, `--style stream=high,freeze=high` g1.5):** user "**hold-stream gate is
+broken**." `freeze=high` floods holds + `stream=high` floods density → holds land IN streams → the pinned foot forces
+jacks (the exact defect `hold_stream_penalty` exists to suppress, `hold_in_stream_findings.md`).
+**Root cause (same class as §1):** the gate is `relu(dens − hold_stream_floor)` where `dens` = LOCAL ONSET
+FRAME-FRACTION (avg_pool over `win=hold_stream_win·f16` frames). A frame-fraction is NOT grid-invariant: a 16th
+stream is `dens=1.0` on the 16th grid (a note every frame) but only `~0.33` on the 48th grid (a note every 3 frames,
+same music). So `hold_stream_floor=0.45` (16th-calibrated) sits ABOVE every v2 stream density → the gate **never
+fires on v2**. The governor pass fixed `win` (a frame COUNT, scales with `f16`) but MISSED `dens` (a FRACTION, does
+not). **Confirmed on the artifact** (`scratchpad/holdgate_probe.py`): pre-fix `dens` maxes at **0.271** < 0.45 →
+gate fires on **0.0%** of 3360 frames; 6/27 holds sit in dense stream frames.
+**Fix (one line, `generate()`):** convert the measured fraction to 16th-native before the floor —
+`dens = (dens · subdiv/4).clamp(max=1.0)` — so the floor AND the penalty MAGNITUDE stay v1-calibrated; the `clamp(1.0)`
+is the 16th grid's natural frame-fraction ceiling (so a 24th/48th stream doesn't over-penalize past a 16th stream).
+subdiv=4 → `·1` + clamp no-op → **BYTE-IDENTICAL** (v1 smoke: Deja loin Hard 18 holds, densities match source). The
+DIRECTION mirror of §1 (`--style` scaled a 16th-native value DOWN to v2 frames; here we scale a v2 fraction UP to
+16th-native — same principle, keep the calibrated constant native, convert the other operand).
+- **Validated (Watch Out Pt.2, `--features highres_v2`):** total holds **28 → 19**; holds in dense/stream frames
+  (`dens16>0.45`) **6 → 3** (the deep-stream holds gone; the 3 left sit at the soft gate margin where the penalty is
+  ~0.08 — correct graduated behavior); **density HELD 0.110** (gate is type-only, onset-decoupled by construction).
+- Uses a HOLD-TYPE-AWARE metric, NOT the presence critic (hold-type-blind — `conditioning-mechanics §7` caveat).
+- **⚠️ METRIC CORRECTION (2026-07-06):** the "hold-heads in dense frames 6→3" number above is a PROXY (where a hold
+  OPENS) and made the fix look partial. The felt pathology is a **16th-run OVERLAPPING an open hold** (the free foot
+  streams while a foot is pinned). On that correct metric the fix is COMPLETE: `scratchpad/dump_holds.py` +
+  the run∩hold intersection show pure-16th-runs(len≥4)-in-holds **1→0**, and ZERO gap-3 free-foot pairs inside any
+  hold BODY in holdfix (holdbug retains the one at frames 2934–2952 ≈ measure 61). Lesson: match the metric to the
+  FELT property (a hold in a dense SECTION ≠ a stream trapped UNDER a hold).
+- **⚠️ PARTIAL fix — the defect PERSISTS (2026-07-06, by-ear + corrected analysis):** the A/B favored the fix
+  (user: "holdbug set was significantly worse") but the user ALSO confirmed a stream-in-hold REMAINS in holdfix
+  ("i played both and knew which was which… i played it"). **My first analysis was WRONG:** I filtered for PURE 16th
+  runs (gap-3) and threw away the actual defect — LONG holds (19–24×16th = **5–6 beats!**) with a sustained ONE-FOOT
+  stream (**8ths @148bpm ≈ 5 notes/s**) running the whole length. E.g. holdfix `D@2688–2745`: Down held ~5 beats while
+  the free foot streams U/R/L 8ths (run of 8). CORRECT metric = free-foot stream ≥4 notes @≤8th UNDER a hold:
+  **holdfix 2, holdbug 4** — the subdiv fix HALVED it, didn't solve it.
+- **ROOT CAUSE (deeper than the gate):** `hold_stream_penalty` gates only the hold-HEAD on onset density; it can't see
+  (a) the hold's DURATION (the automaton runs a hold until the next note on that panel → freeze=high + sparse
+  same-panel notes = 5–6 beat monster holds), nor (b) the free-foot stream that develops DURING the hold. **The real
+  fix = a FREE-FOOT-OVERLOAD gate:** while a hold is open, if the free foot sustains a stream, FORCE-CLOSE the hold
+  (biomechanically: you can't hold one foot AND stream with the other — the human releases the hold to stream). A
+  hold-DURATION cap is a simpler complementary guard against the 6-beat monsters. **IN PROGRESS — do NOT mark the
+  hold-stream bug fixed.**
+- Method note: this is the recurring "match the metric to the FELT property" trap — TWICE here (first the head-density
+  proxy, then filtering the stream to pure-16ths). Dump the RAW grid and read it; don't trust an aggregation that
+  encodes a too-narrow definition of the defect.
+
+### 5b. PARKED (2026-07-06) — the free-foot-stream-under-hold fix, designed + de-risked, NOT built
+User PARKED this as a detour (wants more playtest diversity first, not hacking). Captured so it's pick-up-ready.
+
+**Two failed levers ruled out (measured, not assumed):**
+1. **`hold_stream_floor` tweak** — sweep on Watch Out freeze=high (holds / free-foot-stream-under-hold):
+   `floor 0.45 pen 8` → 19 / 2 (canonical) · `0.25/8` → 6 / 0 · `0.20/12` → 2 / 0 · `0.15/16` → 0 / 0.
+   It DOES kill the defect but by DELETING HOLDS (19→6→0) — it fights `freeze=high` instead of serving it. The
+   head-gate can only remove holds, not thin the stream under them. Dead end for this defect.
+2. **Stamina governor (§8c) — ALREADY ON and losing.** ⚠️ CORRECTION: stamina is NOT off by default — the
+   `generate()` signature says `stamina_ceiling=None` but `CANONICAL_DECODE["stamina_ceiling"]=50.0` (+
+   `stamina_breathe=1.2`), so it ran at 50 in every Watch Out gen (a `ceiling=50` re-run reproduced the canonical
+   run exactly: 19 holds / 2 defect; `ceiling=25` didn't help either). WHY it loses: stamina thins the
+   **least-salient** onsets (`tired = onset & (p_onset ≤ onset_threshold + bump)`, `bump ≤ stamina_max_bump=0.45`);
+   the free-foot stream is REAL AUDIO (`p_onset ≈ 1 > tau+0.45`) so it SURVIVES. Confirms §8d's own "hold-aware
+   stamina near-vacuous for holds" caveat — it thins by SALIENCE, the defect needs thinning by POSITION.
+
+**THE FIX (user-approved direction, ~6 lines, NOT built):** extend the EXISTING hold-aware stamina — during an OPEN
+hold, lift the salience cap so the accumulated free-foot grind (`E_slow`, already hold-aware §8c) thins the stream
+even when it's loud. New param `stamina_hold_bump=None` (default None → skip → **byte-identical**):
+```
+bump = stamina_max_bump * tanh(excess/scale)                                   # (line ~687) salience-capped 0.45
+if stamina_hold_bump is not None:                                              # position-based hold-grind thinning
+    hb = stamina_hold_bump * tanh(excess/scale)                                # uncapped up to ~1.0
+    bump = where(held_start.any(1), maximum(bump, hb), bump)                   # only WHILE a hold is open
+```
+`onset_threshold` IS the per-song tau (`onset = p > onset_threshold`, line 535), so `bump→1.0` can drop even a
+`p≈1` note. SELF-LIMITING: fewer notes → less grind → `E_slow` falls → bump falls → equilibrium at a sustainable
+free-foot rate (thins the stream, does NOT delete the hold). Near-inert where holds aren't grinds (`E_slow` low →
+`excess≈0`), so v1 charts ~unaffected. NEXT: test `stamina_hold_bump=1.0` on Watch Out (measure defect↓, holds held,
+density), tune, set the CANONICAL default, by-ear. Correct metric = `scratchpad/measure_defect.py` (free-foot stream
+≥4 @≤8th under a hold). Skill line FIXED this session: `conditioning-mechanics §8c` no longer says "stamina off by
+default" (that error burned this session).

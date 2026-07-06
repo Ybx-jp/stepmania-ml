@@ -8,6 +8,74 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-06 — gc_similar_bpm20 recreated on v2: b_trip=0.7 reads sub-16th-heavy toward song ends → test 1.0
+
+**WHAT WAS PLAYED** — `gc_similar_bpm20_v2` (the v1 GC-similar-BPM set recreated on the v2 48th-grid model
+`gen_motif_v2_48th_cont`, same cranked conditioning `chaos=0.9,voltage=0.7,air=0.5,freeze=0.5` g1.5 `--hardest`,
++ `b_trip=0.7` triplet band, no-fast-jump default-on). NOTE: the built-in critic reads "Easy" and gen_dens ≈0.13 —
+both grid-artifacts (the `--style` density fix correctly converts the 16th-grid 0.40 target to the 48th-grid
+fraction 0.13 = same ~1.6 notes/beat; the v1-grid critic miscounts the finer grid as sparse). Trust feet, not critic.
+
+**RAW FEEDBACK** — "tends to release more **sub16 notes towards the end**. i wonder if 0.7 is a touch too low, let's
+have a look at 1.0 as well for b_trip."
+
+**COMMENTARY / HYPOTHESIS (H-triplet-commit)** — `b_trip` is a "knee not node" COMMITMENT lever on the triplet
+positions (t%12∈{2,4,8,10}); the whole point of the band (footspeed §2/§3) is to resolve the duple↔triplet HEDGE. At
+0.7 the model may still be under-committing → hedging notes onto adjacent 48ths (pink sub-16ths) instead of clean
+12th-triplets (green). Raising to 1.0 should shift 48th→12th (cleaner commitment), predicting FEWER scattered sub-16ths.
+The "towards the end" concentration is likely song structure (fills/climaxes late — H5's arc) where triplet content
+lives, amplified by the band. Prediction to check offline: 48th-occupancy DOWN, 12th-occupancy UP, at 1.0 vs 0.7.
+
+**ACTION / NEXT** — [ ] generate `gc_similar_bpm20_v2_btrip10` (b_trip=1.0, same set) for a 0.7-vs-1.0 A/B (queued
+behind the full-20 0.7 run). [ ] measure 48th vs 12th occupancy + front/back-half split to back the ear. [ ] if 1.0
+wins, revisit `b_trip=1.0` as the v2 default (currently 0.7 is the candidate).
+
+---
+
+## 2026-07-06 — HOLD-STREAM SUBDIV FIX: helped but DID NOT SOLVE (long holds w/ one-foot streams remain)
+
+**WHAT WAS PLAYED** — Watch Out Pt.2 (v2 48th grid, `gen_motif_v2_48th_cont`, `--style stream=high,freeze=high`
+g1.5, 148 bpm), an A/B of two installs: **`watchout_holdbug`** (the broken gate — the `dens` frame-fraction was
+16th-native so `hold_stream_penalty` never fired on v2) vs **`watchout_holdfix`** (the subdiv fix `dens*=subdiv/4`,
+`e964b1f`).
+
+**RAW FEEDBACK** — "no holdfix did not work. there was a **literal 16th stream in at least 1 hold**." … "to be fair,
+the **holdbug set was significantly worse**." … "no dude **i played both and knew which was which** … i played it."
+
+**COMMENTARY / CORRECTED DIAGNOSIS** — the fix HELPED (holdbug worse) but the defect PERSISTS, and I twice mis-analyzed
+it. The real pathology: the model opens **LONG holds (19–24×16th = 5–6 BEATS)** and the free foot then carries a
+**sustained one-foot stream (8ths @148bpm ≈ 5 notes/s)** for the whole hold — e.g. `D@2688–2745` (Down held ~5 beats
+while the free foot streams U/R/L, run of 8). I first filtered for PURE 16th runs (gap-3) and threw these 8th-note
+streams away, wrongly reporting holdfix "clean." Correct metric = free-foot stream ≥4 notes @≤8th UNDER a hold:
+**holdfix 2, holdbug 4** (halved, not solved). Root: `hold_stream_penalty` gates only the hold-HEAD on density — blind
+to hold DURATION and to the stream that develops DURING the hold. Ties to [[hold-in-stream-fix]] (the v1 defect) and
+the free-foot-overload gate long noted there as the "robust successor."
+
+**ACTION / NEXT** — [ ] build the **free-foot-overload gate**: while a hold is open, if the free foot sustains a stream,
+FORCE-CLOSE the hold (release the pinned foot so both feet stream). [ ] consider a hold-DURATION cap (kills 6-beat
+monster holds). [ ] re-A/B on Watch Out. Findings `footspeed_floor_findings.md §5`. Deploy swap BLOCKED on this.
+
+---
+
+## 2026-07-05 (session 2 cont.) — NO-FAST-JUMP CAP: by-ear A/B PASSED
+
+**WHAT WAS PLAYED** — `nofastjump_ab` (v2, 48th grid, `gen_motif_v2_48th_cont`, Equinox `b_trip=0.7`), a shared-RNG
+A/B via `--ab_no_fast_jump`: **Challenge = capped** (`no_fast_jump=True`, default) vs **Edit = uncapped**.
+
+**RAW FEEDBACK** — "the songs were basically the same as far as i could tell, but the uncapped one had a
+**3-jump-jack in sub16 space**, which is just silly, so i'd say it worked." The mechanism explanation "grooves with
+my vibes." → PASS.
+
+**COMMENTARY** — the textbook outcome for a hard playability cap: **invisible when not needed** (capped ≈ uncapped
+feel → it dulled none of the pink-note/triplet expressiveness), **decisive when it is** (the uncapped arm surfaced
+the exact pathology — three consecutive jumps at 24th spacing, physically unsteppable). Confirms the causal /
+trailing-note-only design (leader jump survives, every sub-16th note after it → single) reads right by ear. Cap =
+the third v2 playability sibling (`max_jack_run` / `min_onset_gap` / `no_fast_jump`). Default stays ON.
+
+**ACTION** — banked. NEXT = the `freeze=high` v2 hold-stream-gate bug (Watch Out), then the deploy swap.
+
+---
+
 ## 2026-07-05 (session 2) — v2 DECODE-PLAYABILITY pass: governor recalib + floor + triplet band = a BY-EAR WIN
 
 **WHAT WAS PLAYED** — five v2 (48th-grid, `gen_motif_v2_48th_cont`) sets. Verdicts:
