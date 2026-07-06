@@ -205,8 +205,11 @@ stream = 1.0 on the 16th grid but ~0.33 on v2), so the 16th-calibrated `hold_str
 was DEAD on v2, holds flooded streams ("hold-stream gate is broken" on Watch Out `freeze=high`). FIX: convert to
 16th-native before the floor — `dens=(dens·subdiv/4).clamp(max=1.0)` (floor + penalty magnitude stay v1-calibrated;
 clamp = the 16th-grid fraction ceiling). subdiv=4 byte-identical. The governor pass fixed `win` (a frame COUNT) but
-missed `dens` (a FRACTION — doesn't scale with `f16`); same class as the `--style` density bug. Confirmed offline
-(holds-in-dense-frames 6→3, total 28→19, density held) with the HOLD-TYPE metric (NOT the presence critic). See
+missed `dens` (a FRACTION — doesn't scale with `f16`); same class as the `--style` density bug. **PARTIAL fix only
+(A/B: broken was "significantly worse" but the defect PERSISTS):** the gate suppresses the hold-HEAD on onset density,
+but the felt pathology is a LONG hold (5–6 beats) with a sustained ONE-FOOT stream (8ths @148bpm) running underneath —
+not addressed by head-gating. Correct metric = free-foot stream ≥4 notes @≤8th UNDER a hold: holdfix 2, holdbug 4.
+The real fix is a FREE-FOOT-OVERLOAD gate (force-close the hold when the free foot streams) — IN PROGRESS. See
 `notes/footspeed_floor_findings.md §5`.
 **Metric caveat (2026-07-02):** the realism critic reads the BINARY note-PRESENCE grid (tap/hold/tail/roll all →
 "present"), so this knob is PRESENCE-BLIND to it — it changes tap-vs-hold type + a downstream same-panel-repeat jack,
@@ -321,7 +324,12 @@ conditioning owns where in the playable zone (NO lower bound — would fight the
 onto the human distribution (maxJackRun 6.2→4.1, real 3.5) with density held.
 
 ### 8c. Per-region STAMINA (Stage 2, `stamina_ceiling`) + breathing ARC (Stage 3, `stamina_breathe`) — DENSITY
-Needs `fatigue_penalty` on (cost signal) and `bpm`; off by default (`stamina_ceiling=None`). The onset DECISION is
+Needs `fatigue_penalty` on (cost signal) and `bpm`. ⚠️ **`generate()`'s SIGNATURE default is `stamina_ceiling=None`
+(off), but the DEPLOYED/CANONICAL default is ON: `CANONICAL_DECODE["stamina_ceiling"]=50.0` + `stamina_breathe=1.2`
+(`decode_defaults.py`).** So every `export_typed_samples.py` / deployed generation runs stamina ON at ceiling 50 — do
+NOT say "stamina is off by default" (it burned a session: a Watch Out freeze=high defect was wrongly blamed on stamina
+being off; it was on at 50 the whole time and thins by SALIENCE, so it can't remove an audio-supported free-foot
+stream — §8d's "near-vacuous for holds" caveat). The onset DECISION is
 now made IN the AR loop (NOT precomputed) — a probe replicating onset must apply this per-frame or set stamina off.
 `p_onset = sigmoid(guided onset logits)` is precomputed (all CFG/phase offsets baked in); per frame the EFFECTIVE
 threshold is raised by a slow workload accumulator, shedding the LEAST-salient onsets. CEILING only (suppresses,

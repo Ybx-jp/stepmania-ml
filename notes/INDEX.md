@@ -314,6 +314,12 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   (`min_onset_gap`) → triplet band (`onset_phase_calib` `b_trip`) → the `--style` density fix; + the diagnosed
   **no-fast-jump** cap (NEXT). `manifold_radar_subdiv_findings.md` — why the manifold refit is DEFERRED (retrain-gated;
   a refit would de-sync from the tpb=4-trained model) + the subdiv-aware groove-radar chaos fix.
+- **UPDATE (2026-07-06) — v2 playability FINISHED + the SHIP pivot.** `footspeed_floor_findings.md` §4 = **no-fast-jump
+  cap** (`df39c3c`, by-ear PASSED), §5 = **hold-stream subdiv fix** (`e964b1f`, PARTIAL — HALVED not solved), §5b =
+  the PARKED real fix (position-based `stamina_hold_bump`; the defect = 5–6 beat holds with a one-foot stream under).
+  Twin cautions: match the metric to the FELT property (mis-analyzed twice), and stamina is ON canonically (=50, not
+  off). b_trip 0.7-vs-1.0 = song-dependent/inconclusive → **PROJECT IN SHIP MODE (cut v1.0.0; memory
+  [[ship-mode-park-research]]); research PARKED.**
 - **UPDATE (2026-07-05c) — v2 DECODE-PLAYABILITY PASS DONE + BY-EAR WIN.** Branch `feat/governor-subdiv-recalib`, 4
   commits (all subdiv=4 byte-identical): governor recalib (`frame_hz=BPM·subdiv/60`+`f16` scaling; maxJackRun 3→2) →
   footspeed floor (kills 1-frame 48th flams, keeps triplet-16ths) + `--style` density fix (×4/subdiv) → triplet band

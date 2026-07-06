@@ -113,6 +113,60 @@ DIRECTION mirror of §1 (`--style` scaled a 16th-native value DOWN to v2 frames;
 - **Validated (Watch Out Pt.2, `--features highres_v2`):** total holds **28 → 19**; holds in dense/stream frames
   (`dens16>0.45`) **6 → 3** (the deep-stream holds gone; the 3 left sit at the soft gate margin where the penalty is
   ~0.08 — correct graduated behavior); **density HELD 0.110** (gate is type-only, onset-decoupled by construction).
-- Uses the HOLD-TYPE-AWARE metric (hold-heads in dense frames), NOT the presence critic (which is hold-type-blind —
-  `conditioning-mechanics §7` caveat). **Awaiting by-ear:** installed `~/sm-generated/watchout_holdfix` (fixed) vs
-  `~/sm-generated/watchout_holdbug` (broken; same seed/settings → a paired A/B, only the one-line fix differs).
+- Uses a HOLD-TYPE-AWARE metric, NOT the presence critic (hold-type-blind — `conditioning-mechanics §7` caveat).
+- **⚠️ METRIC CORRECTION (2026-07-06):** the "hold-heads in dense frames 6→3" number above is a PROXY (where a hold
+  OPENS) and made the fix look partial. The felt pathology is a **16th-run OVERLAPPING an open hold** (the free foot
+  streams while a foot is pinned). On that correct metric the fix is COMPLETE: `scratchpad/dump_holds.py` +
+  the run∩hold intersection show pure-16th-runs(len≥4)-in-holds **1→0**, and ZERO gap-3 free-foot pairs inside any
+  hold BODY in holdfix (holdbug retains the one at frames 2934–2952 ≈ measure 61). Lesson: match the metric to the
+  FELT property (a hold in a dense SECTION ≠ a stream trapped UNDER a hold).
+- **⚠️ PARTIAL fix — the defect PERSISTS (2026-07-06, by-ear + corrected analysis):** the A/B favored the fix
+  (user: "holdbug set was significantly worse") but the user ALSO confirmed a stream-in-hold REMAINS in holdfix
+  ("i played both and knew which was which… i played it"). **My first analysis was WRONG:** I filtered for PURE 16th
+  runs (gap-3) and threw away the actual defect — LONG holds (19–24×16th = **5–6 beats!**) with a sustained ONE-FOOT
+  stream (**8ths @148bpm ≈ 5 notes/s**) running the whole length. E.g. holdfix `D@2688–2745`: Down held ~5 beats while
+  the free foot streams U/R/L 8ths (run of 8). CORRECT metric = free-foot stream ≥4 notes @≤8th UNDER a hold:
+  **holdfix 2, holdbug 4** — the subdiv fix HALVED it, didn't solve it.
+- **ROOT CAUSE (deeper than the gate):** `hold_stream_penalty` gates only the hold-HEAD on onset density; it can't see
+  (a) the hold's DURATION (the automaton runs a hold until the next note on that panel → freeze=high + sparse
+  same-panel notes = 5–6 beat monster holds), nor (b) the free-foot stream that develops DURING the hold. **The real
+  fix = a FREE-FOOT-OVERLOAD gate:** while a hold is open, if the free foot sustains a stream, FORCE-CLOSE the hold
+  (biomechanically: you can't hold one foot AND stream with the other — the human releases the hold to stream). A
+  hold-DURATION cap is a simpler complementary guard against the 6-beat monsters. **IN PROGRESS — do NOT mark the
+  hold-stream bug fixed.**
+- Method note: this is the recurring "match the metric to the FELT property" trap — TWICE here (first the head-density
+  proxy, then filtering the stream to pure-16ths). Dump the RAW grid and read it; don't trust an aggregation that
+  encodes a too-narrow definition of the defect.
+
+### 5b. PARKED (2026-07-06) — the free-foot-stream-under-hold fix, designed + de-risked, NOT built
+User PARKED this as a detour (wants more playtest diversity first, not hacking). Captured so it's pick-up-ready.
+
+**Two failed levers ruled out (measured, not assumed):**
+1. **`hold_stream_floor` tweak** — sweep on Watch Out freeze=high (holds / free-foot-stream-under-hold):
+   `floor 0.45 pen 8` → 19 / 2 (canonical) · `0.25/8` → 6 / 0 · `0.20/12` → 2 / 0 · `0.15/16` → 0 / 0.
+   It DOES kill the defect but by DELETING HOLDS (19→6→0) — it fights `freeze=high` instead of serving it. The
+   head-gate can only remove holds, not thin the stream under them. Dead end for this defect.
+2. **Stamina governor (§8c) — ALREADY ON and losing.** ⚠️ CORRECTION: stamina is NOT off by default — the
+   `generate()` signature says `stamina_ceiling=None` but `CANONICAL_DECODE["stamina_ceiling"]=50.0` (+
+   `stamina_breathe=1.2`), so it ran at 50 in every Watch Out gen (a `ceiling=50` re-run reproduced the canonical
+   run exactly: 19 holds / 2 defect; `ceiling=25` didn't help either). WHY it loses: stamina thins the
+   **least-salient** onsets (`tired = onset & (p_onset ≤ onset_threshold + bump)`, `bump ≤ stamina_max_bump=0.45`);
+   the free-foot stream is REAL AUDIO (`p_onset ≈ 1 > tau+0.45`) so it SURVIVES. Confirms §8d's own "hold-aware
+   stamina near-vacuous for holds" caveat — it thins by SALIENCE, the defect needs thinning by POSITION.
+
+**THE FIX (user-approved direction, ~6 lines, NOT built):** extend the EXISTING hold-aware stamina — during an OPEN
+hold, lift the salience cap so the accumulated free-foot grind (`E_slow`, already hold-aware §8c) thins the stream
+even when it's loud. New param `stamina_hold_bump=None` (default None → skip → **byte-identical**):
+```
+bump = stamina_max_bump * tanh(excess/scale)                                   # (line ~687) salience-capped 0.45
+if stamina_hold_bump is not None:                                              # position-based hold-grind thinning
+    hb = stamina_hold_bump * tanh(excess/scale)                                # uncapped up to ~1.0
+    bump = where(held_start.any(1), maximum(bump, hb), bump)                   # only WHILE a hold is open
+```
+`onset_threshold` IS the per-song tau (`onset = p > onset_threshold`, line 535), so `bump→1.0` can drop even a
+`p≈1` note. SELF-LIMITING: fewer notes → less grind → `E_slow` falls → bump falls → equilibrium at a sustainable
+free-foot rate (thins the stream, does NOT delete the hold). Near-inert where holds aren't grinds (`E_slow` low →
+`excess≈0`), so v1 charts ~unaffected. NEXT: test `stamina_hold_bump=1.0` on Watch Out (measure defect↓, holds held,
+density), tune, set the CANONICAL default, by-ear. Correct metric = `scratchpad/measure_defect.py` (free-foot stream
+≥4 @≤8th under a hold). Skill line FIXED this session: `conditioning-mechanics §8c` no longer says "stamina off by
+default" (that error burned this session).
