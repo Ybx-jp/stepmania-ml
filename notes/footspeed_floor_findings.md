@@ -92,3 +92,27 @@ space** ("just silly", physically unsteppable). Invisible when not needed, decis
 The trailing-note-only mechanism (leader jump survives, every sub-16th note after it → single; rolling backward gap,
 NOT f16-cell binning) matched the user's play-feel. Cap = the third and final v2 playability sibling
 (`max_jack_run` same-panel / `min_onset_gap` timing-floor / `no_fast_jump` two-foot-jump).
+
+## 5. Hold-stream gate — DEAD on the 48th grid (FIXED); the mirror of the `--style` density bug
+**By-ear (`pt_surprise_v2`, Watch Out Pt.2, `--style stream=high,freeze=high` g1.5):** user "**hold-stream gate is
+broken**." `freeze=high` floods holds + `stream=high` floods density → holds land IN streams → the pinned foot forces
+jacks (the exact defect `hold_stream_penalty` exists to suppress, `hold_in_stream_findings.md`).
+**Root cause (same class as §1):** the gate is `relu(dens − hold_stream_floor)` where `dens` = LOCAL ONSET
+FRAME-FRACTION (avg_pool over `win=hold_stream_win·f16` frames). A frame-fraction is NOT grid-invariant: a 16th
+stream is `dens=1.0` on the 16th grid (a note every frame) but only `~0.33` on the 48th grid (a note every 3 frames,
+same music). So `hold_stream_floor=0.45` (16th-calibrated) sits ABOVE every v2 stream density → the gate **never
+fires on v2**. The governor pass fixed `win` (a frame COUNT, scales with `f16`) but MISSED `dens` (a FRACTION, does
+not). **Confirmed on the artifact** (`scratchpad/holdgate_probe.py`): pre-fix `dens` maxes at **0.271** < 0.45 →
+gate fires on **0.0%** of 3360 frames; 6/27 holds sit in dense stream frames.
+**Fix (one line, `generate()`):** convert the measured fraction to 16th-native before the floor —
+`dens = (dens · subdiv/4).clamp(max=1.0)` — so the floor AND the penalty MAGNITUDE stay v1-calibrated; the `clamp(1.0)`
+is the 16th grid's natural frame-fraction ceiling (so a 24th/48th stream doesn't over-penalize past a 16th stream).
+subdiv=4 → `·1` + clamp no-op → **BYTE-IDENTICAL** (v1 smoke: Deja loin Hard 18 holds, densities match source). The
+DIRECTION mirror of §1 (`--style` scaled a 16th-native value DOWN to v2 frames; here we scale a v2 fraction UP to
+16th-native — same principle, keep the calibrated constant native, convert the other operand).
+- **Validated (Watch Out Pt.2, `--features highres_v2`):** total holds **28 → 19**; holds in dense/stream frames
+  (`dens16>0.45`) **6 → 3** (the deep-stream holds gone; the 3 left sit at the soft gate margin where the penalty is
+  ~0.08 — correct graduated behavior); **density HELD 0.110** (gate is type-only, onset-decoupled by construction).
+- Uses the HOLD-TYPE-AWARE metric (hold-heads in dense frames), NOT the presence critic (which is hold-type-blind —
+  `conditioning-mechanics §7` caveat). **Awaiting by-ear:** installed `~/sm-generated/watchout_holdfix` (fixed) vs
+  `~/sm-generated/watchout_holdbug` (broken; same seed/settings → a paired A/B, only the one-line fix differs).

@@ -1,4 +1,4 @@
-# HANDOFF — data-layer-v2 DECODE-PLAYABILITY pass done + no-fast-jump cap SHIPPED. Next = freeze=high hold-stream bug.
+# HANDOFF — data-layer-v2 DECODE-PLAYABILITY done: no-fast-jump cap + hold-stream subdiv fix SHIPPED. Next = deploy swap.
 
 **Written 2026-07-05 (session 2) for the next Claude.** The v2 48th-grid model was a deploy candidate but its
 decode governors were miscalibrated on the finer grid. This session **recalibrated the governors, added a footspeed
@@ -51,20 +51,24 @@ next action, and a second (hold-stream gate on freeze=high) freshly reported.
    single, KEEPS the onset. Causal/backward-looking (trailing note only; leader jump survives; rolling gap not
    f16-cell binning). v1 byte-identical (`f16=1`). Exporter `--no_fast_jump/--no-no_fast_jump` + `--ab_no_fast_jump`.
    **BY-EAR PASSED** (`nofastjump_ab`, Equinox: capped ≈ uncapped feel; uncapped had a "silly" 3-jump-jack in sub-16th
-   space). Not yet committed → committing with this doc refresh (verify via `git log`).
-2. **★ NEXT: hold-stream gate on freeze=high v2** (`playtest_log.md`): user "hold-stream gate is broken" on *Watch Out*
-   (`--style stream=high,freeze=high`). `freeze=high` floods holds + `stream=high` floods density; the recalibrated
-   `hold_stream_win·f16` gate mishandles the combo on the 48th grid. Needs its own inspection (dump the chart first).
-3. **Deploy swap** (after 1–2 land + by-ear): coordinated `conditioning-mechanics §6` + `generation-defaults §0`
+   space). Committed `df39c3c` (verify via `git log`).
+2. **✅ FIXED (offline-confirmed, by-ear PENDING) — hold-stream gate DEAD on the 48th grid** (`footspeed_floor_findings.md
+   §5`; `conditioning-mechanics §7`). Root: the gate compares a frame-FRACTION `dens` to `hold_stream_floor=0.45`, but a
+   fraction shrinks ~`subdiv/4`× on the finer grid (a 16th stream = 1.0 on v1 but ~0.33 on v2) → the floor never fired →
+   holds flooded streams (Watch Out `freeze=high` "gate broken"). The governor pass fixed `win` (a COUNT) but missed
+   `dens` (a FRACTION). FIX (one line): `dens=(dens·subdiv/4).clamp(max=1.0)` before the floor — 16th-native, v1
+   byte-identical. Confirmed: holds-in-dense-frames 6→3, total 28→19, density held 0.110. **BY-EAR:** `~/sm-generated/
+   watchout_holdfix` (fixed) vs `watchout_holdbug` (broken; same seed → paired A/B).
+3. **★ NEXT: Deploy swap** (after item 2 by-ear lands): coordinated `conditioning-mechanics §6` + `generation-defaults §0`
    version bump → checkpoint `gen_motif_v2_48th_cont` + default `--features highres_v2`. Consider making `b_trip=0.7`
-   a v2 default (it WON by ear) — but only after no-fast-jump makes the triplet set fully playable.
+   a v2 default (it WON by ear). Both v2 playability holes are now closed (no-fast-jump + hold-stream).
 4. **Parked:** the manifold refit + groove-radar retrain (bundled, item 5 above); the seq-onset retrain
    ([[good-settings-region]], separate).
 
 ## AWAITING USER
-- **Nothing pending a verdict.** This session's playtests are logged (`playtest_log.md` top). The no-fast-jump re-A/B
-  will be the next user touchpoint. pt_chaos_v2 (Grand Chariot, Take It) was the WIN; pt_surprise_v2 Watch Out flagged
-  the hold-stream bug; Giudecca was an audio/song non-issue.
+- **The hold-stream fix by-ear** (item 2): `~/sm-generated/watchout_holdfix` (fixed) vs `watchout_holdbug` (broken,
+  same seed) — does `freeze=high` now keep holds OUT of the streams? The no-fast-jump cap already PASSED by ear
+  (`nofastjump_ab`). Once the hold-stream fix lands by ear, the only remaining item is the deploy swap (item 3).
 
 ## CANONICAL EXPORT DEFAULTS (the DEPLOYED v1 config — VALIDATED by `tools/check_export_defaults.py`; UNCHANGED by v2)
 The bare `export_typed_samples.py` run reproduces what the user plays. These MUST equal the script's argparse

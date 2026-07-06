@@ -152,8 +152,9 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
     the triplet tax, zero degradation. NEW v2 decode levers (session 2, all v1-no-op): the FOOTSPEED FLOOR
     (`min_onset_gap`, §6 below) + the TRIPLET BAND (`onset_phase_calib` 3rd element, §6) — both BY-EAR WON on
     pt_chaos_v2 ("brand new note colors, flowy streams, conditioning effective"). ✅ NO-FAST-JUMP CAP now BUILT +
-    BY-EAR PASSED (`no_fast_jump`, §8d) — closes the sub-16th two-foot-jump hole. ⚠️ STILL OPEN: the hold-stream gate
-    misbehaves on `freeze=high` v2. See `notes/footspeed_floor_findings.md`, `notes/data_layer_v2_scope.md`, lineage
+    BY-EAR PASSED (`no_fast_jump`, §8d) — closes the sub-16th two-foot-jump hole. The hold-stream gate `freeze=high` v2
+    bug is FIXED too (§7 subdiv fix, offline-confirmed, by-ear pending). See `notes/footspeed_floor_findings.md`,
+    `notes/data_layer_v2_scope.md`, lineage
     `meter-grid-arc.md`, memory [[meter-4-4-grid]].
 - Decode phase levers (all in `generate()`): `onset_phase_calib=(b8,b16[,b_trip])` adds logit offsets to 8th/16th
   (and OPTIONALLY triplet) frames BEFORE tau (the caller's tau MUST use the same offset) → the COUNT floats with audio
@@ -199,6 +200,14 @@ section stays a two-foot stream. DECOUPLED from onset/tau (changes tap-vs-hold O
 `relu(·−floor)` gate is 0 below stream density → SPARSE musical holds untouched by construction (a raw-density gate
 over-cut them — the v1 "too blunt" playtest). Floor grounded on the density-at-holds distribution (expressive holds
 ≤0.5, pathological grind 0.69). It's a density PROXY — a free-foot-overload gate (queued) is the robust successor.
+**⚠️ v2 SUBDIV FIX (2026-07-05):** `dens` is a frame-FRACTION, which shrinks ~`subdiv/4`× on the 48th grid (a 16th
+stream = 1.0 on the 16th grid but ~0.33 on v2), so the 16th-calibrated `hold_stream_floor=0.45` NEVER fired → the gate
+was DEAD on v2, holds flooded streams ("hold-stream gate is broken" on Watch Out `freeze=high`). FIX: convert to
+16th-native before the floor — `dens=(dens·subdiv/4).clamp(max=1.0)` (floor + penalty magnitude stay v1-calibrated;
+clamp = the 16th-grid fraction ceiling). subdiv=4 byte-identical. The governor pass fixed `win` (a frame COUNT) but
+missed `dens` (a FRACTION — doesn't scale with `f16`); same class as the `--style` density bug. Confirmed offline
+(holds-in-dense-frames 6→3, total 28→19, density held) with the HOLD-TYPE metric (NOT the presence critic). See
+`notes/footspeed_floor_findings.md §5`.
 **Metric caveat (2026-07-02):** the realism critic reads the BINARY note-PRESENCE grid (tap/hold/tail/roll all →
 "present"), so this knob is PRESENCE-BLIND to it — it changes tap-vs-hold type + a downstream same-panel-repeat jack,
 neither of which moves the grid much. Do NOT validate `hold_stream_penalty` on the presence critic (a rerun of

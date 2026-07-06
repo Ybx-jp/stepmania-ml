@@ -582,7 +582,13 @@ class LayeredTypedChartGenerator(nn.Module):
             win = max(1, int(hold_stream_win) * f16)                            # frames -> subdiv-scaled (measure-ish span)
             of = onset.float().unsqueeze(1)                                      # (B,1,T)
             sg = torch.nn.functional.avg_pool1d(of, win, stride=1, padding=win // 2, count_include_pad=False)
-            dens = sg.squeeze(1)[:, :T]                                          # (B,T) local onset fraction in [0,1]
+            dens = sg.squeeze(1)[:, :T]                                          # (B,T) local onset fraction (this grid's frames)
+            # SUBDIV FIX (v2 48th grid): dens is a frame-FRACTION, which shrinks ~subdiv/4x on the finer grid (a 16th
+            # stream = 1.0 dense on the 16th grid but ~0.33 on the 48th grid), so the 16th-calibrated hold_stream_floor
+            # (0.45) never fires -> the gate is DEAD on v2 and holds flood streams. Convert dens to a 16th-native
+            # fraction so the floor + penalty MAGNITUDE stay v1-calibrated; clamp at 1.0 = the 16th grid's natural
+            # frame-fraction ceiling. subdiv=4 -> *1, clamp no-op -> BYTE-IDENTICAL. (Mirror of the --style density fix.)
+            dens = (dens * (subdiv / 4.0)).clamp(max=1.0)
             stream_gate = (dens - hold_stream_floor).clamp(min=0.0)             # 0 in sparse, ramps up in streams
 
         caches = [_LayerCache(layer, memory) for layer in self.decoder.layers]
