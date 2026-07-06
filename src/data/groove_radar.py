@@ -80,21 +80,23 @@ class GrooveRadarCalculator:
 
     def _build_color_values(self) -> Dict[int, float]:
         """
-        Build note color values based on beat position.
+        Build note color values by beat position, for ANY `timesteps_per_beat` (subdiv-aware).
 
-        DDR assigns color values based on note quantization:
-        - 4th notes (red): 0
-        - 8th notes (blue): 0.5
-        - 16th notes (yellow): 1.0
-        - 12th/24th/32nd/etc (green): 1.25
+        DDR colors a note by its quantization DENOMINATOR (reduce position k/subdiv to lowest terms):
+        - 4th notes  (red,    d=1): 0.0
+        - 8th notes  (blue,   d=2): 0.5
+        - 16th notes (yellow, d=4): 1.0
+        - 12th/24th/48th/etc (green, d in {3,6,8,12,...} = TRIPLET & finer): 1.25
+
+        At subdiv=4 this is BYTE-IDENTICAL to the old hard-coded {0:0, 1:1, 2:0.5, 3:1} (triplets aren't
+        representable on the 16th grid). At subdiv=12 (data-layer-v2 48th grid) the triplet positions {2,4,8,10}
+        and the 48th positions {1,5,7,11} finally get their 1.25 green instead of defaulting to 1.0 — this is
+        the fix for chaos UNDER-measuring triplet songs (a floored triplet used to read as a 16th).
         """
-        # For 4 timesteps per beat (16th note resolution):
-        return {
-            0: 0.0,   # Quarter note (on beat) - red
-            1: 1.0,   # 16th note - yellow
-            2: 0.5,   # 8th note - blue
-            3: 1.0,   # 16th note - yellow
-        }
+        from math import gcd
+        sub = int(self.timesteps_per_beat)
+        by_denom = {1: 0.0, 2: 0.5, 4: 1.0}   # red / blue / yellow; else -> green (triplet & finer)
+        return {k: (0.0 if k == 0 else by_denom.get(sub // gcd(k, sub), 1.25)) for k in range(sub)}
 
     def calculate(self,
                   chart_tensor: np.ndarray,

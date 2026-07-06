@@ -101,7 +101,16 @@ class StepManiaDataset(Dataset):
         self.parser = parser if parser is not None else StepManiaParser()
         self.feature_extractor = (feature_extractor if feature_extractor is not None
                                 else AudioFeatureExtractor())
-        self.groove_radar_calculator = GrooveRadarCalculator()
+        # subdiv-aware: match the calculator's grid to the parser's (v1=4 -> byte-identical; v2=12 -> the fixed
+        # triplet-green color map fires, so chaos stops under-measuring triplets). See groove_radar._build_color_values.
+        # ⚠️ RETRAIN-GATED (2026-07-05): the EXISTING caches (v1 samples_v3 AND v2 samples_v3_48th) were built with
+        # the OLD hard-coded tpb=4 calculator, so the DEPLOYED v1 model and the v2 deploy-candidate both trained on
+        # tpb=4 radar. This fix changes v2 (tpb=12) radar -> it takes effect only on a v2 cache REBUILD + model
+        # RETRAIN. Do NOT rebuild the v2 cache and reuse the current v2 checkpoint, or the manifold/conditioning
+        # radar will mismatch what the model learned. The manifold refit is bundled with that retrain (NOT a standalone
+        # step); until then keep the v1-fit manifold. See notes/manifold_radar_subdiv_findings.md.
+        self.groove_radar_calculator = GrooveRadarCalculator(
+            timesteps_per_beat=getattr(self.parser, 'timesteps_per_beat', 4))
 
         # Create sample metadata (like load_and_correct_labels in notebook)
         self.valid_samples = self._create_sample_metadata()
