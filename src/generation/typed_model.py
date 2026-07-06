@@ -384,7 +384,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  repetition_penalty=1.0, pattern_bias=None, no_crossovers=False, radar=None,
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
-                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4, max_jack_run=None,
+                 boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4,
+                 min_onset_gap=None, max_jack_run=None,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
                  footswitch_pen=4.0, fatigue_cap=30.0, footswitch=True,
@@ -477,6 +478,7 @@ class LayeredTypedChartGenerator(nn.Module):
         do_cfg = (guidance_scale != 1.0) and (radar is not None or style is not None or motif is not None or figure is not None)  # amplify radar/style/motif/figure conditioning
         if onset_override is not None:
             onset = onset_override.bool().to(device)
+            p = None                                          # no onset probs under override (footspeed-floor skipped)
             p_onset = None                                    # no probs under override -> stamina gate skipped
         else:
             ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif)
@@ -545,6 +547,29 @@ class LayeredTypedChartGenerator(nn.Module):
         #   adjacency (since_onset, free_gap bands, jack_max_gap, smoothing windows).
         # At subdiv=4 (f16=1, subdiv=4) every governor below is byte-identical to the pre-v2 hard-coded math.
         f16 = max(1, subdiv // 4)                                             # frames per 16th (gap/window scale)
+
+        # FOOTSPEED FLOOR (data-layer-v2): a decode-time minimum inter-onset SPACING — the timing-domain,
+        # panel-agnostic sibling of max_jack_run. The 48th grid made SUB-16TH spacings reachable, so the onset head
+        # can place a duple-16th (t%12==3) and an audio-driven TRIPLET (t%12 in {2,4}) one frame (34ms @145bpm =
+        # 29 notes/s) apart — an unsteppable flam, often a max-distance move (D->U). max_jack_run misses it (it caps
+        # SAME-panel runs; these are cross-panel), fatigue/stamina are per-foot/too-slow for a 2-note burst. Enforce a
+        # min pairwise gap of `min_onset_gap` FRAMES on the precomputed (audio-only, non-causal) onset tensor via NMS:
+        # in each too-close pair keep the higher-p_onset note (the one the audio supports), drop the weaker hedge note.
+        # Default: 2 frames on the 48th grid (forbids 1-frame 48ths, PRESERVES 2-frame triplet-16ths — the v2 win),
+        # 1 on the 16th grid (gap>=1 always -> NO-OP, byte-identical to v1). Skipped under onset_override (caller owns
+        # onsets). See notes/footspeed_floor_findings.md + conditioning-mechanics §8.
+        min_gap = int(min_onset_gap) if min_onset_gap is not None else (2 if subdiv >= 12 else 1)
+        if min_gap > 1 and onset_override is None and p is not None:
+            for b in range(B):
+                kept = -10**9                                                 # frame of the last KEPT onset
+                for t in onset[b].nonzero(as_tuple=True)[0].tolist():         # ascending onset frames
+                    if (t - kept) < min_gap:                                  # collision with the last kept note
+                        if float(p[b, t]) > float(p[b, kept]):               # keep the more audio-salient of the two
+                            onset[b, kept] = False; kept = t                  # promote t, drop the earlier weaker note
+                        else:
+                            onset[b, t] = False                               # drop t (weaker hedge note)
+                    else:
+                        kept = t
 
         # HOLD-IN-STREAM suppression (type-head lever; decoupled from onset/tau -> changes tap-vs-hold ONLY, never
         # WHERE/HOW-MANY notes). The type head opens hold-heads in dense STREAM sections a human keeps hold-free
