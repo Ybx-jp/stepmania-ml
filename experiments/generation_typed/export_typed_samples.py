@@ -33,9 +33,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import split_chart_files
 from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
-from src.data.stepmania_parser import StepManiaParser
+from src.data.stepmania_parser import StepManiaParser, INFERENCE_GATES
+from src.data.meter_detect import detect_triple_pref  # audio duple/triplet classifier for --auto_b_trip
 from src.generation.typed_model import MOTIF_DIM
-from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib
+from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib, grid_snap_offset
 from src.generation.decode_harness import (
     conditioned_p_onset, compute_tau, make_feature_extractor, load_generator, chaos_onset_gate_offset, MODEL_ARCH)
 from src.generation.motif_codebook import FIGURE_CLASSES
@@ -186,7 +187,12 @@ def parse_args():
                         "gates ([60,200]/[75,130]). Reaches real songs generate() can already chart but "
                         "the dataset filter hides. Forces cache_dir=None (the valid-song set shifts, so the "
                         "index-keyed feature cache would go stale). Independent of the data-layer-v2 grid "
-                        "refactor; see notes/constraint_relaxation_roadmap.md.")
+                        "refactor; see notes/constraint_relaxation_roadmap.md. NOTE: v2 (--features highres_v2) "
+                        "now uses these widened gates BY DEFAULT (so --relax_gates is redundant there); use "
+                        "--strict_gates to opt back into the narrow training gates on v2.")
+    p.add_argument('--strict_gates', action='store_true',
+                   help="v2 only: force the NARROW training gates (bpm[60,200]/len[75,130]/simul2) that v2 export "
+                        "otherwise widens by default. For reproducing a pre-fix v2 run; drops ~55%% of viable songs.")
     p.add_argument('--prefetch_workers', type=int, default=min(4, os.cpu_count() or 1),
                    help='worker processes that pre-extract UPCOMING songs\' audio features while the GPU '
                         'decodes the current song (overlaps CPU extraction with GPU decode -> big win on a '
@@ -225,6 +231,32 @@ def parse_args():
                         'songs ~none). DEFAULT "0,1.0" = the unlock16_b10 by-ear sweet spot; it is "a KNEE not a '
                         'node" so the right b16 is song-dependent (~0.5 calm -> 1.0 -> 2.0 near-all-16ths on dense '
                         'songs). Preferred over the flat --onset_phase_alloc quota. "0,0" or "" = single threshold (off).')
+    p.add_argument('--auto_b_trip', action=argparse.BooleanOptionalAction, default=True,
+                   help='[DEFAULT ON] DUPLE/TRIPLET SWITCH (v2/48th-grid only): apply the triplet phase band ONLY '
+                        'to triplet-feel songs. The band magnitude = the 3rd element of --onset_phase_calib (default '
+                        '0.7 if absent); a per-song AUDIO meter detector (triple_pref > --triple_pref_thresh) '
+                        'decides. Triplet songs get the band (committal greens), DUPLE songs get b_trip=0 (no '
+                        'band -> no added busyness). Needs per-song audio+BPM (falls back to the global calib if '
+                        'undetectable). On the 16th grid (v1) the detector is SKIPPED (empty band -> no-op). '
+                        '--no-auto_b_trip reverts to a fixed global b_trip (the 3rd --onset_phase_calib element).')
+    p.add_argument('--triple_pref_thresh', type=float, default=0.0,
+                   help='meter threshold for --auto_b_trip: triple_pref > this => triplet-feel => band on. Default '
+                        '0.0 (the detector boundary; triplet seeds sit +0.16..+0.79, duple songs -0.37..-0.68).')
+    p.add_argument('--grid_snap', choices=['auto', 'off', 'all'], default='auto',
+                   help='[DEFAULT auto] 16th-GRID SNAP (v2/48th-grid only): veto onsets on the pure-48th positions '
+                        '{1,5,7,11}@subdiv=12 (keep-triplets) so notes land on the 16th grid — how humans author '
+                        'LOW/MID charts (real 48th-usage ~0%% at Beginner/Easy/Medium). Preserves the density '
+                        'budget (same note count, snapped on-grid) via a -30 logit offset single-sourced into BOTH '
+                        'tau and decode. Fixes v2 busy-low-diff off-grid jitter (8-23%% of Beginner/Easy notes on '
+                        '24th/48th cells the originals never use). auto = ON for difficulty <= Medium, OFF at Hard '
+                        '(fast 48th runs legit there + the v2 sub-16th win lives at Hard); all = every difficulty; '
+                        'off = never. v1 (16th grid) = no-op. See --no-grid_snap_keep_triplets. '
+                        'notes/grid_snap_findings.md.')
+    p.add_argument('--grid_snap_keep_triplets', action=argparse.BooleanOptionalAction, default=True,
+                   help='[DEFAULT ON] with --grid_snap, KEEP the triplet family ({2,4,8,10}@subdiv=12) and veto '
+                        'ONLY the pure-48th positions {1,5,7,11} — kills 48th jitter but PRESERVES triplets (real '
+                        'even at Medium: 君のハート orig 6%%) so it composes with --auto_b_trip. '
+                        '--no-grid_snap_keep_triplets = full snap (drop triplets too; 16th grid only).')
     p.add_argument('--target_density', type=float, default=None,
                    help='override per-chart density (notes/frame) for the onset threshold; default = match the '
                         'source chart. Use to couple density to chaos (real high-chaos charts run ~0.34 vs ~0.22 '
@@ -380,6 +412,15 @@ def main():
     phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
                    if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
     phase_calib = parse_phase_calib(args.onset_phase_calib)  # per-phase logit offset (b8, b16) for variable chaos
+    # --- duple/triplet b_trip SWITCH: resolve the triplet-song band magnitude + strip the global 3rd element ---
+    # (so the band is applied PER SONG below, not globally). auto_b_trip_val=None => switch inactive.
+    _b8b16 = ((float(phase_calib[0]), float(phase_calib[1])) if phase_calib and len(phase_calib) >= 2
+              else (0.0, 1.0))  # the 16th-unlock stays global; only b_trip becomes per-song
+    auto_b_trip_val = None
+    if args.auto_b_trip:
+        auto_b_trip_val = float(phase_calib[2]) if (phase_calib and len(phase_calib) > 2) else 0.7
+        phase_calib = _b8b16  # duple default when the per-song switch says "no band"
+    _tp_cache: dict = {}  # chart_file -> triple_pref (avoid re-loading audio if a song repeats)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # H15 motif-knob conditioning (continuous): build a GLOBAL (1, MOTIF_DIM) vector from "name/idx=z" pairs.
@@ -436,7 +477,13 @@ def main():
     if subdiv == 12:
         if args.features != 'highres_v2':
             raise SystemExit("subdiv=12 requires --features highres_v2 (48th grid); see generation-defaults §0.")
-        infer_parser = StepManiaParser.for_v2()
+        # v2 export DEFAULTS to the widened INFERENCE_GATES (bpm[40,320]/len[30,600]/simul4/gimmick-guarded):
+        # this is the inference/export path (generate() validates nothing), the model handles the extra songs,
+        # and there's no cache downside (v2 is cache_dir=None regardless). +55% val reach vs the narrow TRAINING
+        # gates. --strict_gates restores the narrow training gates (to reproduce a pre-fix v2 run). for_v2()'s
+        # OWN default stays narrow so the v2 TRAINING cache build is unaffected.
+        infer_parser = (StepManiaParser.for_v2() if args.strict_gates
+                        else StepManiaParser.for_v2(**INFERENCE_GATES))
         ds_cache = None
     elif args.relax_gates:
         infer_parser = StepManiaParser.for_inference()
@@ -599,6 +646,25 @@ def main():
             with torch.no_grad():
                 style_for_gen = model.encode_style(ref_t, ref_mask)
 
+        # duple/triplet SWITCH: apply the triplet band (b_trip) only if this song reads triplet-feel. Feeds BOTH
+        # the tau path AND generate() with the SAME per-song calib (the single-source rule, conditioning-mechanics §6).
+        song_calib = phase_calib
+        if auto_b_trip_val is not None and subdiv != 4:  # v1 (16th grid) has an empty triplet band -> skip the detector
+            cf = meta['chart_file']
+            if cf not in _tp_cache:
+                r = detect_triple_pref(cf)
+                _tp_cache[cf] = (r['triple_pref'] if r else None)
+            tp = _tp_cache[cf]
+            song_title = getattr(meta['chart'], 'title', '') or Path(cf).stem
+            if tp is None:  # no audio/BPM -> keep the global calib (least surprising), warn
+                print(f"  [auto_b_trip] {song_title[:30]:30} meter undetected -> global calib")
+            else:
+                is_trip = tp > args.triple_pref_thresh
+                b = auto_b_trip_val if is_trip else 0.0
+                song_calib = (_b8b16[0], _b8b16[1], b)
+                print(f"  [auto_b_trip] {song_title[:30]:30} triple_pref={tp:+.2f} -> "
+                      + (f"TRIPLET (b_trip={b:.2f})" if is_trip else "duple (band off)"))
+
         # onset threshold matched to THIS chart's real density
         audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
         diff = torch.tensor([diff_idx], device=device)
@@ -616,10 +682,17 @@ def main():
                 gate_np = chaos_onset_gate_offset(audio_np, args.chaos_onset_gate, chaos_val, subdiv=subdiv)
                 gate_t = torch.from_numpy(gate_np).to(device)
                 harm_off_t = gate_t if harm_off_t is None else harm_off_t + gate_t  # stack with harm (same slot)
+            # 16th-GRID SNAP (v2 only): auto = difficulty <= Medium (diff_idx<=2), all = every difficulty. Vetoes the
+            # pure-48th cells so busy low/mid charts stay on-grid. Same slot -> single-sourced into tau
+            # (conditioned_p_onset extra_offset=) AND decode (generate onset_logit_offset=). v1 (subdiv==4) = no-op.
+            do_snap = subdiv != 4 and (args.grid_snap == 'all' or (args.grid_snap == 'auto' and diff_idx <= 2))
+            if do_snap:
+                snap_t = grid_snap_offset(T, subdiv, keep_triplets=args.grid_snap_keep_triplets, device=device)
+                harm_off_t = snap_t if harm_off_t is None else harm_off_t + snap_t
             # tau via the shared decode harness — conditioned + guided + phase-calibrated + harm offset, EXACTLY as
             # generate() decodes (conditioning-mechanics §3/§6). harm_off_t is also fed to generate() below.
             p_onset = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
-                                          guidance=args.guidance, phase_calib=phase_calib, extra_offset=harm_off_t,
+                                          guidance=args.guidance, phase_calib=song_calib, extra_offset=harm_off_t,
                                           subdiv=subdiv)
         real_density = float((orig_typed != 0).any(1).mean())
         # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
@@ -654,7 +727,7 @@ def main():
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
-                          onset_phase_alloc=phase_alloc, onset_phase_calib=phase_calib, subdiv=subdiv,
+                          onset_phase_alloc=phase_alloc, onset_phase_calib=song_calib, subdiv=subdiv,
                           onset_logit_offset=harm_off_t,  # STEP-1 sparse-harm-in-quiet phrase calibrator (None=off)
                           style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen,
                           motif=motif_vec,  # H15 continuous motif knobs (global vector; None if --motif unset)
