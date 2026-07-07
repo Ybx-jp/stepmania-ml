@@ -174,6 +174,15 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   sparse melodic event in a lull). SAME tau-coupling rule as calib (the caller's tau MUST include it; the exporter's
   `--harm_calib` does). Phrasing (WHEN notes fire) is the ONSET head's job, not the pattern head's — see
   `notes/phrasing_coherence_findings.md` + the experiment-design lineage `onset-phrasing-calibrator-arc.md`.
+  ▸ **★ `decode_defaults.grid_snap_offset` — the 16th-GRID SNAP (2026-07-06, v2/48th-grid; exporter `--grid_snap`,
+  now a CANONICAL DEFAULT `auto`)** rides this same slot: a `-30` logit veto on the pure-48th phases `{1,5,7,11}@
+  subdiv=12` (keep-triplets: leaves `{2,4,8,10}` open) so busy low/mid charts stay on the 16th grid. Fixes the
+  verified v2 defect where busy Beginner/Easy/Medium songs place 8–23% of notes on 24th/48th cells human originals
+  NEVER use (real ~0% at all low/mid diffs; `notes/grid_snap_findings.md`). Grid-POSITION sibling of `min_onset_gap`
+  (which gates SPACING). Density-PRESERVING (vetoed frames drop out of the tau quantile, budget redistributes
+  on-grid). **v1 (subdiv=4) no-op by construction** (kept phases = all 4). `auto` gates by difficulty (ON ≤ Medium,
+  OFF at Hard where sub-16th runs are legit + the v2 win lives). Composes with `--auto_b_trip` (the b_trip band
+  boosts the triplet frames the keep-triplets snap leaves open). BY-EAR PENDING.
   ▸ **`decode_harness.chaos_onset_gate_offset` (EXPERIMENTAL, 2026-07-04; exporter `--chaos_onset_gate`)** rides this
   same slot: a chaos×onset gate `±gain·chaos·offbeat·saliency` keyed on dim41/dim35. **Phase-0 verdict = DEAD at
   decode (`notes/chaos_onset_gate_scope.md`):** off-beat placement is NOT audio-reachable, so this gate can only do

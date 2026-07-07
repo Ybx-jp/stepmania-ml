@@ -197,6 +197,29 @@ was executed. Believed → learned:
   fork = the auto-vs-global by-ear verdict (pack `~/sm-generated/v2byear_*`), then the deploy-swap. Notes
   `notes/v2_safety_envelope_findings.md`.
 
+### Session 5 (2026-07-06) — LOW-DIFFICULTY verification + the 16th-grid SNAP (`notes/grid_snap_findings.md`)
+Verified the v2 deploy candidate at the LOWER difficulties (it had only ever been by-ear'd on Hard). **v2 generates
+Beginner/Easy/Medium coherently** (no degeneration, density tracks, critic reads low, sparse songs ~100% on-grid ==
+originals), EXCEPT busy low-diff songs place **8–23% of notes on pure-48th cells `{1,5,7,11}`** the human originals
+NEVER use (real 48th-usage ~0% at all low/mid diffs).
+- **Attribution WIN (Rules 7–9):** hypothesised the 16th-unlock; **A/B REFUTED it** (unlock OFF didn't drop off-grid;
+  the note-count decomposition showed the unlock moves ON-grid density, the 48th count is independent). Testing the
+  suspected fix killed it before it shipped. **True cause = the 48th grid's double edge** — the same beat-synced
+  sub-16th capability that gives v2 its triplet win also admits 48th jitter on busy DUPLE songs (governor gates
+  spacing/jumps, not isolated grid POSITION).
+- **Decomposition that set the design (Rule 1):** the off-grid excess is `{1,5,7,11}` (pure-48th noise), NOT the
+  triplet family `{2,4,8,10}` (gen ~1% ≈ real) → the fix must PRESERVE triplets (keep-triplets), and Medium's real
+  triplet usage (君のハート orig 6%) proves it.
+- **FIX = `grid_snap` (decode-only):** `decode_defaults.grid_snap_offset` (−30 logit veto ridden through the
+  exporter `harm_off_t` slot → single-sourced into tau + decode; v1 no-op by construction). Off-grid 6.6%→0%,
+  density PRESERVED+improved, INERT on already-clean songs (byte-identical) — the ideal targeted knob.
+- **WIRED TO CANONICAL (per user ship directive; BY-EAR PENDING):** `--grid_snap auto` (keep-triplets 48th-veto for
+  difficulty ≤ Medium — no per-diff threshold needed since real 48th-usage is 0 at all three — OFF at Hard where
+  fast 48th runs are legit + the v2 win lives) + `--auto_b_trip` flipped default→True. Validated: v1 byte-identical
+  (deployed regime untouched), v2 auto snaps @Easy (48th→0, triplets kept), does NOT snap @Hard. Guard 21→**25 ✓**.
+- **Open fork:** by-ear the installed `~/sm-generated/v2_low_*` vs `*_snap`; the Hard boundary is UNTESTED (left on
+  canonical). Sub-thread memory [[low-diff-gridsnap]].
+
 ## Skills in play
 `experiment-design` (this arc is a WIN case — mechanism-grounded metric predicts the ear; harness/units bugs caught
 first) · `conditioning-mechanics` §6 (the `t%4` phase grid this questions; the refactor re-indexes it) ·

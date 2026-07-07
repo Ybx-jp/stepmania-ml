@@ -390,6 +390,12 @@ filter-relaxation decoupled. GREENLIGHT pending.
   grid. Modest duple-16th lift (audio reach 32%→41%, suggestive/co-varies beat-sync) but audio is CHANCE at TRIPLET
   placement (0.505 vs note-context ceiling 0.930; `frozen_h_conv` 0.939 ≈ ceiling) → v2 fixes the TARGET (triplets
   placeable by the trained prior / in `h`), NOT audio-derivability. Corroborates the seq-onset wall on a finer grid.
+- `grid_snap_findings.md` — LOW-DIFFICULTY verification of the v2 deploy candidate + the 16th-grid SNAP fix. v2 is
+  coherent at Beginner/Easy/Medium EXCEPT busy songs place 8–23% pure-48th `{1,5,7,11}` notes humans never use (real
+  ~0% at all low/mid diffs). 16th-unlock hypothesis REFUTED by A/B; true cause = the 48th grid's audio-salience
+  sub-16th placement. FIX = `grid_snap` (−30 logit veto via `harm_off_t`, single-sourced tau+decode, v1 no-op);
+  off-grid 6.6%→0%, density preserved. WIRED CANONICAL (`--grid_snap auto` diff≤Med + `--auto_b_trip` default→True;
+  guard 25 ✓; BY-EAR PENDING). Sub-thread of the meter arc.
 - Tooling (v2): `probe_v2_{context_fit,grid_emptiness,displacement,alignment,bpm_misalignment}.py`,
   `train_motif_figure_v2.py`, `src/data/timing.py`, `tests/test_{timing,v2_quantize}.py`.
 - Tooling: `probe_meter_equivariant_sb.py` (rotation-invariant DFT meter detector + meter-equivariant SB),
