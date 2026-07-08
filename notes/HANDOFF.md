@@ -8,29 +8,54 @@ knob-tuning is diminishing returns. **Do NOT initiate the parked research** (goo
 GDL/meter-equivariance retrain, seq-onset retrain); redirect tangents to the release checklist. Un-park ONLY on the
 user's literal phrase **"the times have changed."**
 
-**LATEST session (2026-07-06b) — ship checklist #2/#3 executed** (`notes/v2_safety_envelope_findings.md`; all
-UNCOMMITTED on `feat/governor-subdiv-recalib`): built the **b_trip auto-switch** (`--auto_b_trip`), characterized the
-**safe-settings envelope** (a 5-arm × 12-song v2 sweep — playability ROCK-SOLID across the whole range), and FIXED a
-**gate bug** the user flagged (`--relax_gates` was a no-op on v2 → widened `INFERENCE_GATES` now the v2 export
-default, +55% reach). ⚠️ Two honest results: the auto-switch is SAFE but NOT a clean win (the ρ+0.47 audio detector
-fires on only 3/6 chart-triplet songs → **auto-vs-global is a by-ear tradeoff**, my first 2-song "auto dominates" was
-overturned by the widened re-run); and `--style chaos/freeze` opens big dead gaps on long/sparse songs.
+**LATEST session (2026-07-07) — PUBLIC CLI now speaks v2 + `.sm` header/BGCHANGES passthrough** (commit `cf0b820`;
+[[ship-mode-park-research]]): `scripts/generate.py` (the bring-your-own-SONG single-file CLI) gained `--features
+highres_v2` — auto-selects the v2 checkpoint (`gen_motif_v2_48th_cont`), the 48th feature extractor, the 5504-frame
+context, `V2_MSL`, the 48-row `sm_writer`, and the v2 decode flags (`--no_fast_jump` default-on, `--min_onset_gap`,
+`--grid_snap`, `--auto_b_trip`), all derived from one `subdiv` (`fspec.extractor.config.timesteps_per_beat`) so
+audio/notes can't drift. **Its DEFAULT stays highres/v1 (v1 byte-identical) — this is v2-REACHABLE-via-CLI, NOT the
+deploy-swap (ship checklist #1 still open).** Also added **`--title` + presentation flags + `--inherit_from SM|auto`**:
+inherit a source chart's banner/background/**#BGCHANGES music-video** tags and COPY the media into the new folder so
+they resolve (new module `src/generation/sm_headers.py`; `sm_writer` gained a `header=` dict in StepMania tag order,
+default output unchanged; `meter_detect.detect_triple_pref_audio` = the b_trip switch from audio+BPM, no `.sm` needed).
+Timing tags (`#BPMS`/`#STOPS`) deliberately NOT inherited (the generator owns its grid). **Deliverable:** 34/35 v2 Hard
+charts for `~/sm-personal` → `~/sm-generated/v2_personal_hard/` (1 fail = corrupt `.ogg` "Raining Down"; 26 inherited a
+source header, 9 with playing videos). No new experiment/finding — engineering deliverable, no lineage arc. Tag order
+read from the local SM source `~/stepmania-5.1.0-b2/src/NotesWriterSM.cpp`.
+
+**PRIOR session (2026-07-06c) — LOW-DIFFICULTY verification + the 16th-grid SNAP** (`notes/grid_snap_findings.md`,
+[[low-diff-gridsnap]]): verified the v2 deploy candidate at Beginner/Easy/Medium (it had ONLY been by-ear'd on Hard).
+**v2 generates them coherently** (no degeneration, density tracks, critic reads low, sparse songs ~100% on-grid ==
+originals), EXCEPT busy low-diff songs place **8–23% of notes on pure-48th cells `{1,5,7,11}`** human originals never
+use (real 48th-usage ~0% at all low/mid diffs). Hypothesised the 16th-unlock; **A/B REFUTED it** (unlock OFF didn't
+drop off-grid; note-count decomp → the unlock moves ON-grid density, the 48th count is independent). **True cause =
+the 48th grid's double edge** — the same beat-synced sub-16th capability that gives v2 its triplet win also admits
+48th jitter on busy DUPLE songs. **FIX = `grid_snap`** (`decode_defaults.grid_snap_offset`, −30 logit veto ridden
+through the exporter `harm_off_t` slot → single-sourced into tau+decode; v1 no-op by construction): off-grid
+6.6%→0%, density preserved, INERT on already-clean songs. **WIRED TO THE CANONICAL DEFAULT this session (per user
+directive; BY-EAR PENDING):** `--grid_snap auto` (keep-triplets 48th-veto for difficulty ≤ Medium, OFF at Hard) +
+flipped **`--auto_b_trip` default False→True**. The prior 06-06b uncommitted code (`--auto_b_trip`, `INFERENCE_GATES`)
+is now committed alongside grid-snap. Guard 21→**25 ✓**; validated v1 byte-identical + the v2 auto-gate (snaps @Easy,
+not @Hard). **PRIOR session (06-06b)** built the auto-switch + safe-settings sweep + the gate fix — folded in.
 
 ## WHERE WE ARE
-- **Deployed model STILL v1** = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim, 16th grid). Canonical v1
-  decode defaults UNCHANGED (block below; `tools/check_export_defaults.py` passes). Nothing v2 is deployed yet.
+- **Deployed model STILL v1** = `checkpoints/gen_motif_full_fixed/best_val.pt` (42-dim, 16th grid). Nothing v2 is
+  deployed yet. ⚠️ The canonical defaults NOW include the two v2-only auto knobs (`grid_snap=auto`, `auto_b_trip=True`)
+  — but both are **v1 no-ops** (verified byte-identical), so what the user PLAYS on v1 is unchanged; `check_export_
+  defaults.py` = **25 ✓**.
 - **v2 deploy candidate** = `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (val 0.7435), `--features highres_v2`.
-- **Prior session's 4 commits on `feat/governor-subdiv-recalib`** (verify via `git log`): `33de530` governor
-  subdiv-recalibration → `63125eb` footspeed floor + `--style` density fix → `46a25b4` triplet phase band →
-  `ed26aa6` groove-radar subdiv chaos (retrain-gated). All subdiv=4 BYTE-IDENTICAL (v1 untouched).
-- **LATEST session's changes are UNCOMMITTED** (working tree on the same branch): NEW `src/data/meter_detect.py`
-  (audio meter detector), `experiments/generation_typed/analyze_v2_envelope.py` (v2-aware envelope analyzer),
-  `notes/v2_safety_envelope_findings.md`; MODIFIED `export_typed_samples.py` (`--auto_b_trip`/`--triple_pref_thresh`
-  switch + `INFERENCE_GATES` default-widen for v2 + `--strict_gates`), `src/data/stepmania_parser.py`
-  (`INFERENCE_GATES`), `probe_meter_equivariant_sb.py` (imports the shared detector). Canonical decode defaults
-  UNCHANGED (`check_export_defaults.py` still 21 ✓; the switch is opt-in, the gate change is inference-path only).
+- **Prior commits on `feat/governor-subdiv-recalib`** (verify via `git log`): `33de530` governor subdiv-recalibration
+  → `63125eb` footspeed floor + `--style` density fix → `46a25b4` triplet phase band → `ed26aa6` groove-radar subdiv
+  chaos (retrain-gated) → docs-refresh commits. All subdiv=4 BYTE-IDENTICAL (v1 untouched).
+- **Latest commit `cf0b820`** (2026-07-07): `scripts/generate.py` v2 support + `.sm` header inheritance + new
+  `src/generation/sm_headers.py` + `sm_writer` `header=` dict + `meter_detect.detect_triple_pref_audio` (all v1
+  byte-identical; `export_typed_samples.py` argparse defaults untouched → `check_export_defaults.py` still 25 ✓).
+- **06-06c commit** (16th-grid SNAP): `decode_defaults.grid_snap_offset` + exporter `--grid_snap`/
+  `--grid_snap_keep_triplets`, the difficulty auto-gate, `--auto_b_trip` default→True, PLUS the 06-06b work
+  (`src/data/meter_detect.py`, the `--auto_b_trip` switch, `INFERENCE_GATES` in `stepmania_parser.py`,
+  `analyze_v2_envelope.py`, `notes/v2_safety_envelope_findings.md`).
 
-## WHAT SHIPPED THIS SESSION (all in `generate()` / the exporter / groove_radar; v1 byte-identical)
+## v2 DECODE-PLAYABILITY WORK ON THE BRANCH (prior sessions; all in `generate()` / the exporter / groove_radar; v1 byte-identical)
 1. **Governor subdiv-recalibration** (`conditioning-mechanics §8`): the §8 governors reasoned in FRAMES assuming a
    frame=16th (`frame_hz=BPM·4/60`); on the 48th grid a frame=1/12 beat. Threaded `subdiv`: `frame_hz=BPM·subdiv/60`,
    `tau_frames=fatigue_tau·subdiv`, `stamina_decay` per-frame, and the integer gap/window thresholds via
@@ -88,18 +113,26 @@ overturned by the widened re-run); and `--style chaos/freeze` opens big dead gap
    good-settings tolerance formula ([[good-settings-region]]); GDL/meter-equivariance ([[meter-4-4-grid]]).
 
 ## AWAITING USER
+- **★ BY-EAR: the 16th-grid SNAP (low/mid difficulty)** — installed groups `~/sm-generated/v2_low_beginner`,
+  `v2_low_easy`, `v2_low_medium` (canonical) vs `v2_low_easy_snap`, `v2_low_medium_snap` (fix). Play the BUSY songs
+  (**See Me Now, SUPER SUMMER DIVE, Gengaozo, Deja loin**) canonical-vs-snap; the sparse songs are identical between
+  groups. Question: does snapping the 48th jitter to the 16th grid read MORE coherent/human, or do you miss the
+  sub-16th detail? Offline says off-grid 6.6%→0% with density preserved. If it wins → the `--grid_snap auto` default
+  is validated; if not → set `--grid_snap off`. The **Hard boundary is UNTESTED** (auto leaves Hard on canonical).
+  Log to `notes/playtest_log.md`.
 - **BY-EAR: auto-vs-global b_trip** — pack `~/sm-generated/v2byear_01..09` (tagged titles). The key A/B is
   **03 vs 04 (Sway)** and **05 vs 06 (Parousia)**: band-OFF (`auto`, detector said duple) vs band-FORCED-ON
   (`global`). If forcing triplets sounds BETTER → the detector missed, favor `global b_trip=0.7`; if band-off
   sounds right → the audio really is duple, favor `--auto_b_trip`. Also 09 = After The Rain under chaos (does the
   ~28-beat dead gap sound broken?). Log to `notes/playtest_log.md`. This decides the v2 default b_trip in the swap.
-- **COMMIT DECISION:** the session's code (switch + gate fix + analyzer + findings note) is uncommitted on
-  `feat/governor-subdiv-recalib`. This refresh's DOCS are committed separately (docs branch, per the refresh cycle);
-  the CODE awaits the user's go-ahead to commit.
+- **DEPLOY-SWAP (ship checklist #1) still pending** — grid-snap + auto_b_trip are now defaults, but v2 is not yet
+  THE default checkpoint/features. That coordinated bump (+ `b_trip=0.7` or `--auto_b_trip` as the v2 default) is the
+  next ship step, gated on the two by-ear verdicts above.
 
-## CANONICAL EXPORT DEFAULTS (the DEPLOYED v1 config — VALIDATED by `tools/check_export_defaults.py`; UNCHANGED by v2)
+## CANONICAL EXPORT DEFAULTS (VALIDATED by `tools/check_export_defaults.py` = 25 ✓)
 The bare `export_typed_samples.py` run reproduces what the user plays. These MUST equal the script's argparse
-defaults. **Permanent section — keep in every rewrite.**
+defaults. `grid_snap`/`auto_b_trip`/`grid_snap_keep_triplets`/`triple_pref_thresh` are v2-only behaviors that are
+**no-ops on the deployed v1 regime** (byte-identical verified). **Permanent section — keep in every rewrite.**
 <!-- CANONICAL-EXPORT-DEFAULTS:START (do NOT hand-edit values; re-run tools/check_export_defaults.py after a change) -->
 ```
 checkpoint = checkpoints/gen_motif_full_fixed/best_val.pt
@@ -116,6 +149,10 @@ stamina_tau = 8.0
 stamina_scale = 15.0
 stamina_breathe = 1.2
 onset_phase_calib = 0.0,1.0
+auto_b_trip = True
+triple_pref_thresh = 0.0
+grid_snap = auto
+grid_snap_keep_triplets = True
 hold_stream_penalty = 8.0
 hold_stream_floor = 0.45
 hold_stream_win = 16
@@ -126,16 +163,18 @@ guidance = 1.0
 ```
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 NOTE: v2 is a SEPARATE regime — `--features highres_v2` + `gen_motif_v2_48th_cont` + `for_v2()` + the 48th `sm_writer`
-+ `V2_MSL=5400`. New v2 decode knobs (all default to a v1 no-op): `--min_onset_gap` (None→auto 2 on v2), the triplet
-band via `--onset_phase_calib "0,1.0,b_trip"` (b_trip default 0), and `--auto_b_trip` (opt-in per-song triplet band,
-keyed on the audio meter detector). v2 export uses the WIDENED `INFERENCE_GATES` by default (`--strict_gates`
-reverts). Do NOT mix `highres_v2` with the v1 checkpoint.
++ `V2_MSL=5400`. v2 decode knobs (all v1 no-ops): `--min_onset_gap` (None→auto 2 on v2); `--grid_snap auto`
+(keep-triplets 48th-veto for difficulty ≤ Medium, OFF at Hard — the DEFAULT now); `--auto_b_trip` (DEFAULT ON;
+per-song triplet band keyed on the audio meter detector, `b_trip=0.7`); the triplet band via `--onset_phase_calib
+"0,1.0,b_trip"`. v2 export uses the WIDENED `INFERENCE_GATES` by default (`--strict_gates` reverts). Do NOT mix
+`highres_v2` with the v1 checkpoint. `grid_snap` + `auto_b_trip` are OFFLINE-VALIDATED but BY-EAR PENDING as defaults.
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). **Verify PR state via `gh`.**
-  The LATEST session's code (meter_detect.py, analyze_v2_envelope.py, the `--auto_b_trip` switch, the `INFERENCE_GATES`
-  gate fix, the findings note) is **UNCOMMITTED** in the working tree (awaiting user go-ahead). This refresh's DOCS
-  land on a separate `docs/...` branch. The DEPLOY SWAP (ship checklist #1) is a NEW code change not yet made.
+- Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). **Verify PR/branch state via
+  `gh pr view` / `git log`.** Latest code commit **`cf0b820`** (generate.py v2 + `.sm` header inheritance) + this
+  refresh's docs are on this branch; the grid-snap/auto_b_trip and 06-06b code are folded in. The DEPLOY SWAP (ship
+  checklist #1 — make v2 THE default) is a NEW code change not yet made. Whether to open a PR to `main` for the whole
+  long-lived v2 feature branch is a user call.
 - Gitignored / not committed: `outputs/` (incl. `outputs/v2_sweep/*` the safety sweep), `transcripts/`, scratchpad
   probes. Installed by-ear pack: `~/sm-generated/v2byear_01..09`.
 
@@ -144,8 +183,9 @@ Memory **[[ship-mode-park-research]]** (the operative directive) → **this chec
 (the deploy-swap targets: v2 checkpoint/features/knobs) → `conditioning-mechanics §6/§7/§8` (the v2 decode levers +
 the hold-stream partial fix + stamina-is-ON correction) → `notes/footspeed_floor_findings.md §4/§5/§5b` (no-fast-jump
 = shipped; hold-stream = partial + the PARKED fix design) → **`notes/v2_safety_envelope_findings.md`** (the LATEST
-session: the safety sweep, the switch, the gate fix, the auto-vs-global open question) → `notes/playtest_log.md`
-(the by-ear record) → lineage `experiment_lineage/meter-grid-arc.md` (§Session 4). Load-bearing skills:
+session: the safety sweep, the switch, the gate fix, the auto-vs-global open question) → **`notes/grid_snap_findings.md`**
+(the low-diff verification + the 16th-grid SNAP, now a canonical default) → `notes/playtest_log.md`
+(the by-ear record) → lineage `experiment_lineage/meter-grid-arc.md` (§Session 5). Load-bearing skills:
 **generation-defaults, conditioning-mechanics §6/§8, experiment-design** (the ship-vs-tune call = a Rule-"is this the
 right investment" judgment).
 

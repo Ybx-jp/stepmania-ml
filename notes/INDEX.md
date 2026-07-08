@@ -340,6 +340,14 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   (`b_trip=0.7` BY-EAR WON: triplet-occ 0.107→0.390) → groove-radar chaos fix (RETRAIN-GATED). **pt_chaos_v2 WIN**
   ("brand new note colors, flowy streams, conditioning effective"). NEXT = the no-fast-jump cap (fast sub-16th JUMPS
   evade the fatigue governor) + a hold-stream-gate bug on `freeze=high` v2.
+**UPDATE (2026-07-07) — PUBLIC CLI v2 + `.sm` header/BGCHANGES passthrough (engineering, no new finding).** Commit
+`cf0b820`: `scripts/generate.py` gained `--features highres_v2` (v2-reachable via the BYO-song CLI; default stays v1,
+byte-identical) + `--title`/presentation flags + `--inherit_from SM|auto` (carry a source chart's banner/background/
+#BGCHANGES video, copying the media in) via new `src/generation/sm_headers.py` + `sm_writer` `header=` dict +
+`meter_detect.detect_triple_pref_audio`. Delivered 34/35 v2 Hard charts for `~/sm-personal`. No findings file (no
+probe). Prior v2 ship-thread findings live in `grid_snap_findings.md` (07-06 low-diff + 16th-grid snap) +
+`v2_safety_envelope_findings.md` (07-06b sweep + b_trip switch + gate fix). State/next = `HANDOFF.md` (ship checklist).
+
 **UPDATE (2026-07-05b) — 🎉 PHASE 6 BY-EAR PASSED → v2 = DEPLOY CANDIDATE.** Exported the two near-pure-triplet songs
 with `gen_motif_v2_48th_cont` (val 0.7435) + `--features highres_v2` + `for_v2()`; user played vs the v1 set: "it
 totally worked!!!! none of the new note frames felt random… resounding 100% success! no degradation… finally able to
@@ -390,6 +398,12 @@ filter-relaxation decoupled. GREENLIGHT pending.
   grid. Modest duple-16th lift (audio reach 32%→41%, suggestive/co-varies beat-sync) but audio is CHANCE at TRIPLET
   placement (0.505 vs note-context ceiling 0.930; `frozen_h_conv` 0.939 ≈ ceiling) → v2 fixes the TARGET (triplets
   placeable by the trained prior / in `h`), NOT audio-derivability. Corroborates the seq-onset wall on a finer grid.
+- `grid_snap_findings.md` — LOW-DIFFICULTY verification of the v2 deploy candidate + the 16th-grid SNAP fix. v2 is
+  coherent at Beginner/Easy/Medium EXCEPT busy songs place 8–23% pure-48th `{1,5,7,11}` notes humans never use (real
+  ~0% at all low/mid diffs). 16th-unlock hypothesis REFUTED by A/B; true cause = the 48th grid's audio-salience
+  sub-16th placement. FIX = `grid_snap` (−30 logit veto via `harm_off_t`, single-sourced tau+decode, v1 no-op);
+  off-grid 6.6%→0%, density preserved. WIRED CANONICAL (`--grid_snap auto` diff≤Med + `--auto_b_trip` default→True;
+  guard 25 ✓; BY-EAR PENDING). Sub-thread of the meter arc.
 - Tooling (v2): `probe_v2_{context_fit,grid_emptiness,displacement,alignment,bpm_misalignment}.py`,
   `train_motif_figure_v2.py`, `src/data/timing.py`, `tests/test_{timing,v2_quantize}.py`.
 - Tooling: `probe_meter_equivariant_sb.py` (rotation-invariant DFT meter detector + meter-equivariant SB),

@@ -57,6 +57,16 @@ class StepManiaChart:
     credit: str = ""
 
 
+# The WIDENED inference/export gates (the cheap decoupled reach win, notes/constraint_relaxation_roadmap.md).
+# SINGLE SOURCE used by BOTH for_inference() (v1 export) and the v2 export path (--relax_gates on the 48th grid)
+# so they can't drift. gimmick guard ON because the export grid is still single-hop for audio (a scroll-spike
+# would feed the one-hop grid garbage). max_simultaneous=4 admits HANDS/QUADS (the stale default 2 rejects them
+# — and ~55% of real Hard charts; the typed model's 15-way pattern head supports up-to-4-panel frames, so at
+# INFERENCE there's no reason to drop those songs). vs the training defaults [60,200] bpm / [75,130]s / simul 2.
+INFERENCE_GATES = dict(min_bpm=40.0, max_bpm=320.0, min_song_length=30.0, max_song_length=600.0,
+                       gimmick_max_bpm=400.0, max_simultaneous=4)
+
+
 class StepManiaParser:
     """Parser for StepMania .sm and .ssc files with Phase 1 focus"""
 
@@ -128,8 +138,7 @@ class StepManiaParser:
         variable-BPM charts whose brief scroll-gimmick spikes (2467/1431/441) would feed the single-hop grid
         garbage. This is PURE reach and independent of the data-layer-v2 grid refactor.
         """
-        defaults = dict(min_bpm=40.0, max_bpm=320.0, min_song_length=30.0, max_song_length=600.0,
-                        gimmick_max_bpm=400.0)
+        defaults = dict(INFERENCE_GATES)
         defaults.update(kwargs)  # caller overrides win
         return cls(**defaults)
 

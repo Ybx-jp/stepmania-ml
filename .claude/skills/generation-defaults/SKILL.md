@@ -56,6 +56,13 @@ mechanism; **this skill is the config VALUES.**
   (`notes/playtest_log.md` 2026-07-05). **The exporter NOW SUPPORTS it (commit `837c1ed`):** `--features highres_v2`
   auto-selects the `for_v2()` parser + the 48th-grid `sm_writer` (48 rows/measure) + `cache_dir=None` + builds the
   model at `max_len=5504` + uses `V2_MSL=5400` (the v1 config msl=1440 clips a v2 song to ⅓ — a fixed truncation bug).
+  **AND `scripts/generate.py` (the bring-your-own-SONG single-file CLI) also speaks v2 now (commit `cf0b820`):**
+  `--features highres_v2` there auto-selects the v2 checkpoint (`gen_motif_v2_48th_cont`), the 48th feature extractor,
+  the 5504-frame context, `V2_MSL`, the 48-row writer, and the v2 decode flags (`--no_fast_jump`/`--min_onset_gap`/
+  `--grid_snap`/`--auto_b_trip`) — all derived from one `subdiv` (`fspec.extractor.config.timesteps_per_beat`); its
+  DEFAULT stays highres/v1 (v1 byte-identical), so this is v2-reachable-via-CLI, not the default-swap. It also gained
+  `--title` + `.sm` presentation flags + `--inherit_from SM|auto` (carry a source chart's banner/background/#BGCHANGES
+  video, copying the media in) via the new `src/generation/sm_headers.py` + `sm_writer`'s `header=` dict.
   Phase-5 decode re-index (`590daa1`): the phase grid is `subdiv`-parameterized (v1 `highres`=subdiv 4, byte-identical).
   Do NOT pair `highres_v2` with `gen_motif_full_fixed`, or a v1 checkpoint with the v2 cache (grid mismatch).
   **DECODE-PLAYABILITY pass DONE (2026-07-05 session 2)** — all v1-no-op / subdiv=4 byte-identical: the governor
@@ -105,6 +112,9 @@ g = model.generate(audio, diff, lengths=torch.tensor([T], device=device),
 - **No groove conditioning by default:** `radar=None, style=None, motif=None, figure=None, guidance_scale=1.0`.
   That's clean audio+difficulty — the baseline most playtests use. Add a groove knob ONLY deliberately, via the
   manifold (`--style`, never `--radar` mean-pin), per `conditioning-mechanics` §2–§6.
+- **Two v2-only AUTO defaults (on by default, v1 no-ops; see the flags section below):** `--grid_snap auto` (16th-grid
+  snap for difficulty ≤ Medium — vetoes pure-48th jitter) + `--auto_b_trip` (triplet band on audio-detected triplet
+  songs). Both resolve into the `onset_logit_offset` / `onset_phase_calib` slots (NOT generate() kwargs). BY-EAR-PENDING.
 
 ## 1a. ★ `onset_phase_calib` — the 16th-unlock that ties the rhythm together (don't omit it)
 The governor/breathe shape DENSITY; `onset_phase_calib` fixes WHERE the notes land on the 16th grid. Without it the
@@ -175,14 +185,32 @@ hand/quad charts, gimmick guard on) — vs the narrow TRAINING gates [60,200]/[7
 `--strict_gates` reverts to the narrow gates (to reproduce a pre-fix v2 run). Training's `for_v2()` default stays
 narrow (the v2 training cache is untouched). v1 export is unchanged (still `--relax_gates`-gated → `for_inference()`).
 
-**`--auto_b_trip` — the duple/triplet SWITCH (2026-07-06, OPT-IN, v2 only; `notes/v2_safety_envelope_findings.md`):**
+**★ TWO v2-only AUTO DEFAULTS (2026-07-06, now ON in the canonical config; both v1 no-ops; `check_export_defaults.py`
+now 25 ✓). BY-EAR-PENDING — offline-validated, wired to default per user ship-mode directive; a later session should
+gate them by ear before final cut.**
+
+**`--grid_snap auto` — the 16th-GRID SNAP (v2/48th-grid only; `notes/grid_snap_findings.md`):** vetoes onsets on the
+pure-48th cells `{1,5,7,11}@subdiv=12` via a −30 logit offset single-sourced (`decode_defaults.grid_snap_offset`)
+into BOTH tau (`conditioned_p_onset extra_offset=`) and decode (`generate onset_logit_offset=`), stacked into the
+exporter's `harm_off_t` slot. Fixes the verified v2 defect where BUSY low/mid-difficulty songs place 8–23% of notes
+on 24th/48th cells the human originals NEVER use (real 48th-usage ~0% at Beginner/Easy/Medium). Preserves the density
+budget (same note count, snapped on-grid → note counts move TOWARD the original). **`auto` = ON for difficulty ≤
+Medium (diff_idx≤2), OFF at Hard** (fast 48th runs are legit there + the v2 sub-16th/triplet win lives at Hard);
+`all` = every difficulty; `off` = never. **`--grid_snap_keep_triplets` (DEFAULT ON)** keeps the triplet family
+`{2,4,8,10}` and vetoes ONLY `{1,5,7,11}`, so the snap kills 48th jitter but PRESERVES triplets (real even at Medium)
+and COMPOSES with `--auto_b_trip` (b_trip boosts triplet frames; the snap leaves them open). `--no-grid_snap_keep_
+triplets` = full snap (16th grid only). v1 (subdiv=4) = hard no-op (`grid_snap_offset` all-zeros; kept phases = all 4).
+Provably inert on already-on-grid songs (byte-identical). **BY-EAR PENDING** — install-set A/B `v2_low_*` vs `v2_low_*_snap`.
+
+**`--auto_b_trip` (now DEFAULT ON) — the duple/triplet SWITCH (v2/48th-grid only; `notes/v2_safety_envelope_findings.md`):**
 applies the triplet phase band (`b_trip` = the 3rd `--onset_phase_calib` element, default 0.7) ONLY to triplet-feel
 songs, per an AUDIO meter detector (`src/data/meter_detect.py` `detect_triple_pref`; `triple_pref > --triple_pref_
 thresh`, default 0). Duple songs → `b_trip=0` (no band, no busyness). Feeds the SAME per-song calib to BOTH the tau
-path and `generate()`. v1 (16th grid) = no-op (empty triplet band). **SAFE but NOT a clean win:** the ρ+0.47 detector
-fired on only 3/6 chart-triplet songs in the sweep (missed Sway tf0.61) → `auto` under-helps missed triplets while
-keeping duple perfectly clean; `global b_trip=0.7` helps all triplets but adds slight duple busyness. auto-vs-global
-is a BY-EAR call, not offline-decidable. Default OFF (canonical unchanged, `check_export_defaults.py` still 21 ✓).
+path and `generate()`. On v1 (subdiv=4) the detector is SKIPPED (empty band → no-op, no per-song audio-load cost).
+**SAFE but NOT a clean win:** the ρ+0.47 detector fired on only 3/6 chart-triplet songs in the sweep (missed Sway
+tf0.61) → `auto` under-helps missed triplets while keeping duple perfectly clean; `global b_trip=0.7` helps all
+triplets but adds slight duple busyness. auto-vs-global is a BY-EAR call, not offline-decidable. `--no-auto_b_trip`
+reverts to a fixed global b_trip (the 3rd `--onset_phase_calib` element).
 
 ## PRE-FLIGHT CHECKLIST (run before any generate/probe/export)
 1. **Model:** `gen_motif_full_fixed`, `audio_dim=42`? (NOT gen_style/gen_stage1.)

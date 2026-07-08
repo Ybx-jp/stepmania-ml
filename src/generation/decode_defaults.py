@@ -89,6 +89,43 @@ def triplet_band_positions(subdiv=4):
     return tuple(k * step for k in range(1, 6) if k * step != e8)
 
 
+# Off-16th-grid veto magnitude: -30 logits -> sigmoid ~1e-13 ~ a hard veto, but implemented as an ADDITIVE
+# per-frame offset so it rides the SAME onset_logit_offset slot (single-sourced to tau + decode) and is
+# byte-identical to a no-op on the 16th grid. See grid_snap_offset.
+GRID_SNAP_NEG = 30.0
+
+
+def grid_snap_offset(T, subdiv=4, keep_triplets=False, neg=GRID_SNAP_NEG, device=None):
+    """A (T,) onset-logit offset that SNAPS placement to the 16th grid by vetoing onsets on the finer (24th/48th)
+    positions — the timing-domain, grid-POSITION sibling of `min_onset_gap` (which gates spacing, not position).
+
+    KEPT (offset 0): the 16th-grid phases — the strong beat (0), the 8th (subdiv//2), and the two 16th-offbeats
+    (subdiv//4, 3*subdiv//4) from `phase_band_positions`. Optionally the triplet phases (`triplet_band_positions`)
+    when keep_triplets=True, so it composes with the triplet band. EVERY OTHER within-beat phase gets `-neg`
+    (~ -30 logits -> sigmoid ~0): those frames are excluded from tau's density quantile AND never fire in decode.
+
+    The note COUNT (density budget) is PRESERVED — the same top-`density` frames are chosen, now all on the 16th
+    grid — matching how humans author low-difficulty charts (~100% on-grid). Feed the result through the SAME slot
+    that couples tau + decode (the exporter stacks it into harm_off_t -> conditioned_p_onset extra_offset= AND
+    generate onset_logit_offset=), exactly like onset_phase_calib/harm_calib (conditioning-mechanics §6).
+
+    ★ v1 no-op BY CONSTRUCTION: at subdiv=4 the kept phases {0, 2, 1, 3} = ALL 4 positions, so the offset is
+    all-zeros (the 16th grid has no finer position to veto). The snap only bites on the 48th grid (subdiv=12).
+    """
+    import torch
+    e8, (s16a, s16b) = phase_band_positions(subdiv)
+    kept = {0, e8, s16a, s16b}
+    if keep_triplets:
+        kept |= set(triplet_band_positions(subdiv))
+    keep_mask = torch.zeros(subdiv, dtype=torch.bool, device=device)
+    for k in kept:
+        keep_mask[k] = True
+    ph = torch.arange(T, device=device) % subdiv
+    off = torch.zeros(T, device=device)
+    off[~keep_mask[ph]] = -float(neg)
+    return off
+
+
 def phase_calib_offset(T, phase_calib, subdiv=4, device=None):
     """The (T,) per-phase onset-logit offset for `onset_phase_calib = (b8, b16[, b_trip])` — the SINGLE source used
     by BOTH `apply_phase_calib` (tau side) and `generate()` (decode side), so they cannot drift. `b8` -> 8th frames,

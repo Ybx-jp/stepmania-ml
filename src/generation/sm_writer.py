@@ -70,6 +70,7 @@ def tensor_to_sm(
     author: str = "phase2-generator",
     typed: bool = False,
     timesteps_per_beat: int = 4,
+    header: dict = None,
 ) -> str:
     """Render a (T, 4) chart tensor to a complete .sm file as a string.
 
@@ -86,23 +87,47 @@ def tensor_to_sm(
     Returns:
         The full .sm file contents as a string.
     """
-    return _sm_header(bpm, title, artist, music, offset) + _notes_block(
+    return _sm_header(bpm, title, artist, music, offset, header=header) + _notes_block(
         chart, difficulty_name, difficulty_value, author, typed=typed,
         rows_per_measure=_rows_per_measure(timesteps_per_beat)
     )
 
 
-def _sm_header(bpm, title, artist, music, offset) -> str:
-    return (
-        f"#TITLE:{title};\n"
-        f"#ARTIST:{artist};\n"
-        f"#MUSIC:{music};\n"
-        f"#OFFSET:{offset};\n"
-        f"#SAMPLESTART:0.000;\n"
-        f"#SAMPLELENGTH:10.000;\n"
-        f"#SELECTABLE:YES;\n"
-        f"#BPMS:0.000={float(bpm)};\n"
-    )
+# StepMania header order (NotesWriterSM.cpp). We emit the tags we set explicitly (TITLE/ARTIST/MUSIC/OFFSET/
+# SELECTABLE/BPMS) plus any pass-through presentation tags supplied via `header=` (SUBTITLE, BANNER, BGCHANGES,
+# etc.), each in this canonical slot so StepMania's loader is happy. SAMPLESTART/SAMPLELENGTH default to a preview
+# window unless the caller (e.g. an inherited source chart) overrides them.
+_HEADER_ORDER = [
+    "TITLE", "SUBTITLE", "ARTIST", "TITLETRANSLIT", "SUBTITLETRANSLIT", "ARTISTTRANSLIT",
+    "GENRE", "CREDIT", "BANNER", "BACKGROUND", "CDTITLE", "MUSIC", "OFFSET",
+    "SAMPLESTART", "SAMPLELENGTH", "SELECTABLE", "DISPLAYBPM", "BPMS", "STOPS",
+    "BGCHANGES", "FGCHANGES",
+]
+
+
+def _sm_header(bpm, title, artist, music, offset, header: dict = None) -> str:
+    """Build the .sm header. `header` = optional {TAG: value} of extra/override presentation tags (from
+    `sm_headers.read_header_tags` and/or CLI flags); those win over the defaults below and are placed in
+    StepMania's canonical tag order. Only tags with a non-empty value are emitted (besides the always-present core)."""
+    tags = {
+        "TITLE": str(title), "ARTIST": str(artist), "MUSIC": str(music),
+        "OFFSET": str(offset), "SAMPLESTART": "0.000", "SAMPLELENGTH": "10.000",
+        "SELECTABLE": "YES", "BPMS": f"0.000={float(bpm)}",
+    }
+    for k, v in (header or {}).items():
+        k = k.upper()
+        if v is not None and str(v).strip() != "":
+            tags[k] = str(v)
+    core = {"TITLE", "ARTIST", "MUSIC", "OFFSET", "SELECTABLE", "BPMS"}  # always emitted, even if empty
+    lines = []
+    for tag in _HEADER_ORDER:
+        if tag in tags and (tags[tag].strip() != "" or tag in core):
+            lines.append(f"#{tag}:{tags[tag]};")
+    # any override tag not in the canonical order list (unusual) — append so it isn't silently dropped
+    for tag, val in tags.items():
+        if tag not in _HEADER_ORDER and val.strip() != "":
+            lines.append(f"#{tag}:{val};")
+    return "\n".join(lines) + "\n"
 
 
 def _notes_block(chart, difficulty_name, difficulty_value, author, typed: bool = False,
@@ -129,7 +154,7 @@ def _notes_block(chart, difficulty_name, difficulty_value, author, typed: bool =
 
 def charts_to_sm(charts, bpm, title="Generated Chart",
                  artist="stepmania-chart-generator", music="audio.ogg", offset=0.0,
-                 typed: bool = False, timesteps_per_beat: int = 4) -> str:
+                 typed: bool = False, timesteps_per_beat: int = 4, header: dict = None) -> str:
     """Render multiple difficulty charts into one .sm file (e.g. generated + original).
 
     Args:
@@ -141,7 +166,7 @@ def charts_to_sm(charts, bpm, title="Generated Chart",
     Returns the full .sm contents.
     """
     rpm = _rows_per_measure(timesteps_per_beat)
-    out = _sm_header(bpm, title, artist, music, offset)
+    out = _sm_header(bpm, title, artist, music, offset, header=header)
     for c in charts:
         out += _notes_block(c["chart"], c["difficulty_name"], c["difficulty_value"],
                             c.get("author", "phase2-generator"), typed=typed, rows_per_measure=rpm)
