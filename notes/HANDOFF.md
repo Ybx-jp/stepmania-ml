@@ -186,11 +186,11 @@ per-song triplet band keyed on the audio meter detector, `b_trip=0.7`); the trip
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
 - Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). **Verify PR/branch state via
-  `gh pr view` / `git log`.** Open PR **#69** (`feat/governor-subdiv-recalib` → `main`; verify state, don't trust
-  this). Latest code commits (`75cffaf` PE-extend, `3d5639d` `--bpm`, `7381d71` ml-gloss, `cf0b820` v2 CLI + headers)
-  + this refresh's docs are on the branch. **`cf0b820`/`3759727` were pushed; `3d5639d`/`7381d71`/`75cffaf` + this
-  refresh may be UNPUSHED — check `git log origin/feat/governor-subdiv-recalib..HEAD` and push to update #69.** The
-  DEPLOY SWAP (ship checklist #1 — make v2 THE default) is a NEW code change not yet made.
+  `gh pr view` / `git log`.** PR **#69 MERGED** (v2 CLI + headers `cf0b820`/`3759727` are now in `main`); this
+  session's BYO-audio commits (`3d5639d` `--bpm`, `7381d71` ml-gloss, `75cffaf` PE-extend, `14d9eb1` this refresh)
+  are on **PR #70** (`feat/governor-subdiv-recalib` → `main`; verify state via `gh pr view 70`, don't trust this).
+  The branch is re-created after #69's merge+delete. The DEPLOY SWAP (ship checklist #1 — make v2 THE default) is a
+  NEW code change not yet made.
 - Gitignored / not committed: `outputs/` (incl. `outputs/v2_sweep/*` the safety sweep), `transcripts/`, scratchpad
   probes. Installed by-ear pack: `~/sm-generated/v2byear_01..09`.
 
