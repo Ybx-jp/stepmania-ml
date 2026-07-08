@@ -120,7 +120,10 @@ def parse_args():
                         "highres_v2 = the same 42 channels on the data-layer-v2 48th grid (timesteps_per_beat=12, "
                         "beat-sync) — resolves triplets, removes the 16th-grid triplet tax; auto-selects the v2 "
                         "checkpoint + 48th-grid .sm writer + v2 context length. Pair ONLY with a v2 checkpoint.")
-    p.add_argument("--bpm", type=float, default=None, help="song BPM (default: estimate it)")
+    p.add_argument("--bpm", type=float, default=None,
+                   help="song BPM. ★ STRONGLY RECOMMENDED for correct alignment — it grids the whole chart. Default "
+                        "= auto-estimate (librosa), which is UNRELIABLE (octave / 2:3 metric errors, esp. fast songs) "
+                        "and will mis-align the chart if wrong. Pass the real BPM whenever you know it.")
     p.add_argument("--style", action="append", default=None, metavar="DIM=VAL",
                    help="optional groove feel, e.g. 'chaos=q0.7'. Multidimensional: comma-separate "
                         "('chaos=high,freeze=low') OR repeat the flag ('--style chaos=high --style freeze=low'); "
@@ -193,8 +196,17 @@ def main():
         raise SystemExit(f"manifold not found: {manifold_path}\n"
                          "It ships with the repo and supplies the difficulty density target.")
 
-    # 1. BPM -> the 16th-note-aligned hop the model was trained on
+    # 1. BPM -> the 16th-note-aligned hop the model was trained on.
+    # ⚠️ BPM is the load-bearing alignment lever: the audio is gridded at BPM·subdiv/60 and the model's metric-phase
+    # channel assumes each frame IS that beat-fraction, so a WRONG bpm mis-grids the whole chart (notes drift off the
+    # beat + OOD phase features). Auto-estimation (librosa.beat.tempo) is UNRELIABLE — it octave/2:3-errs, especially
+    # on fast tracks (verified: ~40% of a personal set mis-estimated, fast hardcore under-reported by 2:3). So --bpm
+    # is STRONGLY RECOMMENDED for correctness; the estimate is a convenience only, with a loud warning below.
     bpm = args.bpm if args.bpm is not None else estimate_bpm(args.audio)
+    if args.bpm is None:
+        print(f"⚠️  no --bpm given → ESTIMATED {bpm:.1f} BPM. Tempo estimation is UNRELIABLE (octave / 2:3 metric "
+              f"errors, esp. on fast songs) and a wrong BPM mis-aligns the WHOLE chart. Verify this looks right; "
+              f"pass --bpm <song BPM> for a correctly aligned chart.")
     # The safe single-hop grid holds well past the TRAINING gate [60,200]; warn only outside the widened
     # inference band [40,320] (StepManiaParser.for_inference). A gimmick-scale --bpm (e.g. 2467 copied from a
     # #BPMS scroll trick) would make hop≈0 and grid garbage — that's what the parser's gimmick guard catches
