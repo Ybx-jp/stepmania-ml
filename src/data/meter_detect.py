@@ -144,3 +144,26 @@ def detect_triple_pref(sm_file: str) -> dict | None:
     if h is None:
         return None
     return strong_readings(h)
+
+
+def detect_triple_pref_audio(audio_path: str, bpm: float) -> dict | None:
+    """The BYO-audio sibling of `detect_triple_pref` for `scripts/generate.py`: read the meter directly from an
+    audio file + a single constant BPM (no `.sm` to source `#BPMS`/`#OFFSET` from). Shares `strong_readings`
+    (the rotation-invariant DFT) so the classifier is identical to the export path; only the beat mapping differs
+    (constant BPM here vs the full `bpm_map` in `phase_hist`). Returns the `strong_readings` dict or None on failure.
+    """
+    import librosa
+    if not bpm or bpm <= 0:
+        return None
+    try:
+        y, sr = librosa.load(audio_path, sr=SR, mono=True)
+    except Exception:
+        return None
+    env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP)
+    t = np.arange(len(env)) * HOP / sr          # frame times (s)
+    beat = t * bpm / 60.0                        # constant-BPM beat (BYO-audio has no #BPMS drift map)
+    cell = np.mod(np.round(np.mod(beat, 1.0) * 12).astype(int), 12)  # nearest of 12 within-beat cells
+    h = np.zeros(12)
+    for c, e in zip(cell, env):
+        h[c] += e
+    return strong_readings(h)
