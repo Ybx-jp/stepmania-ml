@@ -340,6 +340,18 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   (`b_trip=0.7` BY-EAR WON: triplet-occ 0.107→0.390) → groove-radar chaos fix (RETRAIN-GATED). **pt_chaos_v2 WIN**
   ("brand new note colors, flowy streams, conditioning effective"). NEXT = the no-fast-jump cap (fast sub-16th JUMPS
   evade the fatigue governor) + a hold-stream-gate bug on `freeze=high` v2.
+**UPDATE (2026-07-08) — the "DEAF CHOREOGRAPHY" root cause: audio↔beat-grid MISALIGNMENT + auto-offset detector
+(`byo_offset_detection_findings.md`).** User played the personal set → "really bad, no choreography, like the model is
+deaf." Chased it through the density red herring (a REAL `×4/subdiv` units bug — v2 BYO ran ~2× real-Hard density,
+`generate.py:272` fixed — but the WRONG axis: real-chart oracle showed placement RATIO already matched real; count≠
+placement) to the true disease: generate.py never beat-aligns the audio. **⚠️ OVERTURNS the 07-07 "offset is a red
+herring" call below** — that was PLAYBACK-only reasoning; the model chores on `metric_phase`, so BOTH a wrong BPM
+(Toulouse charted at estimate 129.199 vs true 128 → drifts a beat/~51s) AND a wrong offset (frame0≠first beat) give
+phantom-grid choreography. NEW ASSET: `~/sm-personal` = the user's OWN charts (true BPM+offset) as a detector oracle
+([[personal-reference-charts]]). Auto-offset detector: full-band onset pulse-train + 31ms latency cal WON (~80% ≤40ms,
+~20% half-beat slip); DFT-phase/kick-band/tiebreak all oracle-refuted. **OPEN BY-EAR GATE:** anchoring A/B on Toulouse
+(`toulouse_bpm128` t=0 vs `toulouse_anchor_beat` beat-anchored). Lineage `byo-audio-alignment-arc.md` Ch.2.
+
 **UPDATE (2026-07-07/08) — BYO-audio ALIGNMENT hardening (`byo_audio_alignment_findings.md`).** User by-ear "sus" on
 the shipped v2 personal charts → 3 `generate.py` failure modes + 3 attribution corrections (lineage
 `byo-audio-alignment-arc.md`): (1) BPM estimate (librosa) octave/2:3-errs 10/26 songs — BPM is the alignment lever,
