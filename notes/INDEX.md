@@ -340,6 +340,14 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   (`b_trip=0.7` BY-EAR WON: triplet-occ 0.107→0.390) → groove-radar chaos fix (RETRAIN-GATED). **pt_chaos_v2 WIN**
   ("brand new note colors, flowy streams, conditioning effective"). NEXT = the no-fast-jump cap (fast sub-16th JUMPS
   evade the fatigue governor) + a hold-stream-gate bug on `freeze=high` v2.
+**UPDATE (2026-07-07) — PUBLIC CLI v2 + `.sm` header/BGCHANGES passthrough (engineering, no new finding).** Commit
+`cf0b820`: `scripts/generate.py` gained `--features highres_v2` (v2-reachable via the BYO-song CLI; default stays v1,
+byte-identical) + `--title`/presentation flags + `--inherit_from SM|auto` (carry a source chart's banner/background/
+#BGCHANGES video, copying the media in) via new `src/generation/sm_headers.py` + `sm_writer` `header=` dict +
+`meter_detect.detect_triple_pref_audio`. Delivered 34/35 v2 Hard charts for `~/sm-personal`. No findings file (no
+probe). Prior v2 ship-thread findings live in `grid_snap_findings.md` (07-06 low-diff + 16th-grid snap) +
+`v2_safety_envelope_findings.md` (07-06b sweep + b_trip switch + gate fix). State/next = `HANDOFF.md` (ship checklist).
+
 **UPDATE (2026-07-05b) — 🎉 PHASE 6 BY-EAR PASSED → v2 = DEPLOY CANDIDATE.** Exported the two near-pure-triplet songs
 with `gen_motif_v2_48th_cont` (val 0.7435) + `--features highres_v2` + `for_v2()`; user played vs the v1 set: "it
 totally worked!!!! none of the new note frames felt random… resounding 100% success! no degradation… finally able to

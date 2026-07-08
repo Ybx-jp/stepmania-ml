@@ -56,6 +56,13 @@ mechanism; **this skill is the config VALUES.**
   (`notes/playtest_log.md` 2026-07-05). **The exporter NOW SUPPORTS it (commit `837c1ed`):** `--features highres_v2`
   auto-selects the `for_v2()` parser + the 48th-grid `sm_writer` (48 rows/measure) + `cache_dir=None` + builds the
   model at `max_len=5504` + uses `V2_MSL=5400` (the v1 config msl=1440 clips a v2 song to ⅓ — a fixed truncation bug).
+  **AND `scripts/generate.py` (the bring-your-own-SONG single-file CLI) also speaks v2 now (commit `cf0b820`):**
+  `--features highres_v2` there auto-selects the v2 checkpoint (`gen_motif_v2_48th_cont`), the 48th feature extractor,
+  the 5504-frame context, `V2_MSL`, the 48-row writer, and the v2 decode flags (`--no_fast_jump`/`--min_onset_gap`/
+  `--grid_snap`/`--auto_b_trip`) — all derived from one `subdiv` (`fspec.extractor.config.timesteps_per_beat`); its
+  DEFAULT stays highres/v1 (v1 byte-identical), so this is v2-reachable-via-CLI, not the default-swap. It also gained
+  `--title` + `.sm` presentation flags + `--inherit_from SM|auto` (carry a source chart's banner/background/#BGCHANGES
+  video, copying the media in) via the new `src/generation/sm_headers.py` + `sm_writer`'s `header=` dict.
   Phase-5 decode re-index (`590daa1`): the phase grid is `subdiv`-parameterized (v1 `highres`=subdiv 4, byte-identical).
   Do NOT pair `highres_v2` with `gen_motif_full_fixed`, or a v1 checkpoint with the v2 cache (grid mismatch).
   **DECODE-PLAYABILITY pass DONE (2026-07-05 session 2)** — all v1-no-op / subdiv=4 byte-identical: the governor

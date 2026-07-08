@@ -8,7 +8,22 @@ knob-tuning is diminishing returns. **Do NOT initiate the parked research** (goo
 GDL/meter-equivariance retrain, seq-onset retrain); redirect tangents to the release checklist. Un-park ONLY on the
 user's literal phrase **"the times have changed."**
 
-**LATEST session (2026-07-06c) — LOW-DIFFICULTY verification + the 16th-grid SNAP** (`notes/grid_snap_findings.md`,
+**LATEST session (2026-07-07) — PUBLIC CLI now speaks v2 + `.sm` header/BGCHANGES passthrough** (commit `cf0b820`;
+[[ship-mode-park-research]]): `scripts/generate.py` (the bring-your-own-SONG single-file CLI) gained `--features
+highres_v2` — auto-selects the v2 checkpoint (`gen_motif_v2_48th_cont`), the 48th feature extractor, the 5504-frame
+context, `V2_MSL`, the 48-row `sm_writer`, and the v2 decode flags (`--no_fast_jump` default-on, `--min_onset_gap`,
+`--grid_snap`, `--auto_b_trip`), all derived from one `subdiv` (`fspec.extractor.config.timesteps_per_beat`) so
+audio/notes can't drift. **Its DEFAULT stays highres/v1 (v1 byte-identical) — this is v2-REACHABLE-via-CLI, NOT the
+deploy-swap (ship checklist #1 still open).** Also added **`--title` + presentation flags + `--inherit_from SM|auto`**:
+inherit a source chart's banner/background/**#BGCHANGES music-video** tags and COPY the media into the new folder so
+they resolve (new module `src/generation/sm_headers.py`; `sm_writer` gained a `header=` dict in StepMania tag order,
+default output unchanged; `meter_detect.detect_triple_pref_audio` = the b_trip switch from audio+BPM, no `.sm` needed).
+Timing tags (`#BPMS`/`#STOPS`) deliberately NOT inherited (the generator owns its grid). **Deliverable:** 34/35 v2 Hard
+charts for `~/sm-personal` → `~/sm-generated/v2_personal_hard/` (1 fail = corrupt `.ogg` "Raining Down"; 26 inherited a
+source header, 9 with playing videos). No new experiment/finding — engineering deliverable, no lineage arc. Tag order
+read from the local SM source `~/stepmania-5.1.0-b2/src/NotesWriterSM.cpp`.
+
+**PRIOR session (2026-07-06c) — LOW-DIFFICULTY verification + the 16th-grid SNAP** (`notes/grid_snap_findings.md`,
 [[low-diff-gridsnap]]): verified the v2 deploy candidate at Beginner/Easy/Medium (it had ONLY been by-ear'd on Hard).
 **v2 generates them coherently** (no degeneration, density tracks, critic reads low, sparse songs ~100% on-grid ==
 originals), EXCEPT busy low-diff songs place **8–23% of notes on pure-48th cells `{1,5,7,11}`** human originals never
@@ -32,10 +47,13 @@ not @Hard). **PRIOR session (06-06b)** built the auto-switch + safe-settings swe
 - **Prior commits on `feat/governor-subdiv-recalib`** (verify via `git log`): `33de530` governor subdiv-recalibration
   → `63125eb` footspeed floor + `--style` density fix → `46a25b4` triplet phase band → `ed26aa6` groove-radar subdiv
   chaos (retrain-gated) → docs-refresh commits. All subdiv=4 BYTE-IDENTICAL (v1 untouched).
-- **THIS session's code is COMMITTED** (this refresh): the 16th-grid SNAP (`decode_defaults.grid_snap_offset` +
-  exporter `--grid_snap`/`--grid_snap_keep_triplets`), the difficulty auto-gate, `--auto_b_trip` default→True, PLUS
-  the prior 06-06b uncommitted work now committed (`src/data/meter_detect.py`, the `--auto_b_trip` switch,
-  `INFERENCE_GATES` in `stepmania_parser.py`, `analyze_v2_envelope.py`, `notes/v2_safety_envelope_findings.md`).
+- **Latest commit `cf0b820`** (2026-07-07): `scripts/generate.py` v2 support + `.sm` header inheritance + new
+  `src/generation/sm_headers.py` + `sm_writer` `header=` dict + `meter_detect.detect_triple_pref_audio` (all v1
+  byte-identical; `export_typed_samples.py` argparse defaults untouched → `check_export_defaults.py` still 25 ✓).
+- **06-06c commit** (16th-grid SNAP): `decode_defaults.grid_snap_offset` + exporter `--grid_snap`/
+  `--grid_snap_keep_triplets`, the difficulty auto-gate, `--auto_b_trip` default→True, PLUS the 06-06b work
+  (`src/data/meter_detect.py`, the `--auto_b_trip` switch, `INFERENCE_GATES` in `stepmania_parser.py`,
+  `analyze_v2_envelope.py`, `notes/v2_safety_envelope_findings.md`).
 
 ## v2 DECODE-PLAYABILITY WORK ON THE BRANCH (prior sessions; all in `generate()` / the exporter / groove_radar; v1 byte-identical)
 1. **Governor subdiv-recalibration** (`conditioning-mechanics §8`): the §8 governors reasoned in FRAMES assuming a
@@ -153,9 +171,10 @@ per-song triplet band keyed on the audio meter detector, `b_trip=0.7`); the trip
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
 - Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). **Verify PR/branch state via
-  `gh pr view` / `git log`.** This session's grid-snap + auto_b_trip-default code AND docs are committed on this
-  branch (this refresh); the prior 06-06b code is folded in. The DEPLOY SWAP (ship checklist #1) is a NEW code change
-  not yet made. Whether to open a PR to `main` for the whole branch is a user call (long-lived v2 feature branch).
+  `gh pr view` / `git log`.** Latest code commit **`cf0b820`** (generate.py v2 + `.sm` header inheritance) + this
+  refresh's docs are on this branch; the grid-snap/auto_b_trip and 06-06b code are folded in. The DEPLOY SWAP (ship
+  checklist #1 — make v2 THE default) is a NEW code change not yet made. Whether to open a PR to `main` for the whole
+  long-lived v2 feature branch is a user call.
 - Gitignored / not committed: `outputs/` (incl. `outputs/v2_sweep/*` the safety sweep), `transcripts/`, scratchpad
   probes. Installed by-ear pack: `~/sm-generated/v2byear_01..09`.
 
@@ -165,7 +184,7 @@ Memory **[[ship-mode-park-research]]** (the operative directive) → **this chec
 the hold-stream partial fix + stamina-is-ON correction) → `notes/footspeed_floor_findings.md §4/§5/§5b` (no-fast-jump
 = shipped; hold-stream = partial + the PARKED fix design) → **`notes/v2_safety_envelope_findings.md`** (the LATEST
 session: the safety sweep, the switch, the gate fix, the auto-vs-global open question) → **`notes/grid_snap_findings.md`**
-(THIS session: the low-diff verification + the 16th-grid SNAP, now a canonical default) → `notes/playtest_log.md`
+(the low-diff verification + the 16th-grid SNAP, now a canonical default) → `notes/playtest_log.md`
 (the by-ear record) → lineage `experiment_lineage/meter-grid-arc.md` (§Session 5). Load-bearing skills:
 **generation-defaults, conditioning-mechanics §6/§8, experiment-design** (the ship-vs-tune call = a Rule-"is this the
 right investment" judgment).
