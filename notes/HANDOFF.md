@@ -1,6 +1,6 @@
 # HANDOFF — ★ SHIP MODE: cut v1.0.0 (deploy-swap v2 + guide). Research PARKED. Don't wander.
 
-**Written 2026-07-06 for the next Claude. THE PROJECT IS IN SHIP MODE** (user decision — memory
+**Written 2026-07-08 for the next Claude. THE PROJECT IS IN SHIP MODE** (user decision — memory
 [[ship-mode-park-research]]): clean up, cut **v1.0.0** (tags `0.1.0`/`0.2.0` already exist), host, announce, move on.
 The v2 48th-grid model is "a full step better in expressiveness… already pretty incredible." The remaining gap ("onset
 allocation undertuned") is the **note-context PLACEMENT CEILING** — a RETRAIN problem, not a decode-tune — so more
@@ -8,20 +8,27 @@ knob-tuning is diminishing returns. **Do NOT initiate the parked research** (goo
 GDL/meter-equivariance retrain, seq-onset retrain); redirect tangents to the release checklist. Un-park ONLY on the
 user's literal phrase **"the times have changed."**
 
-**LATEST session (2026-07-07) — PUBLIC CLI now speaks v2 + `.sm` header/BGCHANGES passthrough** (commit `cf0b820`;
-[[ship-mode-park-research]]): `scripts/generate.py` (the bring-your-own-SONG single-file CLI) gained `--features
-highres_v2` — auto-selects the v2 checkpoint (`gen_motif_v2_48th_cont`), the 48th feature extractor, the 5504-frame
-context, `V2_MSL`, the 48-row `sm_writer`, and the v2 decode flags (`--no_fast_jump` default-on, `--min_onset_gap`,
-`--grid_snap`, `--auto_b_trip`), all derived from one `subdiv` (`fspec.extractor.config.timesteps_per_beat`) so
-audio/notes can't drift. **Its DEFAULT stays highres/v1 (v1 byte-identical) — this is v2-REACHABLE-via-CLI, NOT the
-deploy-swap (ship checklist #1 still open).** Also added **`--title` + presentation flags + `--inherit_from SM|auto`**:
-inherit a source chart's banner/background/**#BGCHANGES music-video** tags and COPY the media into the new folder so
-they resolve (new module `src/generation/sm_headers.py`; `sm_writer` gained a `header=` dict in StepMania tag order,
-default output unchanged; `meter_detect.detect_triple_pref_audio` = the b_trip switch from audio+BPM, no `.sm` needed).
-Timing tags (`#BPMS`/`#STOPS`) deliberately NOT inherited (the generator owns its grid). **Deliverable:** 34/35 v2 Hard
-charts for `~/sm-personal` → `~/sm-generated/v2_personal_hard/` (1 fail = corrupt `.ogg` "Raining Down"; 26 inherited a
-source header, 9 with playing videos). No new experiment/finding — engineering deliverable, no lineage arc. Tag order
-read from the local SM source `~/stepmania-5.1.0-b2/src/NotesWriterSM.cpp`.
+**LATEST session (2026-07-07/08) — BYO-audio ALIGNMENT hardening** (`notes/byo_audio_alignment_findings.md`,
+[[byo-audio-bpm-footgun]], lineage `byo-audio-alignment-arc.md`): user played the shipped v2 personal charts and
+called them "sus" → root-caused to THREE `scripts/generate.py` alignment modes (user by-ear + 3 attribution
+corrections). **(1) BPM estimate (librosa) UNRELIABLE** — octave/2:3 errors mis-grid the WHOLE chart (10/26 personal
+songs; BPM is the lever, offset is a self-consistent RED HERRING); an audio-only auto-corrector was validated vs the
+source-`.sm` oracle BEFORE building and REJECTED (net-negative, fixed 6/broke 7) → **require `--bpm`** + loud warn
+(`3d5639d`). **(2) Variable-BPM/stops UNSUPPORTED** (Heroes 13 BPMs, Stereo Sayan 2+stop; single-BPM tool; left
+as-is). **(3) TRUNCATION** — the absolute sinusoidal PE hard-capped length → 23/34 charts cut to SILENCE (worse on
+v2's 458-beat window); a scoping probe showed the model EXTRAPOLATES gracefully past its trained context (panel
+entropy full, density thins ~28% at 2×) → **FIX = extend the PE to cover the whole song** (`75cffaf`; `--max_len`
+default None + `SAFETY_CAP`). Deliverable re-genned: the 8 gross-BPM at true BPM, the 23 truncated full-length
+(VERIFY the re-gen `DONE` — was in progress at write). StepMania cache cleared (`~/.stepmania-5.1/Cache`).
+
+**PRIOR session (2026-07-07) — PUBLIC CLI speaks v2 + `.sm` header/BGCHANGES passthrough** (commit `cf0b820`):
+`scripts/generate.py` gained `--features highres_v2` (auto-selects the v2 checkpoint + 48th extractor + 48-row writer
++ the v2 decode flags, one `subdiv` source; DEFAULT stays highres/v1, byte-identical — v2-REACHABLE, NOT the
+deploy-swap) + `--title`/presentation flags + `--inherit_from SM|auto` (carry a source chart's banner/background/
+**#BGCHANGES video**, copying the media in; new `src/generation/sm_headers.py`, `sm_writer` `header=` dict,
+`meter_detect.detect_triple_pref_audio`). Timing tags NOT inherited (generator owns its grid). SM tag order read from
+the local source `~/stepmania-5.1.0-b2/src/NotesWriterSM.cpp`. Deliverable set = `~/sm-generated/v2_personal_hard/`
+(34/35; "Raining Down" = corrupt `.ogg`).
 
 **PRIOR session (2026-07-06c) — LOW-DIFFICULTY verification + the 16th-grid SNAP** (`notes/grid_snap_findings.md`,
 [[low-diff-gridsnap]]): verified the v2 deploy candidate at Beginner/Easy/Medium (it had ONLY been by-ear'd on Hard).
@@ -47,9 +54,10 @@ not @Hard). **PRIOR session (06-06b)** built the auto-switch + safe-settings swe
 - **Prior commits on `feat/governor-subdiv-recalib`** (verify via `git log`): `33de530` governor subdiv-recalibration
   → `63125eb` footspeed floor + `--style` density fix → `46a25b4` triplet phase band → `ed26aa6` groove-radar subdiv
   chaos (retrain-gated) → docs-refresh commits. All subdiv=4 BYTE-IDENTICAL (v1 untouched).
-- **Latest commit `cf0b820`** (2026-07-07): `scripts/generate.py` v2 support + `.sm` header inheritance + new
-  `src/generation/sm_headers.py` + `sm_writer` `header=` dict + `meter_detect.detect_triple_pref_audio` (all v1
-  byte-identical; `export_typed_samples.py` argparse defaults untouched → `check_export_defaults.py` still 25 ✓).
+- **Latest commits (2026-07-07/08, generate.py BYO-audio hardening):** `75cffaf` PE-extend (chart the whole song),
+  `3d5639d` `--bpm` warning (require it), `7381d71` ml-gloss terms. `cf0b820` v2 CLI + `.sm` header inheritance +
+  `src/generation/sm_headers.py` + `sm_writer` `header=` dict + `meter_detect.detect_triple_pref_audio`. All v1
+  byte-identical; `export_typed_samples.py` argparse defaults untouched → `check_export_defaults.py` still 25 ✓.
 - **06-06c commit** (16th-grid SNAP): `decode_defaults.grid_snap_offset` + exporter `--grid_snap`/
   `--grid_snap_keep_triplets`, the difficulty auto-gate, `--auto_b_trip` default→True, PLUS the 06-06b work
   (`src/data/meter_detect.py`, the `--auto_b_trip` switch, `INFERENCE_GATES` in `stepmania_parser.py`,
@@ -113,6 +121,13 @@ not @Hard). **PRIOR session (06-06b)** built the auto-switch + safe-settings swe
    good-settings tolerance formula ([[good-settings-region]]); GDL/meter-equivariance ([[meter-4-4-grid]]).
 
 ## AWAITING USER
+- **★ BY-EAR: the re-genned personal set** `~/sm-generated/v2_personal_hard/` (34 v2 Hard charts) — this session
+  fixed the BPM misalignment (8 charts re-genned true-BPM) + truncation (23 re-genned full-length via PE-extend).
+  VERIFY the truncated re-gen finished (`DONE` marker / re-run `inspect_charts`), then **launch StepMania** (cache was
+  cleared → it rescans once). Play the previously-"sus" hardcore songs (Jealous, Futureset, Bye Bye) — do they read
+  on-beat now? Do the now-full-length songs hold up past the ~3-min mark (the ~28% density thinning in the
+  extrapolated tail)? Crazy Maybe left at estimated 112.3 (2.1% off) — re-gen at true 110 if it still feels off.
+  Stereo Sayan / Heroes are variable-BPM (unsupported). Log to `notes/playtest_log.md`.
 - **★ BY-EAR: the 16th-grid SNAP (low/mid difficulty)** — installed groups `~/sm-generated/v2_low_beginner`,
   `v2_low_easy`, `v2_low_medium` (canonical) vs `v2_low_easy_snap`, `v2_low_medium_snap` (fix). Play the BUSY songs
   (**See Me Now, SUPER SUMMER DIVE, Gengaozo, Deja loin**) canonical-vs-snap; the sparse songs are identical between
@@ -171,15 +186,18 @@ per-song triplet band keyed on the audio meter detector, `b_trip=0.7`); the trip
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
 - Branch **`feat/governor-subdiv-recalib`** (off `feat/data-layer-v2`, off `main`). **Verify PR/branch state via
-  `gh pr view` / `git log`.** Latest code commit **`cf0b820`** (generate.py v2 + `.sm` header inheritance) + this
-  refresh's docs are on this branch; the grid-snap/auto_b_trip and 06-06b code are folded in. The DEPLOY SWAP (ship
-  checklist #1 — make v2 THE default) is a NEW code change not yet made. Whether to open a PR to `main` for the whole
-  long-lived v2 feature branch is a user call.
+  `gh pr view` / `git log`.** PR **#69 MERGED** (v2 CLI + headers `cf0b820`/`3759727` are now in `main`); this
+  session's BYO-audio commits (`3d5639d` `--bpm`, `7381d71` ml-gloss, `75cffaf` PE-extend, `14d9eb1` this refresh)
+  are on **PR #70** (`feat/governor-subdiv-recalib` → `main`; verify state via `gh pr view 70`, don't trust this).
+  The branch is re-created after #69's merge+delete. The DEPLOY SWAP (ship checklist #1 — make v2 THE default) is a
+  NEW code change not yet made.
 - Gitignored / not committed: `outputs/` (incl. `outputs/v2_sweep/*` the safety sweep), `transcripts/`, scratchpad
   probes. Installed by-ear pack: `~/sm-generated/v2byear_01..09`.
 
 ## READ-FIRST (in order)
-Memory **[[ship-mode-park-research]]** (the operative directive) → **this checklist above** → `generation-defaults §0`
+Memory **[[ship-mode-park-research]]** (the operative directive) → **this checklist above** → **`notes/byo_audio_
+alignment_findings.md`** + [[byo-audio-bpm-footgun]] (THIS session: the BPM-require + PE-extend CLI fixes; lineage
+`byo-audio-alignment-arc.md`) → `generation-defaults §0`
 (the deploy-swap targets: v2 checkpoint/features/knobs) → `conditioning-mechanics §6/§7/§8` (the v2 decode levers +
 the hold-stream partial fix + stamina-is-ON correction) → `notes/footspeed_floor_findings.md §4/§5/§5b` (no-fast-jump
 = shipped; hold-stream = partial + the PARKED fix design) → **`notes/v2_safety_envelope_findings.md`** (the LATEST

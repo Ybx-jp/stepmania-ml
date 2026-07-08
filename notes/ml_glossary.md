@@ -86,3 +86,11 @@ Format per entry: **term** — plain meaning *(how it shows up here)*.
 - **duple vs triplet subdivision** — whether notes between beats fall on a 2/4-way grid (duple, "1-e-and-a") or a 3-way grid (triplet, "1-trip-let"); a triplet song's accents land between the sixteenth slots and get mis-read by a duple grid.
 - **sextuplet** — six evenly-spaced notes per beat (16th-note triplets); shows up as 6-cycles/beat energy in the beat-phase DFT.
 - **beat-phase histogram** — a tally of how much onset energy lands at each fractional position within a beat (0 = on the beat, 0.5 = the "and", etc.), pooled over the song; its shape reveals the subdivision.
+
+## Added 2026-07-07 (BYO-audio BPM thread)
+
+- **onset envelope / onset strength** — a continuous per-frame curve of "how much new energy just started" (spectral flux, from `librosa.onset.onset_strength`); the raw signal whose peaks are note onsets and whose periodicity reveals tempo. Folded into a [[beat-phase histogram]] to score how well a candidate BPM fits.
+- **tempo octave / octave error** — the classic tempo-estimation failure: reporting a simple *ratio* of the true tempo (×2, ×½, or the 2:3 "metric" level) because those all share beat structure. Half/double the true BPM still lands onsets on the beats, so phase-concentration can't tell them apart — this is why librosa under-reported the fast hardcore tracks by 2:3.
+- **autocorrelation** — correlating a signal with a time-shifted copy of itself; peaks at lags where the signal repeats. On an [[onset envelope]] the peak lag = the beat period, the standard primitive for tempo (though still octave-ambiguous).
+- **tempogram** — a time-vs-tempo heat map (local [[autocorrelation]] / Fourier of the [[onset envelope]] over sliding windows) showing which tempi are present when; the proper tool for octave-robust tempo, vs the single-number `librosa.beat.tempo` that failed here.
+- **Herfindahl index (concentration / peakiness)** — sum of squared proportions of a distribution (`Σ pᵢ²`); 1/N for uniform, →1 for fully concentrated. Tried as a "how peaked is the beat-phase histogram" score — but on a fine histogram it was dominated by a discretization artifact (biased toward high BPM), so it was the wrong peakiness metric.

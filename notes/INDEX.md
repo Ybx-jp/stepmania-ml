@@ -340,6 +340,14 @@ stays PARKED (`chaos_onset_gate_scope.md`).
   (`b_trip=0.7` BY-EAR WON: triplet-occ 0.107→0.390) → groove-radar chaos fix (RETRAIN-GATED). **pt_chaos_v2 WIN**
   ("brand new note colors, flowy streams, conditioning effective"). NEXT = the no-fast-jump cap (fast sub-16th JUMPS
   evade the fatigue governor) + a hold-stream-gate bug on `freeze=high` v2.
+**UPDATE (2026-07-07/08) — BYO-audio ALIGNMENT hardening (`byo_audio_alignment_findings.md`).** User by-ear "sus" on
+the shipped v2 personal charts → 3 `generate.py` failure modes + 3 attribution corrections (lineage
+`byo-audio-alignment-arc.md`): (1) BPM estimate (librosa) octave/2:3-errs 10/26 songs — BPM is the alignment lever,
+offset is a self-consistent RED HERRING; an audio-only auto-corrector was validated vs the source-`.sm` oracle and
+REJECTED (net-negative, fixed 6/broke 7) → require `--bpm` (`3d5639d`). (2) variable-BPM/stops unsupported (read ALL
+`#BPMS`). (3) "longer=harder" was "the chart STOPS" — absolute-PE truncated 23/34 to silence; a scoping probe showed
+graceful extrapolation → extend the PE to chart the whole song (`75cffaf`). Open fork: re-indexed sliding window.
+
 **UPDATE (2026-07-07) — PUBLIC CLI v2 + `.sm` header/BGCHANGES passthrough (engineering, no new finding).** Commit
 `cf0b820`: `scripts/generate.py` gained `--features highres_v2` (v2-reachable via the BYO-song CLI; default stays v1,
 byte-identical) + `--title`/presentation flags + `--inherit_from SM|auto` (carry a source chart's banner/background/

@@ -120,7 +120,10 @@ def parse_args():
                         "highres_v2 = the same 42 channels on the data-layer-v2 48th grid (timesteps_per_beat=12, "
                         "beat-sync) — resolves triplets, removes the 16th-grid triplet tax; auto-selects the v2 "
                         "checkpoint + 48th-grid .sm writer + v2 context length. Pair ONLY with a v2 checkpoint.")
-    p.add_argument("--bpm", type=float, default=None, help="song BPM (default: estimate it)")
+    p.add_argument("--bpm", type=float, default=None,
+                   help="song BPM. ★ STRONGLY RECOMMENDED for correct alignment — it grids the whole chart. Default "
+                        "= auto-estimate (librosa), which is UNRELIABLE (octave / 2:3 metric errors, esp. fast songs) "
+                        "and will mis-align the chart if wrong. Pass the real BPM whenever you know it.")
     p.add_argument("--style", action="append", default=None, metavar="DIM=VAL",
                    help="optional groove feel, e.g. 'chaos=q0.7'. Multidimensional: comma-separate "
                         "('chaos=high,freeze=low') OR repeat the flag ('--style chaos=high --style freeze=low'); "
@@ -167,9 +170,10 @@ def parse_args():
                         "v1 grid = no-op. --no-auto_b_trip reverts to the fixed global b_trip.")
     p.add_argument("--triple_pref_thresh", type=float, default=0.0,
                    help="meter threshold for --auto_b_trip (triple_pref > this => triplet-feel => band on).")
-    p.add_argument("--max_len", type=int, default=2048,
-                   help="cap on generated frames (clamped to the model's trained context; auto-raised to the v2 "
-                        "sequence length under --features highres_v2, where 2048 would clip the song to ~1/3)")
+    p.add_argument("--max_len", type=int, default=None,
+                   help="optional cap on generated frames. DEFAULT = None = chart the WHOLE song (the positional "
+                        "encoding is extended past the trained context; the model extrapolates coherently, validated "
+                        "on v2). Set a value to deliberately truncate; a hard safety ceiling still applies.")
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
 
@@ -193,8 +197,17 @@ def main():
         raise SystemExit(f"manifold not found: {manifold_path}\n"
                          "It ships with the repo and supplies the difficulty density target.")
 
-    # 1. BPM -> the 16th-note-aligned hop the model was trained on
+    # 1. BPM -> the 16th-note-aligned hop the model was trained on.
+    # ⚠️ BPM is the load-bearing alignment lever: the audio is gridded at BPM·subdiv/60 and the model's metric-phase
+    # channel assumes each frame IS that beat-fraction, so a WRONG bpm mis-grids the whole chart (notes drift off the
+    # beat + OOD phase features). Auto-estimation (librosa.beat.tempo) is UNRELIABLE — it octave/2:3-errs, especially
+    # on fast tracks (verified: ~40% of a personal set mis-estimated, fast hardcore under-reported by 2:3). So --bpm
+    # is STRONGLY RECOMMENDED for correctness; the estimate is a convenience only, with a loud warning below.
     bpm = args.bpm if args.bpm is not None else estimate_bpm(args.audio)
+    if args.bpm is None:
+        print(f"⚠️  no --bpm given → ESTIMATED {bpm:.1f} BPM. Tempo estimation is UNRELIABLE (octave / 2:3 metric "
+              f"errors, esp. on fast songs) and a wrong BPM mis-aligns the WHOLE chart. Verify this looks right; "
+              f"pass --bpm <song BPM> for a correctly aligned chart.")
     # The safe single-hop grid holds well past the TRAINING gate [60,200]; warn only outside the widened
     # inference band [40,320] (StepManiaParser.for_inference). A gimmick-scale --bpm (e.g. 2467 copied from a
     # #BPMS scroll trick) would make hop≈0 and grid garbage — that's what the parser's gimmick guard catches
@@ -219,25 +232,31 @@ def main():
     audio_tensor = feats.get_aligned_features()  # (T, 42)
     if np.any(~np.isfinite(audio_tensor)):
         raise SystemExit("non-finite audio features — bad/corrupt audio?")
-    # 3. model. v2 (48th grid): build the positional encoding at V2 capacity (5504) so a full ~3-min song fits —
-    # the default 2048-frame build would index pe out of range past ~68s on the finer grid. The pe is a fixed
-    # sinusoid, so a larger buffer is byte-identical to the checkpoint's over the shared range. Also raise --max_len
-    # to the v2 sequence length (the 2048 default clips a 48th-grid song to ~1/3 — the 150-vs-450-tap truncation bug).
-    v2_arch = None
-    if is_v2:
-        v2_arch = dict(MODEL_ARCH, max_len=V2_CTX)
-        if args.max_len < V2_MSL:
-            print(f"highres_v2: raising --max_len {args.max_len} -> {V2_MSL} (48th grid; 2048 clips to ~120 beats).")
-            args.max_len = V2_MSL
+    # 3. model — build at the CHECKPOINT's PE size (v2 = V2_CTX 5504; v1 = the 2048 default) so the stored pe buffer
+    # loads without a size mismatch, THEN extend the PE below to cover the whole song.
+    v2_arch = dict(MODEL_ARCH, max_len=V2_CTX) if is_v2 else None
     model = load_generator(ckpt, fspec.audio_dim, device, arch=v2_arch)  # builds + loads (strict=False) + .eval()
 
-    # the model's positional encoding is a HARD context cap (trained length) — never feed more frames than that,
-    # or the pos-encoding add throws a size mismatch. Longer songs are truncated to the context, with a warning.
-    ctx = int(model.pos_encoding.pe.size(1))
-    T = min(audio_tensor.shape[0], args.max_len, ctx)
-    if audio_tensor.shape[0] > T:
-        print(f"⚠️  song is {audio_tensor.shape[0]} frames; truncating to the model's {ctx}-frame context "
-              f"(~{T * hop / SR:.0f}s). Charting past the trained context isn't supported yet.")
+    # length: the PE was trained up to a fixed window (V2_MSL=5400 on v2), but the model EXTRAPOLATES past it
+    # gracefully — validated on v2 at ~2x context: panel usage holds (~full 4-arrow entropy), density only thins
+    # ~mildly late (partly the stamina governor). That's far better than TRUNCATING the rest of the song to silence
+    # (the old behavior clipped ~23/34 real songs, some to <half). So we EXTEND the sinusoid PE to fit the whole song
+    # (a fresh buffer, byte-identical over the trained range) instead of capping. --max_len (default None = whole
+    # song) is an optional user truncation cap; a hard SAFETY_CAP guards against OOM / extreme extrapolation.
+    needed = audio_tensor.shape[0]
+    SAFETY_CAP = 24000  # ~13 min @128bpm on the 48th grid; beyond this, truncate rather than extrapolate wildly / OOM
+    cap = SAFETY_CAP if args.max_len is None else min(args.max_len, SAFETY_CAP)
+    T = min(needed, cap)
+    trained_ctx = int(model.pos_encoding.pe.size(1))  # the checkpoint's PE length == the trained window
+    if T > trained_ctx:
+        from src.generation.transformer import PositionalEncoding
+        model.pos_encoding = PositionalEncoding(model.pos_encoding.pe.shape[-1], max_len=T + 128).to(device)
+        print(f"song is {needed} frames (~{needed * hop / SR:.0f}s); extending the positional encoding "
+              f"{trained_ctx} → {T + 128} to chart the WHOLE song (positions past {trained_ctx} are extrapolated — "
+              f"the model handles this gracefully; density may thin mildly late).")
+    if needed > T:
+        print(f"⚠️  song ({needed} frames) exceeds the {'--max_len' if args.max_len else 'safety'} cap ({cap}); "
+              f"charting only the first ~{T * hop / SR:.0f}s.")
     audio = torch.from_numpy(audio_tensor[:T].astype(np.float32)).unsqueeze(0).to(device)
 
     diff_idx = list(DIFFICULTY_METER).index(args.difficulty)

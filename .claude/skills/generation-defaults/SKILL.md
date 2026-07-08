@@ -63,6 +63,13 @@ mechanism; **this skill is the config VALUES.**
   DEFAULT stays highres/v1 (v1 byte-identical), so this is v2-reachable-via-CLI, not the default-swap. It also gained
   `--title` + `.sm` presentation flags + `--inherit_from SM|auto` (carry a source chart's banner/background/#BGCHANGES
   video, copying the media in) via the new `src/generation/sm_headers.py` + `sm_writer`'s `header=` dict.
+  ⚠️ **BYO-audio alignment (2026-07-07/08, `notes/byo_audio_alignment_findings.md` / [[byo-audio-bpm-footgun]]):**
+  `generate.py` grids the whole chart from BPM, and its auto-estimate (`librosa.beat.tempo`) is UNRELIABLE
+  (octave/2:3 errors) → **always pass `--bpm`** for a BYO-song; it warns loudly when omitted (`3d5639d`). Variable-BPM
+  / `#STOPS` songs are unsupported (single-BPM tool). Long songs are NO LONGER truncated: `generate.py` EXTENDS the
+  sinusoidal positional encoding to cover the whole song (`75cffaf`; `--max_len` default None = whole song, `SAFETY_CAP`
+  24000) — the model extrapolates past its trained context gracefully. (These are generate.py behaviors; the exporter,
+  which parses a real chart for BPM/length, is unaffected.)
   Phase-5 decode re-index (`590daa1`): the phase grid is `subdiv`-parameterized (v1 `highres`=subdiv 4, byte-identical).
   Do NOT pair `highres_v2` with `gen_motif_full_fixed`, or a v1 checkpoint with the v2 cache (grid mismatch).
   **DECODE-PLAYABILITY pass DONE (2026-07-05 session 2)** — all v1-no-op / subdiv=4 byte-identical: the governor
