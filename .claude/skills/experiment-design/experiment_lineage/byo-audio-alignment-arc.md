@@ -63,15 +63,21 @@ disease was still unfound.
 ## Verdicts / current state
 - **Ch.1:** BPM require `--bpm` (shipped); variable-BPM unsupported; truncation FIXED (PE-extend). Deliverable
   `~/sm-generated/v2_personal_hard` was built BEFORE Ch.2 → still deaf (wrong BPM/offset + 2× density).
-- **Ch.2:** density `×4/subdiv` fix applied (`generate.py:272`, uncommitted→commit). Offset detector chosen =
-  full-band pulse-train + latency cal + a confidence flag for the ~20% (user: ship it as the UNIVERSAL offset source,
-  not reference-inheritance). NOT yet wired into generate.py.
-- **Open fork / binding question (BY-EAR GATE):** the anchoring A/B on Toulouse — Arm A `toulouse_bpm128` (frame0=t=0,
-  training convention) vs Arm B `toulouse_anchor_beat` (frame0=true downbeat, audio trimmed 0.281s), both true 128 BPM
-  + density-fixed. Decides whether the detector's offset feeds the EXTRACTION anchor (skip-to-first-beat) or only the
-  written `#OFFSET`. **Anchor + written offset must move together or playback desyncs**; wrinkle: the dataset only
-  skips POSITIVE offsets (`audio_features.py:203`), so negative-offset songs trained at t=0.
-- Ch.1's sliding-window refinement (erase the ~28% late thinning) still open, lower priority.
+- **Ch.2:** density `×4/subdiv` fix applied (`generate.py:272`). Offset detector chosen = full-band pulse-train +
+  latency cal + a confidence flag for the ~20% (user: ship it as the UNIVERSAL offset source, not reference-inheritance).
+- **✅ RESOLVED (2026-07-09):** The anchoring BY-EAR GATE — Arm A `toulouse_bpm128` (frame0=t=0) vs Arm B
+  `toulouse_anchor_beat` (frame0=true downbeat) — came out **Arm B WINS: anchor-to-beat via the EXTRACTION anchor**
+  (skip-to-first-beat), a deliberate DEVIATION from training's negative-offset-t=0 convention. The detector is now
+  **productionized (`src/data/offset_detect.py`) + WIRED into generate.py as the default:** extraction skips the
+  detected within-beat phase (positive stub offset → `extract_from_chart` skip) and the `.sm` writes `#OFFSET=−phase`
+  (untrimmed audio stays synced). Re-validated vs the `~/sm-personal` oracle: **median 4.6ms, 19/23 ≤40ms, Toulouse
+  7.1ms** — reproduces the original validated result, so the productionized detector IS the validated variant. The
+  confidence flag is WEAK (2/4 slips; the misses slip on a syncopated off-beat, not a clean half-beat rival) → the
+  real safety net is the `--offset` override, not the flag. `tests/test_offset_detect.py`.
+- **Ch.1's sliding-window refinement:** BUILT + BY-EAR PASSED (`toulouse_win_anchor` "decent enough to cut v1"). The
+  harder decoder-side windowing stays parked (not needed).
+- **Current state:** Ch.2 CLOSED for the ship. Feeds the v1.0.0 cut (regen the personal set with the wired detector;
+  the deploy-swap to v2-default is DONE — see `meter-grid-arc.md`).
 
 Primary notes (Ch.2): `notes/byo_offset_detection_findings.md`; memory [[personal-reference-charts]].
 

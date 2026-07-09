@@ -51,7 +51,27 @@ Detect the sub-beat phase that aligns the audio to the beat grid at the (user-su
   Arm B `toulouse_anchor_beat` = audio trimmed 0.281s so frame0=downbeat; both at true 128 BPM).
 - BPM still must be user-supplied (estimation separately unreliable; `byo_audio_alignment_findings.md`).
 
-## Status (verify — transient)
-- `generate.py:272` density `×4/subdiv` fix committed-pending (uncommitted at write). Detector NOT yet wired into
-  generate.py. Probes are scratchpad-only (`$CLAUDE_JOB_DIR/tmp/offset_v*.py`, `probe_density_quiet.py`).
-- Related: [[personal-reference-charts]], [[byo-audio-bpm-footgun]], `byo_audio_alignment_findings.md`, HANDOFF.
+## ✅ IMPLEMENTED + WIRED (2026-07-09)
+The scratchpad probe is now productionized as **`src/data/offset_detect.py`** (`detect_offset_audio(audio_path,
+bpm)` — full-band `onset_strength` → phase histogram folded mod one beat → peak − 31 ms latency → within-beat
+downbeat phase; the three refuted rivals are NOT reintroduced). **Wired into `scripts/generate.py`** as the DEFAULT
+beat-anchor:
+- extraction skips the detected phase (`build_stub_chart(offset=phase)` → `extract_from_chart` `start_sample`
+  skip-to-beat, effective length reduced so no trailing pad) → frame 0 lands on the downbeat (the deaf-chore fix);
+- the `.sm` writes **`#OFFSET = −phase`** (StepMania: #OFFSET = −(time of beat 0)) so the untrimmed copied audio
+  still plays in time. The two are opposite-signed and move together (verified: parser is identity `offset=float(
+  #OFFSET)`, extractor skips only positive offsets — the beat-anchor deliberately DEVIATES from training's
+  negative-offset t=0 behavior, per the by-ear A/B verdict Arm B).
+- Overrides: `--offset <#OFFSET>` (pass a reference chart's value; `phase=(−offset)%beat`) and `--no_auto_offset`
+  (pre-fix t=0 behavior). Low-confidence detections print a "verify by ear / pass --offset" warning.
+
+**Re-validated vs the oracle** (`~/sm-personal`, 23 constant-BPM songs, held-out; `tmp/validate_offset.py`):
+**median 4.6 ms, 19/23 within 40 ms, 4 slips** — reproduces the findings' original ~7 ms / 20-24 / 4-slip result,
+so the productionized detector IS the validated variant. **Toulouse nailed at 7.1 ms** (det 0.274 vs true 0.281).
+⚠️ **The half-beat-rival CONFIDENCE flag is WEAK: it caught only 2/4 slips** (the two misses — Everytime We Touch,
+Pump Up the Jam — slip on a *syncopated* off-beat that out-energizes the downbeat, not a clean half-beat rival; the
+inherent ~20% ambiguity). So the real safety net is `--offset` from a reference, NOT the flag. Unit tests:
+`tests/test_offset_detect.py` (synthetic click track; absolute + latency-canceling relative-tracking checks).
+
+- Related: [[personal-reference-charts]], [[byo-audio-bpm-footgun]], `byo_audio_alignment_findings.md`, HANDOFF,
+  lineage `byo-audio-alignment-arc.md` Ch.2.

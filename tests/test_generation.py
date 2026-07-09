@@ -233,6 +233,48 @@ def test_onset_phase_penalty_shifts_on_beat():
     assert on_beat_frac(2.5) > on_beat_frac(0.0) + 0.1, "phase penalty did not push onsets on-beat"
 
 
+def test_onset_window_noop_when_song_fits():
+    # SLIDING-WINDOW onset (notes/byo_sliding_window_findings.md): a song that FITS the window must take the
+    # plain single-pass path -> BYTE-IDENTICAL (the guarantee that short songs / v1 / the exporter are untouched).
+    # eval() disables dropout so the comparison is exact.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2,
+                                   onset_layers=1, max_len=512).eval()
+    B, T = 2, 200
+    audio = torch.randn(B, T, 23); diff = torch.tensor([1, 3])
+    with torch.no_grad():
+        mem = m.encode_audio(audio)
+        plain = m.onset_logits(mem, diff)
+        fits = m.onset_logits(mem, diff, window=256)          # T=200 <= 256 -> no windowing
+    assert torch.equal(plain, fits), "onset window must be a no-op (byte-identical) when the song fits the window"
+
+
+def test_onset_window_engages_for_long_song():
+    # A song LONGER than the window triggers the sliding window: the onset head runs over in-distribution
+    # LOCAL positions, so the result is well-formed (B,T), finite, and DIFFERS from the absolute-PE path (which
+    # is OOD past the trained context and compresses the tail onset peaks -> the "dead tail"). The behavioral
+    # tail-recovery is validated end-to-end on the TRAINED model; here we lock the contract + that generate()
+    # threads onset_window without error.
+    import torch
+    from src.generation.typed_model import LayeredTypedChartGenerator
+    torch.manual_seed(0)
+    m = LayeredTypedChartGenerator(audio_dim=23, d_model=64, nhead=4, num_layers=2,
+                                   onset_layers=1, max_len=512).eval()
+    B, T, W = 1, 384, 128                                      # 3x the window
+    audio = torch.randn(B, T, 23); diff = torch.tensor([2])
+    with torch.no_grad():
+        mem = m.encode_audio(audio)
+        full = m.onset_logits(mem, diff)                      # absolute PE 0..T
+        win = m.onset_logits(mem, diff, window=W)             # local-PE windows, triangular-blended
+    assert win.shape == (B, T) and torch.isfinite(win).all()
+    assert not torch.equal(full, win), "windowing must change the onset logits for a song past the window"
+    with torch.no_grad():                                     # generate() must accept + thread onset_window
+        g = m.generate(audio, diff, onset_threshold=0.5, onset_window=W)
+    assert g.shape[0] == B and g.shape[1] == T
+
+
 def test_no_crossovers_decoding():
     import torch
     from src.generation.typed_model import LayeredTypedChartGenerator

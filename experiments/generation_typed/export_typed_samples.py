@@ -165,15 +165,16 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--out_dir', default='outputs/typed_samples')
-    p.add_argument('--checkpoint', default='checkpoints/gen_motif_full_fixed/best_val.pt',
-                   help='DEFAULT = the deployed model (42-dim H19 highres retrain; radar+motif+figure). '
-                        'Legacy gen_style/gen_stage1 are 23/41-dim — pair them with --features base/stage1.')
-    p.add_argument('--features', choices=['base', 'stage1', 'highres', 'highres_v2'], default='highres',
-                   help='DEFAULT highres=42-dim (cache/samples_v3, what gen_motif_full_fixed expects). '
-                        'stage1=41-dim (cache/samples_v2, legacy gen_stage1); base=23-dim (cache/samples, gen_style). '
-                        'highres_v2=42-dim on the data-layer-v2 48th grid (timesteps_per_beat=12, beat-sync) -- pair '
-                        'ONLY with a v2 checkpoint (e.g. gen_motif_v2_48th_cont); auto-selects the for_v2() parser + '
-                        'the 48th-grid .sm writer. Do NOT mix with gen_motif_full_fixed (grid mismatch).')
+    p.add_argument('--checkpoint', default='checkpoints/gen_motif_v2_48th_cont/best_val.pt',
+                   help='DEFAULT = the v1.0 canonical model (gen_motif_v2_48th_cont, 42-dim on the 48th grid). '
+                        'Legacy gen_motif_full_fixed is the 16th-grid v1 — pair it with --features highres. '
+                        'gen_style/gen_stage1 are 23/41-dim — pair them with --features base/stage1.')
+    p.add_argument('--features', choices=['base', 'stage1', 'highres', 'highres_v2'], default='highres_v2',
+                   help='DEFAULT highres_v2=42-dim on the data-layer-v2 48th grid (timesteps_per_beat=12, beat-sync; '
+                        'the v1.0 canonical model gen_motif_v2_48th_cont) -- auto-selects the for_v2() parser + the '
+                        '48th-grid .sm writer + v2 context length. highres=42-dim 16th grid (cache/samples_v3, the '
+                        'legacy gen_motif_full_fixed). stage1=41-dim (legacy gen_stage1); base=23-dim (gen_style). '
+                        'Pair highres_v2 ONLY with a v2 checkpoint; do NOT mix with gen_motif_full_fixed (grid mismatch).')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--num_songs', type=int, default=8)
     p.add_argument('--hardest', action='store_true',

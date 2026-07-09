@@ -351,6 +351,15 @@ phantom-grid choreography. NEW ASSET: `~/sm-personal` = the user's OWN charts (t
 ([[personal-reference-charts]]). Auto-offset detector: full-band onset pulse-train + 31ms latency cal WON (~80% ≤40ms,
 ~20% half-beat slip); DFT-phase/kick-band/tiebreak all oracle-refuted. **OPEN BY-EAR GATE:** anchoring A/B on Toulouse
 (`toulouse_bpm128` t=0 vs `toulouse_anchor_beat` beat-anchored). Lineage `byo-audio-alignment-arc.md` Ch.2.
+**UPDATE (2026-07-09) — SHIP MILESTONE: v2 admitted as the DEFAULT + the offset detector WIRED.** (1) The anchoring
+A/B RESOLVED by ear (anchor-to-beat WINS; `toulouse_win_anchor` = anchor-beat + sliding-window played "decent enough
+to cut v1", `playtest_log.md`). (2) **DEPLOY SWAP DONE:** both CLIs default to `--features highres_v2` +
+`gen_motif_v2_48th_cont` (auto knobs ON; hold-stream freeze=high = known limitation; `--harm_calib` added to
+generate.py per the arg-parity sweep). (3) **OFFSET DETECTOR PRODUCTIONIZED + WIRED:** `src/data/offset_detect.py`
+(`byo_offset_detection_findings.md` "IMPLEMENTED + WIRED"), beat-anchors extraction + writes `#OFFSET=−phase`;
+re-validated median 4.6ms / 19-23 ≤40ms / Toulouse 7.1ms; confidence flag weak (2/4 slips) → `--offset` override is
+the safety net. `tests/test_offset_detect.py`. Remaining for v1.0.0: regen the personal set, doc the limitation, cut/
+host/announce. Lineage `byo-audio-alignment-arc.md` Ch.2 + `meter-grid-arc.md`.
 
 **UPDATE (2026-07-07/08) — BYO-audio ALIGNMENT hardening (`byo_audio_alignment_findings.md`).** User by-ear "sus" on
 the shipped v2 personal charts → 3 `generate.py` failure modes + 3 attribution corrections (lineage
