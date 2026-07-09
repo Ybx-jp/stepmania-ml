@@ -8,6 +8,69 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-08 — Toulouse offset A/B: anchor-to-beat WINS the grid, but surfaces "dead spots"; energy overlay splits them into breakdown-rest (correct-ish) vs OOD-tail collapse (the real length bug)
+
+**WHAT WAS PLAYED** — the pending BYO offset anchoring A/B on Toulouse (both v2 `gen_motif_v2_48th_cont`, true
+**128 BPM**, 48th grid, 134 measures ≈ 251s; density-fixed). **Arm A `toulouse_bpm128`** = frame 0 at audio t=0
+(training convention). **Arm B `toulouse_anchor_beat`** = audio trimmed 0.281s so frame 0 = the true downbeat.
+
+**RAW FEEDBACK** — "`toulouse_bpm128` was **grid misaligned**. `toulouse_anchor_beat` was **on grid** but
+**choreography coherence was kinda bad with dead spots where it should be charting notes**. perhaps a density issue,
+possibly related to the song length, or we may just need to implement the sliding window alongside extended
+positional encoding, or revert PE extension and just do sliding window, not sure."
+
+**COMMENTARY / HYPOTHESIS** — Two independent findings, and the second is a NEW defect the offset A/B surfaced.
+1. **OFFSET GATE RESOLVED (the awaited HANDOFF verdict):** Arm B (anchor-to-beat) is on-grid; Arm A (t=0) is
+   misaligned. → **wire the offset detector to the EXTRACTION anchor (skip-to-first-beat)**, not just a written
+   `#OFFSET`. Confirms `byo_offset_detection_findings.md`: the negative-offset wrinkle (dataset skips only POSITIVE
+   offsets, so Toulouse −0.281 trained anchored at t=0) does NOT mean t=0 is right for BYO — the ear says beat-anchor.
+2. **"DEAD SPOTS" = TWO different bugs (proved by an audio-energy overlay, `$CLAUDE_JOB_DIR/tmp/density.py` +
+   RMS/onset-strength per 8-measure band).** They have OPPOSITE audio signatures:
+   - **Mid-song m56–63 (105–120s):** RMS **0.128** = by far the lowest band (a genuine Toulouse breakdown, ~half
+     the energy of neighbors). Onset-strength still normal (1.36). Arm A charts **0 notes for 15s**; Arm B charts 16.
+     → Thinning here is *mostly musically correct* (it IS a breakdown); Arm A's total void is mild **breathe-governor
+     over-rest** of the lowest-energy band. IN-context (m56 ≪ the 112.5-measure trained boundary) → **not a length
+     bug**. This is the "density issue" half. Minor; a breathe-floor nudge, not the headline.
+   - **OOD tail m112–134 (210–251s):** the outro is the **LOUDEST, most onset-dense section of the whole song**
+     (RMS 0.29–0.36, onset-strength **1.71→2.03**, the song's peak) — yet Arm A thins to 38/16/36 and **Arm B
+     collapses to 6/1/5 notes** (≈dead for the final 40s). Energy is high and rising, so neither the audio nor the
+     breathe governor can explain it (both would ADD notes). The ONLY thing special about this region: it is past the
+     **5400-frame / 112.5-measure trained context** (`V2_MSL`). → **This is the extended-PE extrapolation ceiling.
+     The user's length/sliding-window hypothesis is CONFIRMED.** Toulouse is 134 meas vs 112.5 context → ~16% of the
+     song is OOD, and it happens to be the energy climax.
+   **Why the earlier scoping probe (`byo_audio_alignment_findings.md` FM3) missed this:** it graded PE-extrapolation
+   by *panel-entropy* (stayed ~1.0) and *average* thinning (~28% on Lick the Rainbow) — an experiment-design Rule 1
+   miss (the metric moved the "right" way while the property — density on a high-energy outro — collapsed). "Graceful
+   extrapolation" was over-optimistic; on an energy-climax outro, extended-PE-alone fails hard. **H-len (new):** the
+   deployed absolute-sinusoid PE degrades density (not just entropy) past trained context, worst where late-song
+   energy is HIGH — so long songs lose their climaxes. The fix is positions-always-in-distribution = a **sliding
+   window** decode (overlap-chunk so no frame extrapolates), the FM3 "future refinement." Extended-PE strictly beats
+   truncation but does NOT reach coherent full coverage on this song.
+   ⚠️ **A/B CONFOUND (flagged, not resolved):** Arm B is uniformly ~25% less dense than Arm A everywhere (667 vs 886
+   notes), and its tail is deader — the 0.281s front-trim (~7 frames) can't cause that, so the two runs differ in
+   more than anchoring (density target / seed / flag). The offset VERDICT stands (it's the by-ear grid call, not the
+   density), but do NOT read the A/B tail-density delta as an offset effect (Rule 11: variable not isolated).
+
+**ACTION / NEXT** —
+- [x] Offset gate: anchor-to-beat wins → detector offset feeds the extraction anchor (skip-to-first-beat).
+- [x] **User chose: BUILD the sliding-window decode.** DONE + offline-validated (`notes/byo_sliding_window_findings.md`):
+      the dead tail was the ONSET path — abs-PE compresses the tail onset-prob PEAKS below the global tau (NOT stamina,
+      NOT holds, NOT the onset-encoder mean). Fix = run the non-causal onset head over in-distribution local-PE windows
+      (`onset_logits(window=)`, single-sourced into tau + decode); the choreography decoder keeps the extended abs-PE
+      (entropy-graceful, can't change the onset count). **Toulouse tail 90→143 notes, 0 dead measures, tracks the
+      climax.** 38/38 tests pass, export defaults still 25 ✓.
+- [ ] **⟵ BY-EAR GATE (awaiting user):** play `~/sm-generated/toulouse_win_anchor` (anchor-beat + sliding window) vs
+      the old `toulouse_anchor_beat` (on-grid, dead tail). Two things to judge: (1) is the OOD tail now alive/coherent?
+      (2) does the density REDISTRIBUTION feel right — windowing pulls budget from the intro/mid into the outro (local
+      per-window tau competition), so the front thins slightly as the tail fills. If the rebalance feels off, the lever
+      is decoder-windowing (harder) or a per-window density floor.
+- [ ] Breathe over-rest (m56–63 → 0 notes): minor `stamina_breathe_floor` nudge so a real breakdown thins but never
+      fully voids for 15s; gate by ear (don't fight the correct musical rest). Minor, separate from the tail fix.
+- [ ] Wire the offset detector → extraction anchor in generate.py (the HANDOFF's other open step), then REGEN the
+      personal set (now with BOTH the offset anchor AND the sliding window).
+
+---
+
 ## 2026-07-06 — gc_similar_bpm20 recreated on v2: b_trip=0.7 reads sub-16th-heavy toward song ends → test 1.0
 
 **WHAT WAS PLAYED** — `gc_similar_bpm20_v2` (the v1 GC-similar-BPM set recreated on the v2 48th-grid model

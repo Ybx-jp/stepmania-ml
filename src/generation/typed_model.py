@@ -318,12 +318,44 @@ class LayeredTypedChartGenerator(nn.Module):
     def encode_audio(self, audio):
         return self.audio_encoder(audio)
 
-    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None, motif=None):
+    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None, motif=None, window=None):
         # Motif shapes WHICH panels (a pattern-head concern) — the MotifBasis is which-panels only, rhythm &
         # density excluded. Timing/density is the onset head's job, controlled by radar. Conditioning onset on
         # motif was spurious and let CFG inflate density (notes/h15_local_motif_plan.md), so onset sees
         # difficulty+radar+style only; motif is applied in _decode. `motif` kept in the signature for call-site
         # symmetry but intentionally NOT passed to the onset conditioning.
+        #
+        # `window` — SLIDING-WINDOW onset for songs LONGER than the trained positional-encoding context (the
+        # BYO long-song case; notes/byo_sliding_window_findings.md). The onset encoder is non-causal and reads
+        # `self.pos_encoding(memory)` over ABSOLUTE positions 0..T; past the trained window those positions are
+        # OOD and — crucially — the encoder COMPRESSES the onset-probability PEAKS there (the mean p holds, but
+        # the p95 regresses toward the mean). Because density is a GLOBAL quantile threshold (tau), those
+        # flattened tail peaks fall below tau and almost nothing fires → the "dead tail" (verified on Toulouse:
+        # tail onsets 44 abs-PE vs 127 windowed). Fix: tile the song with beat-agnostic windows of `window`
+        # frames (<= the trained context, so every LOCAL position is in-distribution), run the onset encoder on
+        # each memory slice (pos_encoding then adds pe[:, :L] = LOCAL positions), and triangular-blend the
+        # overlaps back to a (B,T) logit map. `memory` itself is length-safe (the AudioEncoder is a Conv1D with
+        # NO positional encoding), so slicing it is exact — only the PE needed re-anchoring. window=None or a
+        # song that fits (T <= window) => the plain single-pass path below, BYTE-IDENTICAL (short songs / v1 /
+        # the exporter are untouched). Blend is on LOGITS so the caller's phase-calib / CFG / sigmoid / tau all
+        # apply downstream identically at both the tau site and the decode site (the §3 tau-coupling holds).
+        B, T, _ = memory.shape
+        if window is not None and T > int(window):
+            W = int(window); hop = max(W // 2, 1)
+            acc = memory.new_zeros(B, T); wsum = memory.new_zeros(T)
+            s = 0
+            while s < T:
+                e = min(s + W, T)
+                msl = mask[:, s:e] if mask is not None else None
+                ol = self.onset_logits(memory[:, s:e], difficulty, msl, radar, style, motif, window=None)  # local PE
+                L = e - s
+                w = torch.minimum(torch.arange(L, device=memory.device) + 1,
+                                  L - torch.arange(L, device=memory.device)).float()  # triangular: favor centers
+                acc[:, s:e] += ol * w; wsum[s:e] += w
+                if e >= T:
+                    break
+                s += hop
+            return acc / wsum.clamp(min=1e-6)
         cond = self._cond(difficulty, radar, style, motif=None)   # onset: NO motif (density stays radar-controlled)
         x = self.dropout(self.pos_encoding(memory) + cond)
         pad = (~mask.bool()) if mask is not None else None
@@ -385,6 +417,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4,
+                 onset_window=None,
                  min_onset_gap=None, max_jack_run=None, no_fast_jump=True,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
@@ -481,9 +514,9 @@ class LayeredTypedChartGenerator(nn.Module):
             p = None                                          # no onset probs under override (footspeed-floor skipped)
             p_onset = None                                    # no probs under override -> stamina gate skipped
         else:
-            ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif)
+            ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif, window=onset_window)
             if do_cfg:  # classifier-free guidance: push onset toward the conditioned prediction
-                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None, motif=None)
+                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None, motif=None, window=onset_window)
                 ol = ol_u + guidance_scale * (ol - ol_u)
             if onset_phase_penalty != 0.0:
                 # metric gate: off-beat frames need higher onset confidence (on-beat free, 8th -p, 16th -2p).

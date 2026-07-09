@@ -248,12 +248,22 @@ def main():
     cap = SAFETY_CAP if args.max_len is None else min(args.max_len, SAFETY_CAP)
     T = min(needed, cap)
     trained_ctx = int(model.pos_encoding.pe.size(1))  # the checkpoint's PE length == the trained window
+    # ONSET SLIDING WINDOW (notes/byo_sliding_window_findings.md): the non-causal ONSET encoder does NOT
+    # extrapolate gracefully past the trained window — abs-PE COMPRESSES the tail onset-probability peaks, and
+    # because density is a GLOBAL quantile (tau), those flattened peaks fall below tau so almost nothing fires
+    # ("dead tail": Toulouse tail onsets 44 abs-PE vs 127 windowed). So we run the onset head over IN-DISTRIBUTION
+    # local-PE windows of `onset_window` frames (single-sourced into BOTH tau and generate() so they can't drift).
+    # The DECODER (choreography) DOES extrapolate gracefully (panel entropy ~1.0 at 2x context) and can't change
+    # the onset count, so it keeps the extended absolute PE below — the two fixes compose. onset_window = the
+    # trained window (v2 = V2_MSL 5400; v1 = the checkpoint PE size); a song that fits is a no-op (byte-identical).
+    onset_window = V2_MSL if is_v2 else trained_ctx
     if T > trained_ctx:
         from src.generation.transformer import PositionalEncoding
         model.pos_encoding = PositionalEncoding(model.pos_encoding.pe.shape[-1], max_len=T + 128).to(device)
-        print(f"song is {needed} frames (~{needed * hop / SR:.0f}s); extending the positional encoding "
-              f"{trained_ctx} → {T + 128} to chart the WHOLE song (positions past {trained_ctx} are extrapolated — "
-              f"the model handles this gracefully; density may thin mildly late).")
+        print(f"song is {needed} frames (~{needed * hop / SR:.0f}s) > trained context {trained_ctx}: onset head "
+              f"uses a sliding window (in-distribution {onset_window}-frame windows so the tail fires normally); "
+              f"the choreography decoder extrapolates its positional encoding {trained_ctx} → {T + 128} "
+              f"(entropy-validated graceful extrapolation) to chart the WHOLE song.")
     if needed > T:
         print(f"⚠️  song ({needed} frames) exceeds the {'--max_len' if args.max_len else 'safety'} cap ({cap}); "
               f"charting only the first ~{T * hop / SR:.0f}s.")
@@ -314,7 +324,8 @@ def main():
     with torch.no_grad():
         memory = model.encode_audio(audio)
         p_onset = conditioned_p_onset(model, memory, diff, radar=radar_arg, guidance=args.guidance,
-                                      phase_calib=song_calib, extra_offset=snap_off, subdiv=subdiv)
+                                      phase_calib=song_calib, extra_offset=snap_off, subdiv=subdiv,
+                                      window=onset_window)  # SAME window generate() decodes from (tau-coupling §3)
     tau = compute_tau(p_onset, gen_density)
 
     # 6. generate with the CANONICAL full-stack palette + mandatory playability (mirrors export_typed_samples.py)
@@ -327,6 +338,7 @@ def main():
         min_onset_gap=args.min_onset_gap,  # v2 footspeed floor (frames); None -> auto per subdiv (2 on 48th; §8)
         no_fast_jump=args.no_fast_jump,    # v2: forbid >=2-fresh JUMP at sub-16th spacing (v1 no-op; §8d)
         onset_phase_calib=song_calib, subdiv=subdiv,  # ★ the 16th-unlock + per-song triplet band (baked into tau above)
+        onset_window=onset_window,  # ONSET sliding window for long songs (fixes the dead tail; no-op if song fits)
         onset_logit_offset=snap_off,       # 16th-grid snap (same offset baked into tau above; None if not snapping)
         fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
         fatigue_free=args.fatigue_free,

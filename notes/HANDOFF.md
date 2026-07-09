@@ -30,21 +30,30 @@ is ship work, not research. Un-park research ONLY on the literal phrase "the tim
   (worse). `librosa.beat_track` segfaults in this env. **User decision: ship the detector as the UNIVERSAL offset
   source** (not reference-chart inheritance) + a confidence flag for the ambiguous ~20%.
 
-## ★ AWAITING USER — the binding BY-EAR GATE (blocks the generate.py wiring)
-- **Anchoring A/B on Toulouse** (both at true 128 BPM + density-fixed, playback-synced; judge CHOREOGRAPHY):
-  - **Arm A** = `~/sm-generated/toulouse_bpm128/` "Toulouse BPM128" — frame 0 = audio start (training convention).
-  - **Arm B** = `~/sm-generated/toulouse_anchor_beat/` "Toulouse ANCHORbeat" — frame 0 = true downbeat (audio trimmed
-    0.281s = the reference `#OFFSET`).
-  - **Question:** does Arm B choreograph noticeably better than Arm A (→ wire the detector's offset to the EXTRACTION
-    anchor, skip-to-first-beat), or a wash (→ keep t=0, only write `#OFFSET`)? Also: is EITHER finally not "deaf"?
-  - ⚠️ **Anchor + written `#OFFSET` must move together** or playback desyncs. Wrinkle: the dataset only skips POSITIVE
-    offsets (`audio_features.py:203`), so negative-offset songs (Toulouse −0.281) trained anchored at t=0. Log to
-    `notes/playtest_log.md`.
-- **After the verdict:** wire the detector + chosen anchoring into `generate.py`, then REGEN the whole
-  `v2_personal_hard` set (all 34 were built pre-fix → wrong BPM/offset/density). BPM per song from the user or their
-  `~/sm-personal` reference charts.
-- (Superseded/of lower priority now: the earlier grid-snap low-diff A/B and auto-vs-global b_trip A/B — still valid
-  but the deploy-swap is gated behind getting BYO alignment right first.)
+## ★ ANCHORING A/B — RESOLVED (2026-07-08); SLIDING WINDOW BUILT; new BY-EAR gate pending
+- **Verdict (user by-ear):** Arm B `toulouse_anchor_beat` (frame 0 = true downbeat) is **ON GRID**; Arm A
+  `toulouse_bpm128` (frame 0 = audio t=0) is **grid-misaligned**. → **anchor-to-beat wins**: wire the offset detector
+  to the EXTRACTION anchor (skip-to-first-beat), not just a written `#OFFSET`. (`notes/playtest_log.md` 2026-07-08.)
+- **NEW defect the A/B surfaced + FIXED this session — the "dead tail" (`notes/byo_sliding_window_findings.md`):**
+  Arm B was on-grid but had "dead spots." An energy overlay split them: (a) m56–63 = a real breakdown (low RMS,
+  correct-ish rest); (b) the OOD tail (past the 5400-frame trained context) died DESPITE being the song's energy
+  CLIMAX. Root cause = the ONSET path: abs-PE past context COMPRESSES the tail onset-prob peaks below the global tau
+  (deployment-matched probe: tail onsets 44 abs-PE vs 127 windowed; NOT stamina/holds/onset-mean — all ruled out).
+  **FIX (built + offline-validated): sliding-window onset.** `onset_logits(window=)` runs the non-causal onset head
+  over in-distribution local-PE windows, single-sourced into BOTH tau (`conditioned_p_onset(window=)`) and decode
+  (`generate(onset_window=)`); the choreography decoder keeps the extended abs-PE (entropy-graceful). generate.py sets
+  `onset_window=V2_MSL(5400)`/v1 PE-size; no-op when the song fits (byte-identical; export defaults still 25 ✓, 38/38
+  tests pass). **Toulouse tail 90→143 notes, 0 dead measures.**
+- **⟵ AWAITING USER — BY-EAR GATE on the sliding window:** play `~/sm-generated/toulouse_win_anchor` (anchor-beat +
+  sliding window) vs old `~/sm-generated/toulouse_anchor_beat` (on-grid, dead tail). Judge: (1) tail alive/coherent?
+  (2) does the density REDISTRIBUTION feel right (windowing pulls budget intro→outro via per-window local tau
+  competition, so the front thins as the tail fills)? If off, next lever = decoder-windowing (harder) or a per-window
+  density floor. ⚠️ Anchor + written `#OFFSET` must move together; dataset skips only POSITIVE offsets
+  (`audio_features.py:203`) so negative-offset songs (Toulouse −0.281) trained anchored at t=0.
+- **After the by-ear gate:** wire the offset detector → extraction anchor into `generate.py`, then REGEN the whole
+  `v2_personal_hard` set (all 34 built pre-fix → wrong BPM/offset/density AND pre-sliding-window). BPM per song from
+  the user or their `~/sm-personal` reference charts.
+- (Lower priority: the earlier grid-snap low-diff A/B and auto-vs-global b_trip A/B — still valid, gated behind BYO.)
 
 ## THE v1.0.0 SHIP CHECKLIST (still standing; BYO alignment is the current blocker on the personal deliverable)
 1. **BYO alignment fix** (THIS thread): land the offset detector + anchoring in `generate.py`; regen the personal set.
@@ -54,7 +63,8 @@ is ship work, not research. Un-park research ONLY on the literal phrase "the tim
 3. **Hold-stream edge** (`freeze=high` v2): ship as documented known-limitation or apply the PARKED position-based fix.
 4. **Release:** cut `v1.0.0`, host, announce ([[marketing-track]]).
 5. **PARKED (needs "the times have changed"):** seq-onset retrain (placement ceiling), GDL/meter-equivariance,
-   good-settings tolerance formula, manifold refit + groove-radar retrain, the sliding-window PE refinement.
+   good-settings tolerance formula, manifold refit + groove-radar retrain. (The onset sliding-window is now BUILT —
+   see above; only the harder DECODER-side windowing stays deferred, and only if the tail choreography reads off by ear.)
 
 ## CANONICAL EXPORT DEFAULTS (VALIDATED by `tools/check_export_defaults.py` = 25 ✓)
 The bare `export_typed_samples.py` run reproduces what the user plays. These MUST equal the script's argparse
