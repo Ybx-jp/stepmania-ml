@@ -32,12 +32,48 @@ set I'd reported as good. Isolating WHY produced three failure modes and three a
    ~28% (partly the stamina governor). Why: the decoder leans on audio cross-attention + periodic `metric_phase`, not
    absolute position. → **cheap fix strictly dominates truncation** (`75cffaf`, extend PE to cover the whole song).
 
+## Chapter 2 — the CHOREOGRAPHY/OFFSET overturn (2026-07-08)
+**Seed:** user played the re-genned personal set (incl. Toulouse, BPM-"corrected" + length-fixed) and said "really
+bad, no choreography, like the model is deaf." A quality complaint that SURVIVED the Chapter-1 fixes → the real
+disease was still unfound.
+7. **Believed (my first move):** the "randomly hard" is a DENSITY problem (stamina/section density, user's hypothesis).
+   **Learned:** partly — found a REAL units bug (generate.py never got the exporter's `×4/subdiv` manifold-density
+   correction, so v2 BYO charts ran ~2× real-Hard density; `generate.py:272` fixed). BUT the real-chart oracle showed
+   Toulouse's quiet:loud RATIO already matched real (0.61 vs 0.64) — placement was fine, only the COUNT was inflated.
+   **ATTRIBUTION: the density fix was the WRONG axis** (count≠placement); lowering it just EXPOSED the deafness. Match
+   the fix to the felt property. (Grounded via `probe_density_quiet.py` + a 12-song real-chart reference.)
+8. **Believed (from Chapter-1):** offset is a red herring, only BPM matters. **Learned — OVERTURNS CORRECTION #1:**
+   that was PLAYBACK-only reasoning. The model chores on `metric_phase`, so an audio↔beat-grid shift → phantom-grid
+   choreography = "deaf." TWO misalignments generate.py never handles: (a) **BPM** — Toulouse was charted at the
+   librosa estimate **129.199** (the "129.2 prior"), NOT the true **128** from the user's reference chart; +0.9%
+   drifts a full beat every ~51s (so "≤3% cosmetic" from Ch.1 was ALSO wrong for choreography). Corroboration: at
+   129.199 the `auto_b_trip` detector false-fired TRIPLET +0.18; at 128 it correctly read duple −0.49. (b) **OFFSET** —
+   `build_stub_chart` hardcodes `offset=0.0`; frame 0 should be the first beat. **The "red herring" call was a
+   playback-sync argument mistaken for a choreography one.**
+9. **NEW ASSET (user reminder):** `~/sm-personal` holds the user's OWN hand-authored charts (true BPM+offset) — never
+   recorded (now memory [[personal-reference-charts]]). Toulouse ref = `#BPMS 128.000; #OFFSET -0.281`. Regen at true
+   128 confirmed the BPM half of the disease (by-ear pending).
+10. **Auto-offset detector — can we fill #OFFSET from audio?** Validated an onset-envelope beat-phase detector against
+   the reference charts + training packs as a REGRESSION ORACLE. **Full-band pulse-train + a 31ms latency calibration
+   WON:** ~80% of songs nailed to ~7ms (a fifth of a 48th-cell), ~20% half-beat SLIP (genuine beat/offbeat ambiguity).
+   Three "principled" upgrades were **oracle-refuted**: DFT-phase-at-beat-freq (WORSE — spike train isn't sinusoidal),
+   kick-band (worse), kick half-beat tiebreak (HARMFUL — wrecked good answers). `beat_track` DP segfaults here.
+   **METHOD KEEPER: the oracle killed 3 confident-but-wrong hypotheses cheaply — measure, don't theorize the mechanism.**
+
 ## Verdicts / current state
-- BPM: require `--bpm` (shipped). Variable-BPM: unsupported (documented). Truncation: FIXED (PE-extend, shipped).
-- Deliverable: 34 v2 Hard charts (`~/sm-generated/v2_personal_hard`); the 8 gross-BPM re-genned true-BPM; the 23
-  truncated re-genned full-length (verify the re-gen `DONE` marker — transient at write time).
-- **Open fork:** a re-indexed **sliding-window** generator (positions always in-distribution) would erase the ~28%
-  late thinning — the quality-ceiling refinement over the cheap PE-extend. Not built.
+- **Ch.1:** BPM require `--bpm` (shipped); variable-BPM unsupported; truncation FIXED (PE-extend). Deliverable
+  `~/sm-generated/v2_personal_hard` was built BEFORE Ch.2 → still deaf (wrong BPM/offset + 2× density).
+- **Ch.2:** density `×4/subdiv` fix applied (`generate.py:272`, uncommitted→commit). Offset detector chosen =
+  full-band pulse-train + latency cal + a confidence flag for the ~20% (user: ship it as the UNIVERSAL offset source,
+  not reference-inheritance). NOT yet wired into generate.py.
+- **Open fork / binding question (BY-EAR GATE):** the anchoring A/B on Toulouse — Arm A `toulouse_bpm128` (frame0=t=0,
+  training convention) vs Arm B `toulouse_anchor_beat` (frame0=true downbeat, audio trimmed 0.281s), both true 128 BPM
+  + density-fixed. Decides whether the detector's offset feeds the EXTRACTION anchor (skip-to-first-beat) or only the
+  written `#OFFSET`. **Anchor + written offset must move together or playback desyncs**; wrinkle: the dataset only
+  skips POSITIVE offsets (`audio_features.py:203`), so negative-offset songs trained at t=0.
+- Ch.1's sliding-window refinement (erase the ~28% late thinning) still open, lower priority.
+
+Primary notes (Ch.2): `notes/byo_offset_detection_findings.md`; memory [[personal-reference-charts]].
 
 ## Method keepers
 - Match the frame to the question (don't diff two tools built to differ). Use an oracle (source `.sm`) to GRADE an

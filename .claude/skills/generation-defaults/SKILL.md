@@ -70,6 +70,17 @@ mechanism; **this skill is the config VALUES.**
   sinusoidal positional encoding to cover the whole song (`75cffaf`; `--max_len` default None = whole song, `SAFETY_CAP`
   24000) — the model extrapolates past its trained context gracefully. (These are generate.py behaviors; the exporter,
   which parses a real chart for BPM/length, is unaffected.)
+  ⚠️ **CHOREOGRAPHY / OFFSET (2026-07-08, `notes/byo_offset_detection_findings.md` / [[personal-reference-charts]]):**
+  the by-ear "no choreography, like the model is deaf" on the personal set traced to **audio↔beat-grid misalignment**
+  (the model chores on `metric_phase`, so a shifted grid → phantom-grid placement). **Two independent parts, and the
+  old "offset is a red herring" note is OVERTURNED** (that was playback-only): (a) a wrong BPM even ~1% DRIFTS a beat
+  every ~51s (Toulouse charted at estimate 129.199 vs true 128); (b) `build_stub_chart` hardcodes `offset=0.0` so
+  frame 0 ≠ the first beat. Auto-offset detector (full-band onset pulse-train + 31ms latency cal) recovers the offset
+  to ~7ms on ~80% of songs (validated vs `~/sm-personal` + training packs as an oracle); ~20% half-beat-slip → needs a
+  confidence flag. NOT yet wired into generate.py; anchoring A/B (extract@t=0 vs @first-beat) is a pending BY-EAR gate.
+  ⚠️ **generate.py DENSITY subdiv-fix (2026-07-08, `generate.py:272`):** the manifold `E[density|diff]` is a 16th-grid
+  fraction; generate.py never applied the exporter's `×4/subdiv` correction (`export_typed_samples.py:631`), so every
+  v2 BYO chart ran ~subdiv/4× (≈3× at the target, ~2× realized) too dense — now scaled, mirroring the exporter.
   Phase-5 decode re-index (`590daa1`): the phase grid is `subdiv`-parameterized (v1 `highres`=subdiv 4, byte-identical).
   Do NOT pair `highres_v2` with `gen_motif_full_fixed`, or a v1 checkpoint with the v2 cache (grid mismatch).
   **DECODE-PLAYABILITY pass DONE (2026-07-05 session 2)** — all v1-no-op / subdiv=4 byte-identical: the governor

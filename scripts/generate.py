@@ -270,6 +270,11 @@ def main():
     tvec, tinfo = manifold.build_target(style_spec, diff_idx)
     radar_for_gen = torch.from_numpy(tvec).unsqueeze(0).to(device)
     gen_density = tinfo["density"]
+    if subdiv != 4:  # the manifold is fit on the 16th grid (density = frac of 16th-frames); on the finer v2
+        gen_density *= 4.0 / subdiv  # 48th grid the SAME notes/beat is a smaller frame-fraction, so scale by
+        # 4/subdiv (=1/3 on the 48th grid) or the whole chart over-places ~subdiv/4x. Mirrors the exporter's
+        # style_density fix (export_typed_samples.py); without a source chart this manifold value is the ONLY
+        # density source here, so the bug hit every v2 BYO chart uniformly (notes/byo_audio_alignment_findings.md).
     print(f"BPM {bpm:.1f} | hop {hop} | {T} frames (~{T*hop/SR:.0f}s) | {args.difficulty} | "
           f"target density {gen_density:.3f}"
           + (f" | style '{style_spec}'" if style_spec else ""))
