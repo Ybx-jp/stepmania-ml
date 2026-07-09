@@ -37,6 +37,7 @@ from src.utils.reproducibility import set_seed
 from src.data.stepmania_parser import StepManiaChart, TimingEvent
 from src.data.dataset import DIFFICULTY_NAMES
 from src.data.meter_detect import detect_triple_pref_audio  # audio duple/triplet classifier for --auto_b_trip (v2)
+from src.data.offset_detect import detect_offset_audio  # audio start-offset detector (beat-anchoring; deaf-chore fix)
 from src.generation.typed import pair_holds
 from src.generation.sm_writer import charts_to_sm
 from src.generation import sm_headers
@@ -67,18 +68,38 @@ def estimate_bpm(audio_path: str) -> float:
     return float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo)
 
 
+def _sparse_harm_offset(audio_np, gain, quiet_q):
+    """The sparse-harm-in-quiet ONSET PHRASE CALIBRATOR (ported byte-for-byte from export_typed_samples.py):
+    add a per-frame onset-logit boost `gain·quiet_gate·harm_onset` so a sparse harmonic/melodic event (a piano
+    line in a lull) fires where the flat governor would bury it. `quiet_gate` -> 1 as the (box-smoothed) total
+    energy dim-0 drops below the `quiet_q` percentile, 0 above it; dim-36 is the already-0-1 harmonic onset.
+    Rides the SAME onset_logit_offset slot as the grid snap, so tau MUST see it too (it does, below).
+    See conditioning-mechanics §6 / notes/phrasing_coherence_findings.md."""
+    e = audio_np[:, 0].astype(np.float64)
+    e = (e - e.min()) / (np.ptp(e) + 1e-9)                       # norm01
+    w = 16; e = np.convolve(np.pad(e, w, mode='edge'), np.ones(2 * w + 1) / (2 * w + 1), mode='valid')  # boxsmooth
+    q = np.percentile(e, quiet_q)
+    quiet_gate = np.clip((q - e) / (q + 1e-6), 0.0, 1.0)         # 0 above the quiet quantile, ->1 as energy->0
+    return (gain * quiet_gate * audio_np[:, 36]).astype(np.float32)   # harm onset (dim36) already 0-1
+
+
 def build_stub_chart(audio_path: str, bpm: float, duration: float, hop_length: int,
-                     subdiv: int = TIMESTEPS_PER_BEAT) -> StepManiaChart:
+                     subdiv: int = TIMESTEPS_PER_BEAT, offset: float = 0.0) -> StepManiaChart:
     """A minimal chart carrying only what extract_from_chart needs: offset, song_length, hop_length.
     No note data — we are GENERATING the notes, not reading them. `subdiv` = the grid resolution (4 = 16th /
     highres, 12 = 48th / highres_v2): it sets timesteps_total so extract_from_chart re-grids the audio to the
-    SAME number of cells the model was trained on."""
-    total_beats = duration * bpm / 60.0
+    SAME number of cells the model was trained on.
+    `offset` (seconds, ≥0) = the BEAT-ANCHOR skip: extract_from_chart skips this many seconds of audio (its
+    `start_sample = int(offset*sr) if offset>0`) so frame 0 lands on the first downbeat — the fix for the "deaf
+    choreography" bug (the model chores on within-beat phase; a misaligned grid = phantom-grid placement). The
+    effective (post-skip) length drives timesteps_total so the grid + note count stay right (no trailing pad)."""
+    eff_duration = max(0.0, duration - max(0.0, offset))
+    total_beats = eff_duration * bpm / 60.0
     return StepManiaChart(
         title=Path(audio_path).stem, artist="", audio_file=audio_path,
-        bpm=bpm, offset=0.0, sample_start=0.0, sample_length=0.0,
+        bpm=bpm, offset=offset, sample_start=0.0, sample_length=0.0,
         timing_events=[TimingEvent(beat=0.0, value=bpm, event_type="bpm")],
-        note_data=[], song_length_seconds=duration,
+        note_data=[], song_length_seconds=eff_duration,
         timesteps_total=int(total_beats * subdiv), hop_length=hop_length,
     )
 
@@ -113,17 +134,27 @@ def parse_args():
                         ".sm/.ssc sitting next to --audio. Explicit flags above OVERRIDE inherited values. Timing "
                         "tags (#BPMS/#STOPS) are NOT inherited — the generator owns its own grid.")
     p.add_argument("--checkpoint", default=None,
-                   help="generator weights (default: the deployed 42-dim highres model, or the v2 48th-grid "
-                        "checkpoint when --features highres_v2). Pass a path to override.")
-    p.add_argument("--features", choices=["highres", "highres_v2"], default="highres",
-                   help="feature/grid space. highres = the deployed 42-dim 16th grid (gen_motif_full_fixed). "
-                        "highres_v2 = the same 42 channels on the data-layer-v2 48th grid (timesteps_per_beat=12, "
-                        "beat-sync) — resolves triplets, removes the 16th-grid triplet tax; auto-selects the v2 "
-                        "checkpoint + 48th-grid .sm writer + v2 context length. Pair ONLY with a v2 checkpoint.")
+                   help="generator weights (default: auto — the v2 48th-grid checkpoint gen_motif_v2_48th_cont for "
+                        "the default --features highres_v2, or the legacy gen_motif_full_fixed for --features highres). "
+                        "Pass a path to override.")
+    p.add_argument("--features", choices=["highres", "highres_v2"], default="highres_v2",
+                   help="feature/grid space. highres_v2 (DEFAULT, the v1.0 canonical model) = the 42 channels on the "
+                        "data-layer-v2 48th grid (timesteps_per_beat=12, beat-sync) — resolves triplets, removes the "
+                        "16th-grid triplet tax; auto-selects the v2 checkpoint (gen_motif_v2_48th_cont) + 48th-grid "
+                        ".sm writer + v2 context length. highres = the legacy 42-dim 16th grid (gen_motif_full_fixed) "
+                        "— pair ONLY with a v1 checkpoint.")
     p.add_argument("--bpm", type=float, default=None,
                    help="song BPM. ★ STRONGLY RECOMMENDED for correct alignment — it grids the whole chart. Default "
                         "= auto-estimate (librosa), which is UNRELIABLE (octave / 2:3 metric errors, esp. fast songs) "
                         "and will mis-align the chart if wrong. Pass the real BPM whenever you know it.")
+    p.add_argument("--offset", type=float, default=None,
+                   help="song start #OFFSET in seconds (StepMania convention: negative = lead-in before beat 0, e.g. "
+                        "-0.281). Default = AUTO-DETECT from audio (beat-anchors frame 0 to the first downbeat — the "
+                        "fix for 'deaf choreography'). Pass your reference chart's #OFFSET to override the detector "
+                        "(recommended when it flags low confidence — ~20%% of songs slip a half-beat).")
+    p.add_argument("--no_auto_offset", action="store_true",
+                   help="disable beat-anchoring entirely: grid from audio t=0 with #OFFSET 0 (the pre-fix behavior). "
+                        "Use only to reproduce an old chart or if the detector misbehaves and you have no reference.")
     p.add_argument("--style", action="append", default=None, metavar="DIM=VAL",
                    help="optional groove feel, e.g. 'chaos=q0.7'. Multidimensional: comma-separate "
                         "('chaos=high,freeze=low') OR repeat the flag ('--style chaos=high --style freeze=low'); "
@@ -155,6 +186,13 @@ def parse_args():
                    help="★ the 16th-UNLOCK 'b8,b16' (logit space): un-buries 16th-offbeats so they float with "
                         "the audio per song. Canonical '0.0,1.0' (a KNEE: ~0.5 calm song .. 2.0 dense). '' = off. "
                         "A 3rd element (b_trip) is the v2 triplet band; with --auto_b_trip it applies per song.")
+    p.add_argument("--harm_calib", type=float, default=0.0,
+                   help="OPT-IN sparse-harm-in-quiet phrase calibrator (default 0 = off): boost the onset logit by "
+                        "gain·quiet_gate·harm_onset so a sparse melodic event in a lull (a piano line) fires where "
+                        "the flat governor buries it. ~10 to start. Rides the same slot as the grid snap; baked into "
+                        "tau. Needs the 42-dim highres/highres_v2 features (perc/harm channels).")
+    p.add_argument("--harm_quiet_q", type=float, default=40.0,
+                   help="percentile of (smoothed) energy below which --harm_calib's quiet gate opens (default 40).")
     # ---- v2 (48th-grid) decode flags — all are v1 no-ops (subdiv=4) BY CONSTRUCTION, so they're safe defaults
     p.add_argument("--no_fast_jump", action=argparse.BooleanOptionalAction, default=True,
                    help="[v2; DEFAULT ON] forbid a >=2-fresh-press JUMP at sub-16th spacing (a 24th/48th gap on the "
@@ -232,7 +270,28 @@ def main():
     # generate() below so the whole pipeline agrees on the grid (Phase 5; conditioning-mechanics §6).
     subdiv = fspec.extractor.config.timesteps_per_beat if fspec.extractor is not None else 4
     hop = int(SR * 60 / (bpm * subdiv))  # finer hop on the 48th grid so the audio is gridded at `subdiv`/beat
-    stub = build_stub_chart(args.audio, bpm, duration, hop, subdiv=subdiv)
+
+    # ★ BEAT-ANCHOR (the "deaf choreography" fix, notes/byo_offset_detection_findings.md): the model chores on
+    # within-beat phase, so frame 0 MUST sit on a downbeat or it choreographs to a phantom grid. Resolve the
+    # within-beat start phase and skip it during extraction (positive stub offset = extract_from_chart's
+    # skip-to-beat), then write #OFFSET = -phase so the untrimmed copied audio still plays in time (§ below).
+    beat_period = 60.0 / bpm
+    if args.no_auto_offset:                              # escape hatch: pre-fix behavior (grid from t=0)
+        anchor = 0.0
+    elif args.offset is not None:                        # manual #OFFSET (negative lead-in) -> within-beat phase
+        anchor = (-args.offset) % beat_period
+        print(f"offset: using --offset {args.offset:+.3f}s → beat-anchor skip {anchor:.3f}s (#OFFSET {-anchor:+.3f})")
+    else:                                                # audio detector (full-band onset pulse-train, ~7ms median)
+        r = detect_offset_audio(args.audio, bpm)
+        anchor = r["offset_sec"] if r else 0.0
+        if r is None:
+            print("⚠️  offset detector failed (silent/short audio) → grid from t=0. Pass --offset from a reference chart.")
+        elif r["is_confident"]:
+            print(f"offset: auto-detected {anchor:.3f}s (#OFFSET {-anchor:+.3f}), confidence {r['confidence']:.2f}")
+        else:
+            print(f"⚠️  offset auto-detected {anchor:.3f}s but LOW confidence ({r['confidence']:.2f}) — likely a "
+                  f"half-beat slip (beat vs off-beat). Verify by ear; pass --offset <reference #OFFSET> if it's off.")
+    stub = build_stub_chart(args.audio, bpm, duration, hop, subdiv=subdiv, offset=anchor)
     feats = fspec.extractor.extract_from_chart(args.audio, stub)
     if feats is None:
         raise SystemExit(f"feature extraction failed for {args.audio}")
@@ -322,11 +381,21 @@ def main():
             song_calib = (_b8b16[0], _b8b16[1], b)
             print(f"  [auto_b_trip] triple_pref={tp:+.2f} -> "
                   + (f"TRIPLET (b_trip={b:.2f})" if is_trip else "duple (band off)"))
-    # 16th-GRID SNAP (v2 only): veto the pure-48th cells so busy low/mid charts stay on-grid. Single-sourced into
-    # BOTH tau (extra_offset=) and decode (onset_logit_offset=). auto = difficulty <= Medium; v1 (subdiv=4) = no-op.
+    # per-frame onset-logit offsets that RIDE THE SAME SLOT and are single-sourced into BOTH tau (extra_offset=)
+    # and decode (onset_logit_offset=) so they can't drift (conditioning-mechanics §6):
+    #   (a) 16th-GRID SNAP (v2 only): veto the pure-48th cells so busy low/mid charts stay on-grid. auto =
+    #       difficulty <= Medium; v1 (subdiv=4) = no-op.
+    #   (b) OPT-IN sparse-harm-in-quiet phrase calibrator (--harm_calib): boost a sparse melodic event in a lull.
+    onset_off = None
     do_snap = subdiv != 4 and (args.grid_snap == 'all' or (args.grid_snap == 'auto' and diff_idx <= 2))
-    snap_off = (grid_snap_offset(T, subdiv, keep_triplets=args.grid_snap_keep_triplets, device=device)
-                if do_snap else None)
+    if do_snap:
+        onset_off = grid_snap_offset(T, subdiv, keep_triplets=args.grid_snap_keep_triplets, device=device)
+    if args.harm_calib > 0:
+        if audio_tensor.shape[1] != 42:
+            raise SystemExit("--harm_calib needs the 42-dim highres/highres_v2 features (perc/harm channels).")
+        harm_t = torch.from_numpy(
+            _sparse_harm_offset(audio_tensor[:T], args.harm_calib, args.harm_quiet_q)).to(device)
+        onset_off = harm_t if onset_off is None else onset_off + harm_t
     # the radar fed to BOTH tau and the decode MUST be the same one, else tau is calibrated on a different
     # distribution than generate() decodes from (conditioning-mechanics §3). No --style -> radar=None (null token).
     radar_arg = radar_for_gen if style_spec else None
@@ -335,7 +404,7 @@ def main():
     with torch.no_grad():
         memory = model.encode_audio(audio)
         p_onset = conditioned_p_onset(model, memory, diff, radar=radar_arg, guidance=args.guidance,
-                                      phase_calib=song_calib, extra_offset=snap_off, subdiv=subdiv,
+                                      phase_calib=song_calib, extra_offset=onset_off, subdiv=subdiv,
                                       window=onset_window)  # SAME window generate() decodes from (tau-coupling §3)
     tau = compute_tau(p_onset, gen_density)
 
@@ -350,7 +419,7 @@ def main():
         no_fast_jump=args.no_fast_jump,    # v2: forbid >=2-fresh JUMP at sub-16th spacing (v1 no-op; §8d)
         onset_phase_calib=song_calib, subdiv=subdiv,  # ★ the 16th-unlock + per-song triplet band (baked into tau above)
         onset_window=onset_window,  # ONSET sliding window for long songs (fixes the dead tail; no-op if song fits)
-        onset_logit_offset=snap_off,       # 16th-grid snap (same offset baked into tau above; None if not snapping)
+        onset_logit_offset=onset_off,      # 16th-grid snap + --harm_calib (same offset baked into tau above; None if neither)
         fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
         fatigue_free=args.fatigue_free,
         stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),
@@ -410,7 +479,7 @@ def main():
     sm = charts_to_sm(
         charts=[{"chart": gen, "difficulty_name": "Challenge",
                  "difficulty_value": DIFFICULTY_METER[args.difficulty], "author": "generated"}],
-        bpm=bpm, title=title, artist=(args.artist or ""), music=music, offset=0.0, typed=True,
+        bpm=bpm, title=title, artist=(args.artist or ""), music=music, offset=-anchor, typed=True,  # #OFFSET = -(beat-anchor); untrimmed audio plays in time
         timesteps_per_beat=subdiv,  # 4 = 16th grid, 12 = the v2 48th grid -> 48 rows/measure so triplets land true
         header=header,
     )
