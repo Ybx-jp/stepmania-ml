@@ -129,6 +129,13 @@ def parse_args():
                         "('chaos=high,freeze=low') OR repeat the flag ('--style chaos=high --style freeze=low'); "
                         "both merge into one manifold spec.")
     p.add_argument("--guidance", type=float, default=1.5, help="CFG scale for --style (default 1.5)")
+    p.add_argument("--target_density", type=float, default=None,
+                   help="override the density target (notes/frame on the ACTIVE grid; the top-priority density lever, "
+                        "conditioning-mechanics §6). Default = the manifold E[density|difficulty] — which is the "
+                        "TRAINING-CORPUS AVERAGE for the bucket and can read SPARSE vs your own charts (corpus 'Hard' "
+                        "≈ 2.7 notes/s @128bpm; a real meter-10 chart ≈ 3.5-5). Pass e.g. 0.14 (v2/48th grid) for a "
+                        "denser Hard. NOTE: this is the final active-grid fraction — it BYPASSES the manifold + the "
+                        "4/subdiv scaling, so specify it directly for the grid you're on (v2 = 48th).")
     # ---- decode palette: defaults sourced from the CANONICAL single source of truth
     #      (src/generation/decode_defaults.py = the same values export_typed_samples.py uses = what the user
     #      plays). These are NOT opt-in tweaks; they ARE the deployed regime. Pass 0 to disable a governor.
@@ -285,8 +292,12 @@ def main():
         # 4/subdiv (=1/3 on the 48th grid) or the whole chart over-places ~subdiv/4x. Mirrors the exporter's
         # style_density fix (export_typed_samples.py); without a source chart this manifold value is the ONLY
         # density source here, so the bug hit every v2 BYO chart uniformly (notes/byo_audio_alignment_findings.md).
+    density_src = "manifold E[density|diff]"
+    if args.target_density is not None:  # explicit override: the top-priority density lever (conditioning-mechanics
+        gen_density = args.target_density  # §6). Final ACTIVE-grid fraction — bypasses the manifold + 4/subdiv above.
+        density_src = "--target_density"   # the manifold 'Hard' is corpus-average + can read sparse vs the user's charts
     print(f"BPM {bpm:.1f} | hop {hop} | {T} frames (~{T*hop/SR:.0f}s) | {args.difficulty} | "
-          f"target density {gen_density:.3f}"
+          f"target density {gen_density:.3f} ({density_src}; ~{gen_density*bpm*subdiv/60:.1f} notes/s)"
           + (f" | style '{style_spec}'" if style_spec else ""))
 
     # the 16th-unlock offset (b8,b16) — applied to the onset logits BEFORE tau AND inside generate(); the two

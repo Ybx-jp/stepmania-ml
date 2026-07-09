@@ -71,6 +71,20 @@ compose.
   harder + riskier, not evidence-required yet.
 - The `min_onset_gap` / `no_fast_jump` / footspeed floor all still apply on the windowed onsets (they run after).
 
+## Density note — baseline "Hard" is deliberately MODERATE; crank via conditioning / --target_density (NOT a defect)
+The deliverable reads ~2.6 notes/s (660 notes / 250s). That is a BELIEVABLE baseline Hard, not a bug — the manifold
+`E[density|Hard]` = 0.32 (16th-grid) = **2.73 notes/s @128bpm** is the corpus average for the bucket, and density is
+meant to be CRANKED UP by conditioning (a per-song lever), not baked high into the baseline. Levers:
+- **Radar `--style stream=high,voltage=high`** (+`--guidance ~1.5`): raises density ON-MANIFOLD (stream/voltage are
+  the density dims; real charts raise density coherently), the intended path.
+- **`--target_density`** (now wired into generate.py — it existed in the exporter but was never passed through here;
+  the top-priority density lever, conditioning-mechanics §6): a direct override, FINAL active-grid fraction (bypasses
+  the manifold + the 4/subdiv scaling); e.g. `--target_density 0.14` on v2 ≈ 3.6 notes/s. The print now shows `~N
+  notes/s`. Un-set = the manifold default (byte-identical to before).
+(Context for calibration: the user's own Toulouse reference — `~/sm-personal/.../Nicky Romero - Toulouse.sm`, meter 10 —
+runs ~3.6 onset-rows/s, i.e. a cranked Hard sits ~1.3× over the baseline. The sliding window is orthogonal: it
+PRESERVES density, so this is unrelated to it — the deployed baseline reads the same.)
+
 Related: `byo_audio_alignment_findings.md` (FM3), `byo_offset_detection_findings.md`, `notes/playtest_log.md`
 (2026-07-08), `conditioning-mechanics §6`, `generation-defaults §0`, memory [[byo-audio-bpm-footgun]],
 lineage `experiment_lineage/byo-audio-alignment-arc.md` Ch.3.
