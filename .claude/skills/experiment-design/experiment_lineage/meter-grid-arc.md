@@ -193,9 +193,12 @@ was executed. Believed → learned:
 - **Method keeper — validate the detector on the KNOWN cases before trusting it, and re-validate on the HARD ones:**
   the detector looked clean on the easy 9-song set (+0.81) but its true chart-triplet hit-rate is ~50%; the
   6-triplet sweep was the fair test. A metric that separates the easy cases is not validated on the hard ones.
-- **Current state:** the switch + gate fix are SAFE + shipped (uncommitted, `feat/governor-subdiv-recalib`). Open
-  fork = the auto-vs-global by-ear verdict (pack `~/sm-generated/v2byear_*`), then the deploy-swap. Notes
-  `notes/v2_safety_envelope_findings.md`.
+- **Current state:** the switch + gate fix are SAFE + shipped. **✅ DEPLOY-SWAP DONE (2026-07-09):** v2
+  (`gen_motif_v2_48th_cont` + `--features highres_v2`) is now the DEFAULT in BOTH CLIs; the auto knobs (`grid_snap
+  auto`, `auto_b_trip` with `b_trip=0.7`) ship ON; the auto-vs-global b_trip by-ear A/B was WAIVED for the cut (ride
+  the offline validation + the `toulouse_win_anchor` "cut v1" verdict). The hold-stream `freeze=high` edge ships as a
+  documented KNOWN LIMITATION. Notes `notes/v2_safety_envelope_findings.md`; the arc now feeds v1.0.0 (regen the
+  personal set + the BYO offset detector, `byo-audio-alignment-arc.md` Ch.2).
 
 ### Session 5 (2026-07-06) — LOW-DIFFICULTY verification + the 16th-grid SNAP (`notes/grid_snap_findings.md`)
 Verified the v2 deploy candidate at the LOWER difficulties (it had only ever been by-ear'd on Hard). **v2 generates

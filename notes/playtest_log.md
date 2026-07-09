@@ -8,6 +8,39 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-09 — Sliding-window PASS + "cut v1"; v2 admitted to the canonical default
+
+**WHAT WAS PLAYED** — `toulouse_win_anchor` (v2 `gen_motif_v2_48th_cont`, 128 BPM, 48th grid, anchor-beat +
+the new sliding-window onset head — the ★ HANDOFF by-ear gate) plus "a few songs I generated myself through
+`scripts/generate.py`."
+
+**RAW FEEDBACK** — "everything seems to be in decent enough working order to cut a v1 ... it basically works.
+Some songs come out better than others, but you can screw around with the conditioning and maybe get something
+better ... consolidate my learning, publish something, and move on."
+
+**COMMENTARY / HYPOTHESIS** —
+1. **SLIDING-WINDOW ONSET GATE = PASS (the awaited HANDOFF verdict).** `toulouse_win_anchor` is the anchor-beat +
+   sliding-window build; "decent enough working order" clears the gate that `notes/byo_sliding_window_findings.md`
+   left open (dead-tail fix: tail 90→143 notes, 0 dead measures). Not a rave — a "works, ship it" — so the density
+   redistribution (windowing pulls budget intro→outro) reads acceptable by ear; the harder decoder-side windowing
+   stays PARKED, not needed for the cut.
+2. **DECISION: v2 admitted as the canonical default.** Per the user's directive + this verdict, flipped BOTH
+   `scripts/generate.py` and `export_typed_samples.py` defaults to `--features highres_v2` + `gen_motif_v2_48th_cont`
+   (validator still 25 ✓, 38/38 tests pass, end-to-end generate confirmed 48-row/measure output). The v2-only auto
+   knobs (`grid_snap auto`, `auto_b_trip`) ship **ON as-is** (offline-validated; by-ear A/B waived for the cut).
+3. **DECISION: the v2 `freeze=high` hold-stream edge ships as a documented KNOWN LIMITATION** (long hold + one-foot
+   stream under it; real free-foot-overload fix designed + PARKED for a 2.0).
+
+**ACTION / NEXT** —
+- [x] Sliding-window by-ear gate → PASS; logged.
+- [x] Deploy swap: v2 the default in both CLIs; HANDOFF canonical block moved with the code (validator green).
+- [x] Arg-parity sweep: `generate.py` mirrors the full canonical stack; added the one missing validated lever
+      (`--harm_calib`/`--harm_quiet_q`). Optional H15/pattern-steering knobs deliberately left exporter-only.
+- [ ] Still OPEN (orthogonal to the swap, pre-existing): the BYO auto-offset detector is not yet wired into
+      `generate.py` (`build_stub_chart` offset hardcoded 0.0); `toulouse_win_anchor` was anchored by hand.
+- [ ] `/refresh` to propagate the swap through the skills (generation-defaults §0, conditioning-mechanics §6) +
+      memory ([[ship-mode-park-research]], [[meter-4-4-grid]]) + HANDOFF prose.
+
 ## 2026-07-08 — Toulouse offset A/B: anchor-to-beat WINS the grid, but surfaces "dead spots"; energy overlay splits them into breakdown-rest (correct-ish) vs OOD-tail collapse (the real length bug)
 
 **WHAT WAS PLAYED** — the pending BYO offset anchoring A/B on Toulouse (both v2 `gen_motif_v2_48th_cont`, true

@@ -43,13 +43,19 @@ mechanism; **this skill is the config VALUES.**
 > footgun — 30+ probes re-derived it, some with a buggy `calibrated_p_onset`). `DEPLOYED_CHECKPOINT` is here too.
 
 ## 0. THE MODEL (get this right first — it's the most-missed)
-- **Deployed model = `checkpoints/gen_motif_full_fixed/best_val.pt`** — the 42-dim H19 highres retrain (radar +
+> **★ DEPLOY SWAP DONE (2026-07-09): v2 IS NOW THE DEFAULT in both CLIs.** `scripts/generate.py` and
+> `export_typed_samples.py` DEFAULT to `--features highres_v2` + `checkpoints/gen_motif_v2_48th_cont/best_val.pt`
+> (the 48th-grid model). The v2-only auto knobs (`grid_snap auto`, `auto_b_trip`) ship ON. The legacy v1 model
+> (`gen_motif_full_fixed`, 16th grid) is still REACHABLE via `--features highres` — read the v1 paragraph below as
+> "the legacy path," not "the default." Everything else in this skill (the decode palette §1, tau §2/§3, governors
+> §8) is grid-agnostic and unchanged.
+- **v1 / LEGACY model = `checkpoints/gen_motif_full_fixed/best_val.pt`** — the 42-dim H19 highres retrain (radar +
   continuous motif + discrete figure). Build it `LayeredTypedChartGenerator(audio_dim=42, d_model=128,
-  num_layers=4, onset_layers=2)`.
-- **Features = `highres`:** `AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True,
+  num_layers=4, onset_layers=2)`. Reach it with `--features highres`.
+- **Features `highres` (v1/legacy):** `AudioFeatureConfig(use_chroma=True, use_hpss_onsets=True, use_metric_phase=True,
   use_highres_onset=True)` → `audio_dim=42`, `cache_dir='cache/samples_v3'`. (41-dim `samples_v2` = the OLD
-  stage1 space; 23-dim `samples` = the base/critic space — neither matches the deployed generator.)
-- ⏩ **`highres_v2` — ✅ PHASE 6 BY-EAR PASSED (2026-07-05), a DEPLOY CANDIDATE, but NOT YET the deployed default:**
+  stage1 space; 23-dim `samples` = the base/critic space — neither matches the generator.)
+- ⏩ **`highres_v2` — ✅ THE DEFAULT since 2026-07-09 (Phase 6 by-ear passed 2026-07-05):**
   same 42-dim channels on the 48th grid (`timesteps_per_beat=12`, `beat_sync=True`, `cache/samples_v3_48th`), paired
   with `StepManiaParser.for_v2()`. Best checkpoint `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (val 0.7435). The
   by-ear gate on the triplet set CLEARED — the 48th grid REMOVES the triplet tax with zero degradation
@@ -94,14 +100,16 @@ mechanism; **this skill is the config VALUES.**
   5–6 beat holds with a one-foot stream under them — PERSISTS; real fix DESIGNED + PARKED, `footspeed_floor_findings.md
   §5b`). ⚠️ **PROJECT IS IN SHIP MODE (2026-07-06, [[ship-mode-park-research]] memory): cut v1.0.0.** The swap =
   make `gen_motif_v2_48th_cont` + `--features highres_v2` the default, `b_trip=0.7` (song-dependent; 0.7 is the gentler
-  default, 1.0 adds busyness on duple songs). Decide whether the hold-stream edge (freeze=high only) blocks the cut or
-  ships as a known limitation. Until the swap, the deployed regime STAYS `highres` + `gen_motif_full_fixed`.
-  Groove-radar chaos fix is
+  default, 1.0 adds busyness on duple songs). **DONE 2026-07-09** — the swap landed (b_trip=0.7 auto default); the
+  hold-stream `freeze=high` edge ships as a documented KNOWN LIMITATION (user call). Groove-radar chaos fix is
   RETRAIN-GATED (`notes/manifold_radar_subdiv_findings.md` — do NOT refit the manifold for the current model). See
   `notes/footspeed_floor_findings.md`, `notes/data_layer_v2_scope.md`, `conditioning-mechanics §6/§8`.
 - ⚠️ **TRAP:** `export_typed_samples.py`'s argparse `--checkpoint` DEFAULT is the legacy `gen_style` (23-dim) and
-  `--features` defaults to `base`. So the exporter's *bare* default loads the WRONG model. You MUST pass
-  `--checkpoint checkpoints/gen_motif_full_fixed/best_val.pt --features highres`.
+  `--features` DEFAULTS now correctly resolve to the v2 canonical model (`gen_motif_v2_48th_cont` + `highres_v2`) as
+  of 2026-07-09 — the *bare* run loads the RIGHT model (the old "bare default = wrong model" trap is FIXED). The
+  remaining footgun is MIXING: never pair `--features highres_v2` with a v1 checkpoint (or vice-versa) — the grid
+  mismatches. To run the legacy v1 model, pass BOTH `--checkpoint checkpoints/gen_motif_full_fixed/best_val.pt
+  --features highres`.
 
 ## 1. THE canonical decode palette (copy-paste)
 Values = `export_typed_samples.py` argparse defaults (06-28). `bpm` is **per-song** and MANDATORY (no bpm →
