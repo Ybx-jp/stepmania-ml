@@ -17,6 +17,7 @@ It replicates the canonical decode path exactly:
 Usage:
   python scripts/generate.py --audio song.ogg --difficulty Hard
   python scripts/generate.py --audio song.ogg --difficulty Medium --bpm 174 --style "chaos=q0.7"
+  python scripts/generate.py --audio "https://youtu.be/XXXX" --difficulty Hard --bpm 174   # URL -> pulls .ogg
 
 Weights: defaults to checkpoints/gen_motif_full_fixed/best_val.pt (the deployed 42-dim model).
 Density/conditioning needs cache/radar_manifold.npz (shipped with the repo).
@@ -38,6 +39,8 @@ from src.data.stepmania_parser import StepManiaChart, TimingEvent
 from src.data.dataset import DIFFICULTY_NAMES
 from src.data.meter_detect import detect_triple_pref_audio  # audio duple/triplet classifier for --auto_b_trip (v2)
 from src.data.offset_detect import detect_offset_audio  # audio start-offset detector (beat-anchoring; deaf-chore fix)
+from src.data.youtube_audio import is_url, fetch_to_cache  # --audio may be a YouTube URL -> pull to a local .ogg
+from src.data.audio_slice import parse_trim_spec, ensure_trimmed  # --trim-audio: keep a time range of the audio
 from src.generation.typed import pair_holds
 from src.generation.sm_writer import charts_to_sm
 from src.generation import sm_headers
@@ -106,7 +109,24 @@ def build_stub_chart(audio_path: str, bpm: float, duration: float, hop_length: i
 
 def parse_args():
     p = argparse.ArgumentParser(description="Generate a StepMania chart from one audio file.")
-    p.add_argument("--audio", required=True, help="path to an audio file (.ogg/.mp3/.wav)")
+    p.add_argument("--audio", required=True,
+                   help="path to an audio file (.ogg/.mp3/.wav) OR a YouTube/yt-dlp URL "
+                        "(pulled to a local .ogg; requires yt-dlp+ffmpeg on PATH)")
+    p.add_argument("--audio_quality", type=int, default=6, choices=range(0, 11), metavar="0-10",
+                   help="Vorbis quality when re-encoding a URL pull or --trim-audio (higher = better; default 6)")
+    p.add_argument("--trim-audio", "--trim_audio", dest="trim_audio", default=None, metavar="START[,END]",
+                   help="chart only a time range of the audio. Timestamps are SS, M:SS, or H:MM:SS. "
+                        "'0:04' = from 4s to the end; '0:04,2:14' = the 4s-2:14 interior. Applies to a "
+                        "local file or a URL pull; the beat-anchor offset re-detects on the trimmed clip.")
+    p.add_argument("--sm_difficulty", "--sm-difficulty", dest="sm_difficulty", default=None,
+                   choices=["Beginner", "Easy", "Medium", "Hard", "Challenge", "Edit"],
+                   help="StepMania difficulty SLOT written to the .sm (default: same as --difficulty). Set this to "
+                        "place several generated difficulties of ONE song in distinct slots so they don't collide.")
+    p.add_argument("--append_to", "--append-to", dest="append_to", default=None, metavar="CHART.sm",
+                   help="append this difficulty into an EXISTING song's .sm as another difficulty slot (instead of "
+                        "writing a new song folder). The target's #OFFSET/#BPMS/title/audio are kept; use the SAME "
+                        "--bpm and --offset the target's charts were generated with so the beat grids match. Backs "
+                        "the target up to <name>.sm.bak first.")
     p.add_argument("--difficulty", required=True, choices=list(DIFFICULTY_METER),
                    help="target difficulty bucket")
     p.add_argument("--out", default=None,
@@ -223,10 +243,85 @@ def parse_args():
     return p.parse_args()
 
 
+def _first_measure_rows(block: str) -> int:
+    """Note rows in a #NOTES block's first measure = the grid resolution (e.g. 48 on the v2 grid, 16 on v1)."""
+    n, started = 0, False
+    for ln in block.splitlines():
+        s = ln.strip()
+        if re.fullmatch(r"[0-9MLF]{4}", s):
+            n, started = n + 1, True
+        elif s == "," and started:   # measures are comma-separated in the .sm
+            break
+    return n
+
+
+def append_chart_to_sm(target: Path, new_block: str, gen_bpm: float, slot: str) -> None:
+    """Splice a generated #NOTES block into an existing song's .sm as another difficulty, in place.
+
+    The target's header (title, audio, #BPMS, and its possibly hand-tuned #OFFSET) is kept, so both
+    difficulties share one grid + one offset. Two grid guards refuse an append that can't line up:
+    a bpm mismatch (different beat spacing) or a rows-per-measure mismatch (different subdivision).
+    """
+    if not target.is_file():
+        raise SystemExit(f"--append_to: target .sm not found: {target}")
+    text = target.read_text(encoding="utf-8")
+    if "#NOTES:" not in text:
+        raise SystemExit(f"--append_to: {target} has no #NOTES block to append beside.")
+    tgt_block = text[text.index("#NOTES:"):]
+    m = re.search(r"#BPMS:\s*[0-9.]+\s*=\s*([0-9.]+)", text)          # guard 1: same tempo
+    if m and abs(float(m.group(1)) - gen_bpm) > 0.05:
+        raise SystemExit(f"--append_to: target bpm {float(m.group(1)):g} != --bpm {gen_bpm:g}; grids differ — "
+                         "regenerate with a matching --bpm.")
+    tgt_rpm, new_rpm = _first_measure_rows(tgt_block), _first_measure_rows(new_block)
+    if tgt_rpm and new_rpm and tgt_rpm != new_rpm:                    # guard 2: same subdivision
+        raise SystemExit(f"--append_to: target grid is {tgt_rpm} rows/measure but this chart is {new_rpm} — "
+                         "different --features subdivision; regenerate to match.")
+    if re.search(rf"(?m)^\s*{re.escape(slot)}:\s*$", tgt_block):
+        print(f"⚠️  --append_to: target already has a '{slot}' difficulty — you'll end up with two. "
+              "Pass a different --sm_difficulty if that's not intended.")
+    off = re.search(r"#OFFSET:\s*(-?[0-9.]+)", text)
+    print(f"ℹ️  --append_to: keeping the target's #OFFSET {off.group(1) if off else '?'} for BOTH difficulties — "
+          "this chart must have been generated on the SAME --offset (beat-anchor) as the target's, or it will be "
+          "off-grid against them.")
+    backup = target.with_suffix(target.suffix + ".bak")
+    backup.write_text(text, encoding="utf-8")
+    target.write_text(text.rstrip() + "\n\n" + new_block.rstrip() + "\n", encoding="utf-8")
+    print(f"appended '{slot}' difficulty → {target}  (backup: {backup})")
+
+
 def main():
     args = parse_args()
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # --audio may be a YouTube (or any yt-dlp) URL. Pull it to a local Vorbis .ogg (cached by
+    # video id, so re-running on the same URL at another difficulty doesn't re-download) and
+    # chart the local file — everything downstream sees a plain path. Title defaults to the
+    # video title when --title wasn't given. BPM is still user's job (URLs carry no reliable BPM).
+    if is_url(args.audio):
+        try:
+            audio_path, video_title = fetch_to_cache(args.audio, quality=args.audio_quality)
+        except RuntimeError as e:
+            raise SystemExit(f"could not fetch audio from URL: {e}")
+        print(f"↓ pulled audio → {audio_path}")
+        args.audio = str(audio_path)
+        if args.title is None:
+            args.title = video_title
+
+    # --trim-audio: keep only a time range of the (local) audio, producing a new .ogg that BECOMES
+    # args.audio here — so everything below (bpm, duration, offset detection, feature extraction,
+    # generation) runs on the trimmed clip; the model never sees the untrimmed audio. Runs after the
+    # URL pull so it slices whichever file we ended up with. Because offset detection therefore sees
+    # the trimmed clip, cutting the intro just re-anchors #OFFSET to the clip's first beat.
+    if args.trim_audio:
+        try:
+            trim_start, trim_end = parse_trim_spec(args.trim_audio)
+            trimmed = ensure_trimmed(args.audio, trim_start, trim_end, quality=args.audio_quality)
+        except (ValueError, RuntimeError) as e:
+            raise SystemExit(f"--trim-audio: {e}")
+        span = f"{trim_start:g}s..{'end' if trim_end is None else f'{trim_end:g}s'}"
+        print(f"✂  trimmed audio to [{span}] → {trimmed}")
+        args.audio = str(trimmed)
 
     is_v2 = args.features == "highres_v2"
     # checkpoint default is grid-aware: v2 features REQUIRE a v2 (48th-grid) checkpoint or the weights mis-match
@@ -436,6 +531,21 @@ def main():
         gen = pair_holds(model.generate(audio, diff, lengths=torch.tensor([T], device=device),
                                         **gen_kwargs)[0].cpu().numpy())
 
+    # 7a. --append_to: splice this difficulty into an existing song's .sm instead of writing a new song folder.
+    #     The target owns #OFFSET/#BPMS/title/audio; we contribute one #NOTES block (grid guards in the helper).
+    if args.append_to:
+        sm_difficulty = args.sm_difficulty or args.difficulty
+        one = charts_to_sm(
+            charts=[{"chart": gen, "difficulty_name": sm_difficulty,
+                     "difficulty_value": DIFFICULTY_METER[args.difficulty], "author": "generated"}],
+            bpm=bpm, title="", artist="", music="", offset=-anchor, typed=True,
+            timesteps_per_beat=subdiv, header={})
+        new_block = one[one.index("#NOTES:"):]
+        append_chart_to_sm(Path(args.append_to), new_block, bpm, sm_difficulty)
+        print(f"   ({float((gen != 0).any(1).mean()):.3f} realized density, "
+              f"{int((gen != 0).any(1).sum())} notes)")
+        return
+
     # 7. write a StepMania-shaped folder: <group>/<song>/{chart.sm, audio}.
     #    StepMania expects Songs/<group>/<song>/<files> — a song folder placed DIRECTLY in a songs folder
     #    becomes an empty group and won't appear. So --out is the GROUP folder (you drop it into Songs/);
@@ -476,8 +586,9 @@ def main():
         if val is not None:
             header[tag] = val
 
+    sm_difficulty = args.sm_difficulty or args.difficulty  # the .sm difficulty SLOT (defaults to --difficulty)
     sm = charts_to_sm(
-        charts=[{"chart": gen, "difficulty_name": "Challenge",
+        charts=[{"chart": gen, "difficulty_name": sm_difficulty,
                  "difficulty_value": DIFFICULTY_METER[args.difficulty], "author": "generated"}],
         bpm=bpm, title=title, artist=(args.artist or ""), music=music, offset=-anchor, typed=True,  # #OFFSET = -(beat-anchor); untrimmed audio plays in time
         timesteps_per_beat=subdiv,  # 4 = 16th grid, 12 = the v2 48th grid -> 48 rows/measure so triplets land true
