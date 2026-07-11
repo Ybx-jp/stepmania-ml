@@ -24,6 +24,13 @@ beat-anchor offset detector**. What's left is mechanical (regenerate the deliver
   shared via `CANONICAL_DECODE` so the two CLIs can't drift.
 - **Sliding-window onset** (Ch.1): BUILT + by-ear PASSED (`toulouse_win_anchor`); no-op when a song fits the trained
   context. The harder decoder-side windowing stays parked (not needed).
+- **✅ BYO acquisition/assembly TOOLING (2026-07-10, tooling not model; `notes/byo_audio_acquisition_tooling.md`,
+  [[audio-acquisition-tooling]]).** `generate.py --audio` now accepts a YouTube/yt-dlp URL (→ Vorbis `.ogg` cached
+  by video id; also `scripts/pull_audio.py`); `--trim-audio START[,END]` slices a range BEFORE gen; `--sm_difficulty`
+  writes the real `.sm` slot (**default changed**: follows `--difficulty`, was hardcoded `Challenge`); `--append_to
+  CHART.sm` splices a difficulty into an existing song (bpm/subdivision grid guards + `.bak`). Deps: yt-dlp+ffmpeg
+  (+deno) on PATH. ⚠️ Load-bearing: playback `#OFFSET` ≠ generation beat-anchor — all difficulties of one song MUST
+  share one `--offset` ([[byo-audio-bpm-footgun]] 4th mode). On branch `feat/youtube-audio-pull-trim-append`.
 
 ## ★ ACTIVE THREAD — the v1.0.0 CUT (nothing research-y is blocking)
 Lineage: `meter-grid-arc.md` (v2 default) + `byo-audio-alignment-arc.md` **Ch.2** (offset, now CLOSED for the ship).
@@ -85,10 +92,12 @@ NOTE: v2 is a SEPARATE regime — `--features highres_v2` + `gen_motif_v2_48th_c
 triplet band via `--onset_phase_calib "0,1.0,b_trip"`; `--auto_b_trip`. Do NOT mix `highres_v2` with the v1 checkpoint.
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- Branch **`feat/byo-sliding-window-onset`** (off `main`; pushed). This session's commits (v2 deploy-swap +
-  `--harm_calib` + the offset detector + this docs refresh) land here. As of the refresh there was **no open PR** for
-  it (`gh pr list` empty — the old "PR #70" reference was stale). A PR to `main` is being opened at the end of this
-  refresh — **verify its number/state via `gh pr view` / `gh pr list`; do not trust a number written here.**
+- Branch **`feat/byo-sliding-window-onset`** (off `main`; pushed) holds the v2 deploy-swap + `--harm_calib` + the
+  offset detector + that docs refresh. **Verify its PR state via `gh pr list`; do not trust a number written here.**
+- Branch **`feat/youtube-audio-pull-trim-append`** (off `feat/byo-sliding-window-onset`, 2026-07-10) = the BYO
+  acquisition/assembly tooling (URL `--audio`, `--trim-audio`, `--sm_difficulty`, `--append_to`) + this docs refresh.
+  Its PR is based on `feat/byo-sliding-window-onset` (clean diff, since the generate.py edits depend on that branch);
+  **verify number/state/base via `gh pr view` — retarget to `main` if byo lands first.**
 - Gitignored / not committed: `outputs/`, `transcripts/`, scratchpad probes (`$CLAUDE_JOB_DIR/tmp/*`). Untracked and
   NOT mine: `.claude/commands/begin.md` (left unstaged). Test charts under `~/sm-generated/` are gitignored.
 

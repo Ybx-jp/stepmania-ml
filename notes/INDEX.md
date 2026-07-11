@@ -351,6 +351,17 @@ phantom-grid choreography. NEW ASSET: `~/sm-personal` = the user's OWN charts (t
 ([[personal-reference-charts]]). Auto-offset detector: full-band onset pulse-train + 31ms latency cal WON (~80% ≤40ms,
 ~20% half-beat slip); DFT-phase/kick-band/tiebreak all oracle-refuted. **OPEN BY-EAR GATE:** anchoring A/B on Toulouse
 (`toulouse_bpm128` t=0 vs `toulouse_anchor_beat` beat-anchored). Lineage `byo-audio-alignment-arc.md` Ch.2.
+**UPDATE (2026-07-10) — BYO acquisition/assembly TOOLING (`byo_audio_acquisition_tooling.md`; tooling, no model
+change).** Made `generate.py` a one-command path from a YouTube link to a playable multi-difficulty song: `--audio`
+accepts a URL (pulled to a Vorbis `.ogg` cached by video id, `src/data/youtube_audio.py` + standalone
+`scripts/pull_audio.py`); `--trim-audio START[,END]` slices a range BEFORE generation (`src/data/audio_slice.py`,
+sample-accurate); `--sm_difficulty` writes the real `.sm` difficulty slot (**default changed** from hardcoded
+`Challenge` → follows `--difficulty`); `--append_to CHART.sm` splices a difficulty into an existing song with
+bpm/subdivision grid guards + `.bak`. **Load-bearing gotcha (hit live):** playback `#OFFSET` ≠ generation
+beat-anchor — `--offset` sets BOTH, and a `.sm` shares ONE `#OFFSET`, so every difficulty of a song must use the
+SAME `--offset` or they sit a half-beat apart (Crazy Frog Beginner vs Easy, 0.261s @129 BPM). Deps installed:
+yt-dlp+ffmpeg (+deno for full-quality YouTube). See [[audio-acquisition-tooling]], [[byo-audio-bpm-footgun]] 4th mode.
+
 **UPDATE (2026-07-09) — SHIP MILESTONE: v2 admitted as the DEFAULT + the offset detector WIRED.** (1) The anchoring
 A/B RESOLVED by ear (anchor-to-beat WINS; `toulouse_win_anchor` = anchor-beat + sliding-window played "decent enough
 to cut v1", `playtest_log.md`). (2) **DEPLOY SWAP DONE:** both CLIs default to `--features highres_v2` +
