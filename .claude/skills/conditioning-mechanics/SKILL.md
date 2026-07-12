@@ -130,9 +130,27 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   degradation, not counter-evidence). FIX = `tail_hangover` frames of pad past T so a full window CENTERS on the true
   end (`auto`=W//2); **BY-EAR "definitely better."** `hangover_reflect=False` (DEFAULT since 2026-07-11 = SILENCE,
   the correct "future"; True=mirror keeps energy but stops the wind-down). All generate.py-only + off unless the song
-  exceeds the window (byte-identical no-op otherwise); NOT on the canonical export path. OPEN (user priority): a
-  UNIVERSAL sub-train-length window (~80%) applied to ALL songs so even SHORT songs' ends leave the abs-PE tail —
-  UNTESTED.
+  exceeds the window (byte-identical no-op otherwise); NOT on the canonical export path.
+  ▸ **★ UNIVERSAL sub-train-length window — CONFIRMED at onset + decode (2026-07-12, `notes/universal_window_findings.md`).**
+  The user's premise is measured: the v2 TRAIN-length dist (`cache/samples_v3_48th/train`, N=4547) is median 3120 /
+  p75 3648 / **MAX 5128** — no train song fills the 5400 buffer; abs-PE exposure collapses to 31%/13%/6% by pos
+  3500/4000/4320. So ANY song >~3500 sits its END in the under-trained abs-PE tail, yet `onset_window` is pinned at
+  V2_MSL=5400 → windowing NEVER fires for it → the SAME tail collapse as long songs, on SHORT songs. `probe_universal_
+  window.py` (cached VAL, human chart = ground truth, n=60/band): single-pass fires only **30% of real TAIL notes** on
+  the 3800–5128 band + tail backbone Herfindahl smears 0.61→0.34; **W3600 restores** recall (~0.63) + Herfindahl to
+  the HUMAN value (0.61); CONTROL (<3000) shows no degen + is BYTE-IDENTICAL (no-op); **W4320 ~no-op** (fires only
+  T>4320, past the ~3500 onset) = the sharpest proof it's an abs-PE effect (window must be < the degen onset to fire).
+  Decoded check (`probe_universal_window_decoded.py`): windowed tail quarter% 33–69 vs single-pass's collapsed 4–8%,
+  tail JITTER 0 (vs 4–12%), dead-tail recovered (DOMINION 227 vs 136 notes). **✅ BY-EAR PASSED + SHIPPED AS DEFAULT
+  (2026-07-12, `playtest_log.md`): windowed won on all 3 A/B songs** ("great" / "better" / "fine"; the bland ones =
+  per-song conditioning, not the window). **`decode_defaults.UNIVERSAL_ONSET_WINDOW=3600`; both CLIs default v2 →
+  3600** (exporter `--onset_window` default 3600, gated subdiv!=4; generate.py `--onset_window auto`→3600 +
+  `--onset_tail_hangover auto`), single-sourced through `conditioned_p_onset(window=)` + `generate(onset_window=)`;
+  `check_export_defaults` now 27 ✓. v1/16th grid + short-fit songs = byte-identical no-op; disable via `--onset_window
+  0`. **RNG:** shared RNG can't keep the windowed/single-pass arms close — the window diverges them at the ONSET level
+  + shifts the GLOBAL tau, so they differ from the intro on (not a bug). **New residual [H-winddown]:** neither arm
+  winds down into a silence/outro (PRE-EXISTING, not windowing) — candidate = the window restores tail p_onset peaks
+  → the stamina breathe arc thins the outro LESS (queued probe, don't build blind).
   NOTE (06-27): `onset_logit_scale` is a NO-OP under quantile thresholding — `p=sigmoid(scale·ol)` is monotonic,
   so it preserves the frame RANKING → the top-`density` frames are identical for any scale (confirmed: 0 frames
   differ at scale 0.5/2.0). There is NO "onset temperature" that changes WHICH onsets fire in deployment; it

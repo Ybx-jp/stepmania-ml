@@ -8,6 +8,72 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-12 — UNIVERSAL sub-train-length window A/B VERDICT: windowed WINS on all 3 (great / better / fine); [H-subtail] short-song tail-collapse fix CONFIRMED by ear → default FLIPPED. New residual [H-winddown]. RNG question answered.
+
+**WHAT WAS PLAYED** — `~/sm-generated/universal_window_ab/` (3 long val songs, Hard; each `.sm` = **Challenge =
+WINDOWED W3600** / **Edit = single-pass**, today's default / **<Hard> = human original**; shared RNG). This is the
+by-ear gate for the universal sub-train-length window (`notes/universal_window_findings.md`): tile the onset head so
+a SHORT song's end leaves the under-trained abs-PE tail (train len median 3120 / max 5128; single-pass fires only
+~30% of real tail notes on the 3800–5128 band). Songs: DOMINION (4973 frames), チョコレートスマイル / GUMI (4992),
+ラクガキスト / "&"-artist (4800).
+
+**RAW FEEDBACK** (verbatim) —
+- **DOMINION:** windowed "**was great!** it did not wind down properly though, 1-2 measures after silence it was
+  still streaming." single-pass "did sorta the same but ended more disjointed rather than streamy." "the 2 charts
+  were VERY different, did they actually use the same rng? single pass **used sub-16ths liberally from the beginning**,
+  they didn't feel bad though, but it **did degenerate towards the end**."
+- **"&"-artist (ラクガキスト):** windowed "was fine, pretty **bland choreography** though — in sync but not
+  interesting." single-pass "similarly bland, but had **worse foot speed during holds** behavior. i suspect the bland
+  choreography is just an artifact of sub-optimal conditioning, more 'song specific conditioning' problems."
+- **GUMI one (チョコレートスマイル):** "windowed **was better**."
+
+**COMMENTARY / HYPOTHESIS** —
+1. **[H-subtail] THE BY-EAR GATE PASSES — windowed wins on all three (great / better / fine-and-no-worse).** This
+   confirms the onset-probe (n=60, single-pass tail recall 0.30→0.63) + decoded check (windowed tail quarter% 33–69
+   vs single-pass's collapsed 4–8%, tail jitter 0). The user even names the single-pass defect precisely on DOMINION:
+   "**degenerate towards the end**" — the exact tail-collapse the window fixes. **Action: default FLIPPED to the
+   universal window (W3600) in both CLIs.** The prior tail-hangover fix (07-11) handled long songs (T>5400); this
+   extends the same mechanism to the ~3500–5400 band that never windowed.
+2. **RNG question ANSWERED — same RNG, legitimately VERY different, NOT a bug.** The A/B DOES share the RNG state
+   (`_ab_rng` restored before the Edit arm). But shared RNG only keeps two arms identical UP TO their first
+   divergence (as in the footswitch / hold_stream / no_fast_jump A/Bs, where only a LATE decode gate differs). Here
+   the window changes the arms at the ONSET level AND changes the GLOBAL tau (each arm recomputes tau from its own
+   `p_onset`): single-pass's tau is set over a p-distribution whose TAIL is flattened/degenerate, which shifts the
+   whole-song threshold → different frames fire from the INTRO onward (this is the user's "single-pass used sub-16ths
+   liberally from the beginning" — the body over-fires because the collapsed tail can't compete for the fixed density
+   budget). Once the onset stream diverges, the AR pattern/type sampling consumes the shared draws at different
+   points → the charts diverge globally. So the divergence is REAL and expected — a nice illustration that `tau` is a
+   whole-song coupling (cond-mech §6). Not a harness error.
+3. **[H-winddown] NEW residual defect — the chart does not WIND DOWN into a silence/outro (present on BOTH arms →
+   PRE-EXISTING, not caused by windowing).** windowed "still streaming 1-2 measures after silence"; single-pass "did
+   sorta the same but ended more disjointed." So neither arm tapers; windowing just makes the over-run a coherent
+   STREAM (better feel) vs single-pass's disjointed over-run. Mechanism candidates (to test, do NOT commit): (a) the
+   stamina BREATHING arc (§8c, `stamina_breathe=1.2`, floor 0.4) is supposed to thin low-energy outros using the
+   smoothed `p_onset` as the energy proxy — but the window RESTORES the tail `p_onset` peaks, so the breathe envelope
+   now reads HIGHER energy in the tail → LESS thinning (a plausible interaction the window introduced on TOP of a
+   pre-existing weak wind-down); (b) global-tau over-firing a genuinely quiet outro (the inverse of the shelved
+   empty-middles — same global-allocation root). This is a SEPARATE lead from [H-subtail]; the window is still a
+   clean win. Relates to the abrupt-ending / `stamina_breathe_floor` history.
+4. **[H-song-conditioning] BLANDNESS = sub-optimal per-song conditioning, NOT the window (user's own read).** Both
+   arms bland on ラクガキスト; the user attributes it to "song specific conditioning problems." This is exactly the
+   f48 quality-VARIANCE the taste-critic arc exists to solve via best-of-N SELECTION (the deployed default is
+   no-groove-conditioning; a per-song manifold pick could lift the bland ones). Corroborates the arc's framing:
+   choreography INTEREST is a conditioning/selection problem, orthogonal to the placement/timing fixes.
+5. **[H-foot-hold] single-pass "worse foot speed during holds" (defect #3) still present** — the parked free-foot-
+   overload gate (§5b). Note it recurs; not addressed this session.
+
+**ACTION / NEXT** —
+- [x] Flip the default to the universal window (W3600) in both CLIs (`export_typed_samples.py`, `generate.py`);
+      update `check_export_defaults.py` + HANDOFF canonical block + skills/memory.
+- [ ] **[H-winddown]** cheap probe: does the windowed tail over-fire a LOW-ENERGY outro vs the human? (bin outro
+      energy vs firing; test whether `stamina_breathe` thins less post-window; candidate fix = a stronger outro
+      taper / breathe-floor interaction). Do not build blind.
+- [ ] **[H-song-conditioning]** feeds the taste-critic best-of-N track (E0.1/E3) — the bland songs are the argument
+      for per-song conditioning selection.
+- [ ] **[H-foot-hold]** free-foot-overload gate still parked (§5b) — recurred here on single-pass.
+
+---
+
 ## 2026-07-11 (b) — harm_calib A/B VERDICT: both gates LAND by ear, but the density-PRESERVING design makes them TRADE percussive alignment for melodic fill; PERC feeds the sub-16th tail
 
 **WHAT WAS PLAYED** — the two remaining Bye Bye arms of the stamina/harm group (`~/sm-generated/stamina_probe/`):

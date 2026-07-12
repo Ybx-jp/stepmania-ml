@@ -47,7 +47,7 @@ from src.generation import sm_headers
 from src.generation.playtest_export import enforce_playability
 from src.generation.radar_manifold import RadarManifold
 from src.generation.decode_defaults import (
-    CANONICAL_DECODE, calib_arg_default, parse_phase_calib, grid_snap_offset)
+    CANONICAL_DECODE, calib_arg_default, parse_phase_calib, grid_snap_offset, UNIVERSAL_ONSET_WINDOW)
 from src.generation.decode_harness import (
     conditioned_p_onset, compute_tau, make_feature_extractor, load_generator, MODEL_ARCH)
 
@@ -207,12 +207,21 @@ def parse_args():
                         "envelope over a ROLLING window of this many FRAMES instead of the whole song. None (default) "
                         "= deployed whole-song z. ~3600 (48th grid) ≈ one training-song span; fixes the length-mis-"
                         "scoped arc on >130s songs.")
-    p.add_argument("--onset_tail_hangover", type=str, default="0",
-                   help="EXPERIMENTAL (long-song tail-collapse fix, notes/playtest_log.md 2026-07-11): reflect-pad the "
-                        "audio past song-end by this many FRAMES so the onset head's FINAL window CENTERS on the true "
-                        "end instead of leaving it at the under-trained trailing edge (fixes the tail quarter-backbone "
-                        "collapse on songs longer than the onset window; e.g. Lick the Rainbow). 'auto' = W//2 (~2700 on "
-                        "v2). 0/off (default) = disabled. No-op if the song fits the onset window (byte-identical).")
+    p.add_argument("--onset_tail_hangover", type=str, default="auto",
+                   help="tail-collapse fix (notes/playtest_log.md 2026-07-11/12): pad the audio past song-end by this "
+                        "many FRAMES (SILENCE) so the onset head's FINAL window CENTERS on the true end instead of "
+                        "leaving it at the under-trained trailing edge (fixes the tail quarter-backbone collapse on "
+                        "songs longer than the onset window). 'auto' (DEFAULT) = W//2. 0/off = disabled. No-op if the "
+                        "song fits the onset window (byte-identical).")
+    p.add_argument("--onset_window", type=str, default="auto",
+                   help="UNIVERSAL SUB-TRAIN-LENGTH WINDOW (notes/universal_window_findings.md): tile the ONSET head "
+                        "over local-PE windows of this many FRAMES for EVERY song longer than it. 'auto' (default) = the "
+                        "trained window (v2 V2_MSL=5400 / v1 the checkpoint PE size) = current behavior, only fires past "
+                        "the trained context. A SMALLER value (e.g. 3600 = v2 p75 train length) also fixes SHORT-song "
+                        "END-degeneration: the v2 abs-PE tail is under-trained past ~3500 (train len median 3120/max 5128) "
+                        "so a song ending there fires ~30%% of its real tail notes; ~3600 restores tail recall + backbone "
+                        "to human levels (probe_universal_window.py; by-ear gate pending). A song shorter than W = no-op "
+                        "(byte-identical). Single-sourced into BOTH tau and generate() so they can't drift.")
     p.add_argument("--pattern_temperature", type=float, default=CANONICAL_DECODE["pattern_temperature"],
                    help="footwork sampling temperature (canonical 1.0 — real jack/jump balance; NOT 0.7)")
     p.add_argument("--type_temperature", type=float, default=CANONICAL_DECODE["type_temperature"],
@@ -434,9 +443,21 @@ def main():
     # ("dead tail": Toulouse tail onsets 44 abs-PE vs 127 windowed). So we run the onset head over IN-DISTRIBUTION
     # local-PE windows of `onset_window` frames (single-sourced into BOTH tau and generate() so they can't drift).
     # The DECODER (choreography) DOES extrapolate gracefully (panel entropy ~1.0 at 2x context) and can't change
-    # the onset count, so it keeps the extended absolute PE below — the two fixes compose. onset_window = the
+    # the onset count, so it keeps the extended absolute PE below — the two fixes compose. onset_window 'auto' = the
     # trained window (v2 = V2_MSL 5400; v1 = the checkpoint PE size); a song that fits is a no-op (byte-identical).
-    onset_window = V2_MSL if is_v2 else trained_ctx
+    # A SMALLER --onset_window (e.g. 3600) also fixes SHORT-song end-degeneration (the abs-PE tail is under-trained
+    # past ~3500 even below the trained window; notes/universal_window_findings.md) — by-ear gate pending.
+    _ow = str(args.onset_window).strip().lower()
+    # 'auto' (default): v2 = the by-ear-validated UNIVERSAL window (3600, fires on short songs too); v1 = the trained
+    # context (current behavior, the analysis is v2-specific). A positive number overrides on either grid; 0/off/none
+    # DISABLES the universal window and reverts to the trained-window behavior (only tiles past the trained context).
+    if _ow in ("auto", ""):
+        onset_window = UNIVERSAL_ONSET_WINDOW if is_v2 else trained_ctx
+    elif _ow in ("off", "none", "0"):
+        onset_window = V2_MSL if is_v2 else trained_ctx          # disable universal window, keep long-song safety
+    else:
+        _v = int(float(_ow))
+        onset_window = _v if _v > 0 else (V2_MSL if is_v2 else trained_ctx)
     # TAIL HANGOVER (the long-song backbone-collapse fix, notes/playtest_log.md 2026-07-11): the onset head's FINAL
     # window puts the song-end at its under-trained trailing edge -> the tail quarter-backbone collapses. Reflect-pad
     # the audio memory by `onset_tail_hangover` frames so a full window can CENTER on the true end. 'auto' = W//2 (the

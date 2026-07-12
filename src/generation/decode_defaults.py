@@ -94,6 +94,16 @@ def triplet_band_positions(subdiv=4):
 # byte-identical to a no-op on the 16th grid. See grid_snap_offset.
 GRID_SNAP_NEG = 30.0
 
+# UNIVERSAL sub-train-length ONSET WINDOW (v2/48th grid), by-ear-validated 2026-07-12 (notes/universal_window_
+# findings.md, playtest_log 2026-07-12): tile the non-causal onset head over local-PE windows of this many FRAMES
+# for EVERY song longer than it, so a song's END leaves the UNDER-TRAINED absolute-PE tail (v2 train len median 3120
+# / p75 3648 / MAX 5128; abs-PE exposure 31%/13%/6% by pos 3500/4000/4320). Single-pass fires only ~30% of the real
+# TAIL notes past ~3800; this restores tail recall + backbone to human levels. 3600 = the v2 p75 train length (75% of
+# training songs fit fully in one window; the rest tile). A song shorter than this = byte-identical no-op. v1/16th
+# grid keeps the trained-context window (the analysis is v2-specific). Single-sourced into BOTH tau
+# (conditioned_p_onset window=) and decode (generate onset_window=).
+UNIVERSAL_ONSET_WINDOW = 3600
+
 
 def grid_snap_offset(T, subdiv=4, keep_triplets=False, neg=GRID_SNAP_NEG, device=None):
     """A (T,) onset-logit offset that SNAPS placement to the 16th grid by vetoing onsets on the finer (24th/48th)

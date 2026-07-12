@@ -129,3 +129,6 @@ probe_v2grid.log
 
 # Session transcript exports (learning-material mining; written by tools/export_transcript.py via /refresh)
 transcripts/
+
+# personal learning material (interview prep), not repo content
+teaching/

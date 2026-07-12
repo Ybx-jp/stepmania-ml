@@ -109,13 +109,33 @@ panel-scramble ladder) and `offgrid_personal.py` (48th-grid placement census). B
     short-song END-degeneration seen even pre-windowing. My `onset_window_sweep` tested smaller-W on Lick's MIDDLES
     (WRONG population, exp-design Rule 5/11) — this claim is UNTESTED.
 
+## Results — 2026-07-12 session (UNIVERSAL sub-train-length window; `notes/universal_window_findings.md`)
+The user's OPEN priority, resolved at the onset level (RIGHT population this time — exp-design Rule 5/11 fixed).
+- **Premise MEASURED first (Rule 5/6):** v2 train-length dist (`cache/samples_v3_48th/train`, N=4547) median 3120,
+  p75 3648, **MAX 5128** — no training song fills the 5400 buffer; abs-PE exposure collapses to 31%/13%/6% by
+  position 3500/4000/4320. So any song >~3500 sits its END in the under-trained abs-PE tail, yet `onset_window`
+  is pinned at V2_MSL=5400 → windowing NEVER fires for it. The user's mechanism was right.
+- **Onset probe (`probe_universal_window.py`, cached VAL, human chart = ground truth, n=60/band):** single-pass
+  fires only **30% of real TAIL notes** on the under-trained band (3800–5128) and the tail backbone Herfindahl
+  smears **0.610→0.342**. **W3000/W3600 restore** tail recall (~0.60) and Herfindahl to **the human value
+  (0.607–0.610 vs 0.600)**. CONTROL band (<3000): NO degeneration + window BYTE-IDENTICAL (no-op) → clean
+  specificity (Rule 4/11). **W4320 ~no-op** on the affected bands (fires only T>4320) = the sharpest proof it's an
+  abs-PE effect (window must be < the ~3500 degeneration onset to fire). Recommended default **W≈3600** (=p75).
+- **Decoded check (`probe_universal_window_decoded.py`):** windowed tail quarter% 33–69 vs single-pass's collapsed
+  4–8%, tail jitter 0, dead-tail recovered (DOMINION 227 vs 136 notes) — the onset fix survives the AR decode.
+- **✅ BY-EAR PASSED → SHIPPED AS DEFAULT (2026-07-12, `playtest_log.md`):** A/B (Challenge=windowed W3600 / Edit=
+  single-pass / human) on the 3 long songs — **windowed won on all three** ("great"/"better"/"fine"; the bland
+  choreography = per-song CONDITIONING, user's own read, feeds the best-of-N track). `decode_defaults.UNIVERSAL_
+  ONSET_WINDOW=3600`; both CLIs default v2 → 3600 (`check_export_defaults` 27 ✓; v1/short-fit byte-identical).
+- **New residual [H-winddown]** (SEPARATE, pre-existing): neither arm winds down into a silence/outro — candidate =
+  the window restores tail p_onset peaks so the stamina breathe arc thins the outro less (queued probe).
+
 ## Open fork (binding question)
 Two live tracks, complementary: (A) **decode-fix the 3 defects** — #2 harm_calib PASSED (density-preserving trade,
-documented); #1 tail COLLAPSE fixed (hangover, ear-confirmed) but the empty-MIDDLES half is an open density-
-allocation problem (local-tau shelved); #3 free-foot gate still parked. **Next window direction = the user's
-UNIVERSAL sub-train-length window (test on the SHORT val-set end-degeneration), NOT local tau.** (B) **Phase 2
-taste-align the critic (R3)** — the confirmed crux for best-of-N, needs the user's preference labels; the defects
-ARE its negative targets, so (A) feeds (B).
+documented); #1 tail COLLAPSE fixed (hangover, ear-confirmed) + **short-song END-degeneration FIXED + SHIPPED
+(universal window W3600, by-ear PASSED 2026-07-12)**; the empty-MIDDLES half is an open density-allocation problem
+(local-tau shelved); NEW **[H-winddown]** outro-taper lead (pre-existing); #3 free-foot gate still parked. (B) **Phase 2 taste-align the critic (R3)** — the
+confirmed crux for best-of-N, needs the user's preference labels; the defects ARE its negative targets, so (A) feeds (B).
 
 ## Attribution corrections / method keepers (this thread)
 - HARNESS→DATA→MODEL caught the gate bug before a 4-chart conclusion (Rule 0). The off-grid census (Rule 8, ground

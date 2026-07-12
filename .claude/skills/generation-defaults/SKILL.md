@@ -138,9 +138,14 @@ g = model.generate(audio, diff, lengths=torch.tensor([T], device=device),
 - **No groove conditioning by default:** `radar=None, style=None, motif=None, figure=None, guidance_scale=1.0`.
   That's clean audio+difficulty — the baseline most playtests use. Add a groove knob ONLY deliberately, via the
   manifold (`--style`, never `--radar` mean-pin), per `conditioning-mechanics` §2–§6.
-- **Two v2-only AUTO defaults (on by default, v1 no-ops; see the flags section below):** `--grid_snap auto` (16th-grid
-  snap for difficulty ≤ Medium — vetoes pure-48th jitter) + `--auto_b_trip` (triplet band on audio-detected triplet
-  songs). Both resolve into the `onset_logit_offset` / `onset_phase_calib` slots (NOT generate() kwargs). BY-EAR-PENDING.
+- **Three v2-only defaults (on by default, v1 no-ops):** `--grid_snap auto` (16th-grid snap for difficulty ≤ Medium —
+  vetoes pure-48th jitter) + `--auto_b_trip` (triplet band on audio-detected triplet songs; both resolve into the
+  `onset_logit_offset` / `onset_phase_calib` slots) + **`--onset_window 3600` (2026-07-12, by-ear PASSED, `notes/
+  universal_window_findings.md`)** = the UNIVERSAL sub-train-length window (`decode_defaults.UNIVERSAL_ONSET_WINDOW`):
+  tile the onset head so a song's END leaves the under-trained abs-PE tail (v2 train len median 3120/max 5128 →
+  single-pass fires only ~30% of real tail notes past ~3800). Single-sourced into tau (`conditioned_p_onset window=`)
+  + decode (`generate onset_window=`) with `--onset_tail_hangover auto` (=W//2, end-centering). A song < 3600 frames
+  or v1 = byte-identical no-op; disable via `--onset_window 0`. generate.py: `--onset_window auto` (v2→3600).
 
 ## 1a. ★ `onset_phase_calib` — the 16th-unlock that ties the rhythm together (don't omit it)
 The governor/breathe shape DENSITY; `onset_phase_calib` fixes WHERE the notes land on the 16th grid. Without it the

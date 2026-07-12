@@ -26,6 +26,15 @@ windows, NOT harm_calib; local-tau fixes offline but SHELVED as the Rule-13 quot
 silence-pad adopted as the hangover default; local-tau shelved; OPEN priority = a UNIVERSAL sub-train-length window
 for broad short-song end-degeneration (untested — my sweep tested the wrong population).
 
+**UPDATE (2026-07-12 — UNIVERSAL sub-train-length window CONFIRMED; `universal_window_findings.md`, probes
+`probe_universal_window{,_decoded}.py`):** the user's premise MEASURED — v2 train-len median 3120 / MAX 5128,
+abs-PE exposure 31%/13%/6% by pos 3500/4000/4320, yet `onset_window`=V2_MSL(5400) never fires for T≤5400 → short
+songs' ends collapse like long songs'. RIGHT population (cached VAL, human ground truth, n=60/band): single-pass
+fires **30% of real TAIL notes** on the 3800–5128 band; **W3600 restores** recall + tail backbone Herfindahl to the
+HUMAN value; CONTROL (<3000) byte-identical no-op; W4320 ~no-op (proves abs-PE effect). Decoded: windowed tail
+quarter% 33–69 vs single-pass 4–8% collapse, tail jitter 0. WIRED off by default (`--onset_window/--ab_onset_window`,
+canonical byte-identical); **by-ear gate + default-flip PENDING** (A/B `~/sm-generated/universal_window_ab`).
+
 
 **CURRENT STATE (2026-06-26):** deployed model = **`gen_motif_full_fixed`** (42-dim highres, the H19 clean
 retrain). Two arcs shipped on top of it: (1) the **H15 motif arc** — steerable section-level candle/trill
