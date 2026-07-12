@@ -111,6 +111,28 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   (r +0.63), which the manifold density coupling reproduces — so let density float with the manifold.
   NOTE: `tau` sets the BASE density, but the per-frame onset decision is made IN the AR loop and can be raised by
   the STAMINA governor (§8c) — so realized density ≤ the tau target wherever sustained workload is high.
+  ▸ **★ tau IS GLOBAL — the empty-middles gotcha (2026-07-11, `notes/playtest_log.md` + `probe_onset_window_sweep`).**
+  `tau` is ONE quantile over the WHOLE song, so a stretch where the onset head is weak/flat (low-energy build OR a
+  percussion-sparse melodic passage — the head keys on percussion) sinks BELOW tau → a long EMPTY section with a few
+  noise peaks poking through ("scattered random notes"). This is a DENSITY-ALLOCATION artifact, NOT a window bug: an
+  offline sweep showed window size/overlap don't fix it (more overlap makes gaps WORSE by over-smoothing), and
+  `harm_calib` is too weak (it keys on harmonic ONSETS a sustained hole lacks, +2 notes at gain 20). A per-region /
+  windowed tau (fire each region's top-X%) DOES fix it offline (maxgap 371→188; energy-gated leaves true silence
+  sparse) but is the experiment-design Rule-13 GLOBAL-QUOTA anti-pattern (forces notes onto onset-poor noise) → user
+  SHELVED it. Distinct from the tail collapse below (that IS a window bug).
+  ▸ **★ ONSET SLIDING-WINDOW + the HANGOVER PAD (long BYO songs, `generate.py` / `typed_model.onset_logits(window=,
+  tail_hangover=, hop_frac=, hangover_reflect=)`).** Songs longer than the trained PE context (v2 `V2_MSL=5400`) tile
+  the onset head over in-distribution `window`-frame windows (hop=`hop_frac`·W, triangular blend favoring CENTERS)
+  to fix the abs-PE "dead tail" (peaks compress past the trained window → nothing fires). RESIDUAL bug (2026-07-11):
+  the SONG-END unavoidably sits at the final window's TRAILING edge (high local-PE = the under-trained tail of the
+  training LENGTH distribution) with no later window to heal it → the tail quarter-backbone COLLAPSES to a 16th wash
+  (mid-song RECOVERS because overlapping windows re-cover it at a center — the recovery is the SIGNATURE of edge-
+  degradation, not counter-evidence). FIX = `tail_hangover` frames of pad past T so a full window CENTERS on the true
+  end (`auto`=W//2); **BY-EAR "definitely better."** `hangover_reflect=False` (DEFAULT since 2026-07-11 = SILENCE,
+  the correct "future"; True=mirror keeps energy but stops the wind-down). All generate.py-only + off unless the song
+  exceeds the window (byte-identical no-op otherwise); NOT on the canonical export path. OPEN (user priority): a
+  UNIVERSAL sub-train-length window (~80%) applied to ALL songs so even SHORT songs' ends leave the abs-PE tail —
+  UNTESTED.
   NOTE (06-27): `onset_logit_scale` is a NO-OP under quantile thresholding — `p=sigmoid(scale·ol)` is monotonic,
   so it preserves the frame RANKING → the top-`density` frames are identical for any scale (confirmed: 0 frames
   differ at scale 0.5/2.0). There is NO "onset temperature" that changes WHICH onsets fire in deployment; it

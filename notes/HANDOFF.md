@@ -1,60 +1,58 @@
-# HANDOFF — ★ SHIP MODE PAUSED: the TASTE-CRITIC arc is UN-PARKED. Active work = a taste-aligned critic for best-of-N.
+# HANDOFF — ★ SHIP MODE PAUSED: taste-critic arc UN-PARKED. Active = decode-fixing the 3 long-song defects + a taste-aligned critic.
 
-**Written 2026-07-11 for the next Claude.** The standing "ship v1.0.0" directive is **PAUSED** — on 2026-07-11 the
-user CONSCIOUSLY UN-PARKED the taste-critic thread ("un-park now" = the tripwire override; see
-[[ship-mode-park-research]], now marked partially-superseded). v1.0.0 is DEFERRED, not cancelled; the OTHER parked
-paths (GDL, seq-onset retrain, good-settings formula) stay parked. **No deployed-model change this session** — the
-canonical v2 default is untouched; all new code is experimental + off-by-default.
+**Written 2026-07-11 (session 2) for the next Claude.** The "ship v1.0.0" directive is **PAUSED** (the taste-critic
+thread was consciously un-parked 2026-07-11; see [[ship-mode-park-research]]). v1.0.0 is DEFERRED, not cancelled; the
+OTHER parked paths (GDL, seq-onset retrain, good-settings formula) stay parked. **This session shipped ONE new
+generate.py-only lever (the HANGOVER PAD, off by default) + flipped its pad default to silence; the canonical v2
+export default is UNTOUCHED** (validator green).
 
 ## WHERE WE ARE
-- **Goal (user's words):** f48 raised quality VARIANCE — "banger when the conditioning is right, but I can't predict
-  the right knobs per song." Fix = **SELECTION** (generate N conditioning variants, a critic picks the best), NOT
-  PREDICTION (audio→knobs is the [[good-settings-region]] clean-negative). The critic is the linchpin.
-- **The diagnostic that framed it** (`notes/taste_critic_v2_findings.md`): the taste critic (a) rates the user's OWN
-  hand-made charts mostly "fake" (P(real) 0.32 vs train-real 0.82); (b) was 16th-grid so it CAN'T see f48 output
-  (grid wall, user-predicted); (c) graded objective helps but isn't enough. → a 3-part arc: R1 see-f48, R2 grade,
-  R3 taste-align.
-- **✅ E1.1 DONE — R1 cleared.** `experiments/realism_critic/train_graded_critic_v2.py` →
-  `checkpoints/realism_critic_graded_v2/best_val.pt` (48th grid, warm-started from the binary critic, + a sub-16th
-  JITTER corruption axis). Jitter ladder monotone **0.98** → it grades the sub-16th placement the 16th critic
-  couldn't see.
-- **✅ E1.2 DONE — mixed; R3 (taste) is the confirmed crux.** `scratchpad/critic_catches_defects.py`: the critic
-  CATCHES the tail/placement defect (tail scored −1.59 below body, within-song), but is presence-blind to subtle
-  arm quality and **rates generations above the user's human charts on 2/3 songs**. E1.1 fixed the grid, NOT taste.
-- **STAMINA long-song detour (user-prioritized) CLOSED — hypothesis REFUTED.** The breathing arc's whole-song
-  z-normalization IS length-mis-scoped (corr(len,ceiling-divergence)+0.83) but does NOT bite the chart (fair
-  density test + by-ear: OFF was WORST, GLOBAL best-or-tied). `notes/stamina_longsong_findings.md`. New non-breaking
-  `stamina_breathe_local_win` lever kept as a MILD partial fix for defect #2 (NOT default).
-- **PLAYTEST (2026-07-11, `notes/playtest_log.md`) enumerated 3 real defects = the critic's target list:**
-  **#1** spurious sub-16ths, worst near the END, consistent across songs (critic SEES it); **#2** quiet/harmonic
-  sections under-choreographed (decode leads: harm_calib + local-z); **#3** very-high foot-speed during a hold,
-  worst on fast songs (presence-BLIND → the parked free-foot-overload gate).
+- **Deployed model UNCHANGED:** v2 48th-grid `gen_motif_v2_48th_cont` + `--features highres_v2`, both CLIs default to
+  it. This session added `generate.py --onset_tail_hangover` (long-song tail fix, OFF by default) + tunable onset
+  window internals (`hop_frac`/`hangover_reflect`, probe-only, default-inert). No export-path change.
+- **Goal (user's words):** f48 raised quality VARIANCE — fix = SELECTION (a critic picks the best of N conditioning
+  variants), plus DECODE-FIXING the concrete defects that make gens feel off. The 3 defects ARE the critic's negative
+  target list.
+- **This session (2026-07-11 s2) advanced the DECODE-FIX track on long songs** (`notes/playtest_log.md`, newest
+  entries; probes `experiments/generation_typed/probe_{subtail_position,lick_vs_byebye,onset_window_sweep,harm_fills_middle}.py`):
+  - **Defect #2 (quiet under-charge) — harm_calib gate PASSED by ear** ("did its job"). Mechanism nailed: harm_calib
+    is DENSITY-PRESERVING → it TRADES (fills melodic by STEALING from percussive: HARM-TOTAL +40% lull / −13% out-of-
+    gate), does not add. TOTAL+PERC compete for one budget.
+  - **Defect #1 (sub-16th tail) → a LENGTH-GATED long-song defect** (both long songs, neither short; harm_calib
+    EXONERATED). = the onset-head sliding-window TRAILING EDGE (song-end at the final window's under-trained high-
+    local-PE, no later window to heal → quarter-backbone COLLAPSE; user's hypothesis, confirmed by the window
+    arithmetic). **FIX SHIPPED: the HANGOVER PAD** (`--onset_tail_hangover auto`); **BY-EAR "definitely better."**
+  - **Empty MIDDLES ("long empty sections + scattered notes", both long songs) = a SEPARATE bug: global-tau
+    ALLOCATION starves onset-poor regions** (NOT windows, NOT harm_calib — both refuted offline). local/windowed tau
+    fixes it offline (maxgap 371→188) but is the Rule-13 quota anti-pattern → **user SHELVED it.**
 
 ## ★ ACTIVE THREAD — taste-critic-quality arc (lineage `experiment_lineage/taste-critic-arc.md`)
 Two complementary tracks; the defects feed the critic (they ARE its negative targets):
-- **(A) Decode-fix the 3 defects** to raise base quality. STARTED with **defect #2** (user "leaning decode fixes",
-  flagged harm_calib). Added `generate.py --harm_quiet_feat total|perc` (perc = cond-mech §6 dim-35 gate). Offline
-  (`scratchpad/harm_offline.py`): both gates land + orthogonal (TOTAL +40% density in silent lulls; PERC +17% in
-  busy-harmonic drum-sparse sections; the two target DIFFERENT sections, Jaccard 0.20).
+- **(A) Decode-fix the 3 defects.** #2 harm_calib = PASSED (density-preserving trade, documented — don't stack gains
+  blindly). #1 tail COLLAPSE = FIXED (hangover, ear-confirmed); the empty-MIDDLES half is OPEN (density allocation,
+  local-tau shelved). #3 (free-foot-overload during a hold) still PARKED.
 - **(B) Phase 2: taste-align the critic (R3)** — the confirmed crux for best-of-N; a preference reward-model on the
-  user's good/bad labels (mine `playtest_log.md` + structured pairs). Not started.
+  user's good/bad labels. Not started. The 3 defects are its negative targets.
 
-## ⏳ AWAITING USER — the binding gate
-**By-ear verdict on the Bye Bye 4-arm harm_calib A/B**, installed at `~/sm-generated/stamina_probe/` (group has
-Bye Bye {OFF, GLOBAL=base, LOCAL, HARM-TOTAL, HARM-PERC} + Switch/Calling stamina arms). **Question:** in the bare
-spots, does HARM-TOTAL (silent-lull fill) or HARM-PERC (harmonic-passage fill) land the choreography — or does gain
-10 over-boost junk? Log the verdict to `notes/playtest_log.md` (newest on top). Then: lock a #2 fix (gate+gain, fold
-`local-z` in) and move to defect #1 (sub-16th tail probe) or #3 (free-foot gate) — OR, if neither gate lands, #2 is
-an onset-head/retrain matter → it goes to the reward-model's target list, and we pivot to track (B).
+## ⏳ AWAITING USER — binding questions
+1. **Silence-pad by-ear re-confirm.** The hangover was ear-validated with REFLECTION; the pad default is now SILENCE
+   (`hangover_reflect=False`, correctness call). Offline near-identical, but re-confirm on the next long-song play.
+   Installed A/B: `~/sm-generated/stamina_probe/Lick {GLOBAL (base), HANGOVER (fix)}` (distinct #TITLEs; clear
+   `~/.stepmania-5.1/Cache` if StepMania shows stale titles).
+2. **The user's OPEN priority = a UNIVERSAL sub-train-length window.** Short songs (T≤5400) get NO windowing today, so
+   a ~4800-frame song's end sits at the under-trained ABS-PE tail → the user believes a ~80%-train-length window
+   applied to ALL songs fixes broad short-song END-degeneration (seen even pre-windowing). **UNTESTED** — my
+   `onset_window_sweep` tested smaller-W on Lick's MIDDLES (WRONG population, exp-design Rule 5/11). NEXT window work =
+   test smaller-W applied universally on the SHORT val-set songs that show end-degeneration. NOT local tau (shelved).
 
 ## THE v1.0.0 SHIP CHECKLIST (DEFERRED — resume when the arc lands or is set down)
-Was one mechanical step from a cut (regen the personal deliverable, doc the hold-stream known-limitation, host,
-announce; [[marketing-track]]). The hold-stream free-foot edge is the same as defect #3 above — the arc may fix it.
+Regen the personal deliverable, doc the hold-stream known-limitation, host, announce ([[marketing-track]]). The
+hold-stream free-foot edge = defect #3.
 
-## CANONICAL EXPORT DEFAULTS (VALIDATED by `tools/check_export_defaults.py` = 25 ✓ this session)
+## CANONICAL EXPORT DEFAULTS (VALIDATED by `tools/check_export_defaults.py`)
 The bare `export_typed_samples.py` run reproduces what the user plays; these MUST equal its argparse defaults.
-UNCHANGED this session (the new `generate.py` flags `--stamina_breathe_local_win`/`--harm_quiet_feat` are
-generate.py-only, off by default, and do NOT touch the exporter). **Permanent section — keep in every rewrite.**
+UNCHANGED this session (the hangover + window knobs are generate.py-only / probe-only, off by default, and do NOT
+touch the exporter). **Permanent section — keep in every rewrite.**
 <!-- CANONICAL-EXPORT-DEFAULTS:START (do NOT hand-edit values; re-run tools/check_export_defaults.py after a change) -->
 ```
 checkpoint = checkpoints/gen_motif_v2_48th_cont/best_val.pt
@@ -86,23 +84,24 @@ guidance = 1.0
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- On branch **`explore/taste-critic-quality-resolution`** (off `feat/youtube-audio-pull-trim-append`). Holds this
-  session's work: the v2 graded-critic trainer, the stamina probe, the non-breaking `generate.py`/`typed_model.py`
-  levers, and these docs. NOT yet PR'd (mid-investigation, experimental code, awaiting the by-ear gate) — open a PR
-  only when the arc reaches a shippable conclusion.
-- Pre-existing untracked/unstaged NOT mine (leave alone): `.claude/commands/`, `teaching/`,
-  `notes/grid_snap_findings.md` (modified before this session).
+- On branch **`explore/taste-critic-quality-resolution`** (off `feat/youtube-audio-pull-trim-append`). Holds the
+  session-1 work (graded critic v2, stamina probe, harm_calib) AND this session-2 work (the hangover pad +
+  tunable onset-window internals in `typed_model.py`/`decode_harness.py`/`generate.py`, the 4 new probes, these docs).
+- A `docs/...` refresh branch carries THIS refresh commit (open a PR to `main`; verify number via `gh pr list`).
+- Pre-existing untracked/unstaged NOT mine (leave alone): `.claude/commands/`, `teaching/`, and the pre-session
+  modification to `notes/grid_snap_findings.md`.
 
 ## READ-FIRST (in order)
-Memory [[ship-mode-park-research]] (the un-park block) → this HANDOFF → lineage
-`experiment_lineage/taste-critic-arc.md` → `notes/taste_critic_v2_findings.md` + `notes/stamina_longsong_findings.md`
-→ `notes/playtest_log.md` (2026-07-11 entry) → memories [[taste-critic-transfer]], [[meter-4-4-grid]]. Load-bearing
-skills: **conditioning-mechanics** (§6 harm gates, §7 hold-stream, §8 stamina), **experiment-design** (Rule 7/9 —
-the stamina detour is the exemplar), **generation-defaults**.
+Memory [[ship-mode-park-research]] (un-park block) → this HANDOFF → lineage `experiment_lineage/taste-critic-arc.md`
+→ `notes/playtest_log.md` (2026-07-11 entries — the harm gate, the length-defect chain, the hangover fix, the
+empty-middles diagnosis, the user decisions) → memories [[taste-critic-transfer]], [[meter-4-4-grid]],
+[[personal-reference-charts]]. Load-bearing skills: **conditioning-mechanics** (§6 now covers the global-tau empty-
+middles + the onset sliding-window/hangover; §6 harm gates; §8 stamina), **experiment-design** (Rule 5/11 wrong-
+population, Rule 13 global-quota, Rule 9 don't-commit — all exemplified this session), **generation-defaults**.
 
 ## DISCIPLINE
-**The EAR is the deciding vote** — every offline metric (ceiling divergence, ladder AUC, critic margin) is a proxy;
-the stamina detour is the cautionary tale (a +0.83 cheap-probe correlation that the fair test + ears REFUTED). **Run
-the fair test before committing a conclusion** (Rule 7/9, necessary≠sufficient). **Match the verb to the evidence**
-([[claim-precision]] — the user corrected GLOBAL→LOCAL on the bridge). **One change at a time.** Ship mode is PAUSED,
-not off — don't wander into the OTHER parked paths.
+**The EAR is the deciding vote** — every offline metric is a proxy (this session: the hangover offline "confirmed the
+mechanism" but the EAR both validated it AND surfaced 2 new defects the metrics missed). **Run the fair test / right
+POPULATION before committing** (I tested smaller-W on the wrong population; the user caught it). **Retract cleanly** —
+I committed "PERC feeds the tail" and "decoder PE" and had to retract both when the cheap probe/arithmetic overturned
+them. **One change at a time. Match the verb to the evidence** ([[claim-precision]]). Ship mode is PAUSED, not off.

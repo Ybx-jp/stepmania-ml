@@ -15,6 +15,17 @@ OFF worst) — the session's cleanest Rule-7/9 case; `local-z` lever kept as a m
 enumerated 3 defects = the critic's target list (sub-16th tail / quiet under-charge / hold foot-speed). Decode-fix
 track started on #2: `generate.py --harm_quiet_feat total|perc` (both gates land offline; ⏳ by-ear PENDING).
 
+**UPDATE (2026-07-11 session 2 — decode-fix track advanced; all detail in `playtest_log.md`, probes
+`experiments/generation_typed/probe_{subtail_position,lick_vs_byebye,onset_window_sweep,harm_fills_middle}.py`):**
+harm_calib #2 gate PASSED by ear ("did its job") but is DENSITY-PRESERVING → TRADES melodic fill for percussive
+alignment (not a free add). Defect #1 (sub-16th tail) → a LENGTH-gated long-song defect (both long songs, neither
+short; harm_calib EXONERATED). Two parts: (i) tail quarter-backbone COLLAPSE = the onset-window TRAILING-EDGE (fix
+= the **HANGOVER PAD**, `--onset_tail_hangover`; **BY-EAR "definitely better"**; real-chart ref confirms the human
+keeps the quarter pulse in the tail); (ii) empty MIDDLES = global-tau ALLOCATION starving onset-poor regions (NOT
+windows, NOT harm_calib; local-tau fixes offline but SHELVED as the Rule-13 quota anti-pattern). USER DECISIONS:
+silence-pad adopted as the hangover default; local-tau shelved; OPEN priority = a UNIVERSAL sub-train-length window
+for broad short-song end-degeneration (untested — my sweep tested the wrong population).
+
 
 **CURRENT STATE (2026-06-26):** deployed model = **`gen_motif_full_fixed`** (42-dim highres, the H19 clean
 retrain). Two arcs shipped on top of it: (1) the **H15 motif arc** — steerable section-level candle/trill

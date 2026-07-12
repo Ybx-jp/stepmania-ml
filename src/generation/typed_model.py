@@ -318,7 +318,8 @@ class LayeredTypedChartGenerator(nn.Module):
     def encode_audio(self, audio):
         return self.audio_encoder(audio)
 
-    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None, motif=None, window=None):
+    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None, motif=None, window=None,
+                     tail_hangover=0, hop_frac=0.5, hangover_reflect=False):
         # Motif shapes WHICH panels (a pattern-head concern) — the MotifBasis is which-panels only, rhythm &
         # density excluded. Timing/density is the onset head's job, controlled by radar. Conditioning onset on
         # motif was spurious and let CFG inflate density (notes/h15_local_motif_plan.md), so onset sees
@@ -341,21 +342,46 @@ class LayeredTypedChartGenerator(nn.Module):
         # apply downstream identically at both the tau site and the decode site (the §3 tau-coupling holds).
         B, T, _ = memory.shape
         if window is not None and T > int(window):
-            W = int(window); hop = max(W // 2, 1)
-            acc = memory.new_zeros(B, T); wsum = memory.new_zeros(T)
+            # `hop_frac` = window stride as a fraction of W. 0.5 (default) = 50% overlap; SMALLER = MORE overlapping
+            # windows so every frame sits nearer SOME window's CENTER (peak onset quality), fixing the weak/empty
+            # mid-song sections where a global-tau starves low-confidence frames (notes/playtest_log.md 2026-07-11).
+            W = int(window); hop = max(int(round(W * hop_frac)), 1)
+            # TAIL HANGOVER (notes/playtest_log.md 2026-07-11, the Lick-the-Rainbow long-song backbone-collapse fix):
+            # the SONG-END sits at the trailing edge of the FINAL window (high local-PE, under-trained: few training
+            # songs filled a full W window) with NO later window to re-cover it at a low local position -> the tail
+            # quarter-backbone collapses to a 16th wash (Lick's end lands at local-PE 5351 ~ the trained ceiling).
+            # Fix: REFLECT-pad `memory` by `tail_hangover` frames so the true final frame is followed by (mirrored)
+            # "future" content and a FULL window can center on it; tile over the padded length, then slice back to
+            # [:T] (the padded output is discarded). H = W//2 lets a full window place T-1 at its CENTER. H=0 -> no-op
+            # (byte-identical). `memory` is length-safe (Conv1D audio encoder, no PE) so reflecting it is exact.
+            Tproc = T
+            if tail_hangover and int(tail_hangover) > 0:
+                H = min(int(tail_hangover), T)
+                # pad the "future" past song-end. hangover_reflect=False (DEFAULT, the correctness call 2026-07-11) =
+                # SILENCE (the physically-correct future — the song is over — so the model TAPERS into the ending);
+                # True MIRRORS the tail (keeps energy, but the model then hears the song CONTINUING and never winds
+                # down). Either way the true final frame gains a full-window center. (Offline the two are near-identical
+                # in raw firing; the ear-validated hangover used reflection, so re-confirm silence by ear on a long song.)
+                pad = (memory[:, T - H:].flip(1) if hangover_reflect
+                       else memory.new_zeros(B, H, memory.shape[-1]))
+                memory = torch.cat([memory, pad], dim=1)
+                if mask is not None:
+                    mask = torch.cat([mask, mask[:, T - H:].flip(1)], dim=1)
+                Tproc = T + H
+            acc = memory.new_zeros(B, Tproc); wsum = memory.new_zeros(Tproc)
             s = 0
-            while s < T:
-                e = min(s + W, T)
+            while s < Tproc:
+                e = min(s + W, Tproc)
                 msl = mask[:, s:e] if mask is not None else None
                 ol = self.onset_logits(memory[:, s:e], difficulty, msl, radar, style, motif, window=None)  # local PE
                 L = e - s
                 w = torch.minimum(torch.arange(L, device=memory.device) + 1,
                                   L - torch.arange(L, device=memory.device)).float()  # triangular: favor centers
                 acc[:, s:e] += ol * w; wsum[s:e] += w
-                if e >= T:
+                if e >= Tproc:
                     break
                 s += hop
-            return acc / wsum.clamp(min=1e-6)
+            return (acc / wsum.clamp(min=1e-6))[:, :T]
         cond = self._cond(difficulty, radar, style, motif=None)   # onset: NO motif (density stays radar-controlled)
         x = self.dropout(self.pos_encoding(memory) + cond)
         pad = (~mask.bool()) if mask is not None else None
@@ -417,7 +443,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4,
-                 onset_window=None,
+                 onset_window=None, onset_tail_hangover=0,
                  min_onset_gap=None, max_jack_run=None, no_fast_jump=True,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
@@ -515,9 +541,11 @@ class LayeredTypedChartGenerator(nn.Module):
             p = None                                          # no onset probs under override (footspeed-floor skipped)
             p_onset = None                                    # no probs under override -> stamina gate skipped
         else:
-            ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif, window=onset_window)
+            ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif, window=onset_window,
+                                   tail_hangover=onset_tail_hangover)
             if do_cfg:  # classifier-free guidance: push onset toward the conditioned prediction
-                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None, motif=None, window=onset_window)
+                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None, motif=None, window=onset_window,
+                                         tail_hangover=onset_tail_hangover)
                 ol = ol_u + guidance_scale * (ol - ol_u)
             if onset_phase_penalty != 0.0:
                 # metric gate: off-beat frames need higher onset confidence (on-beat free, 8th -p, 16th -2p).

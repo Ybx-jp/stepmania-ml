@@ -82,14 +82,40 @@ panel-scramble ladder) and `offgrid_personal.py` (48th-grid placement census). B
   #3 very-high foot-speed during a hold (worst on fast songs; presence-BLIND → the parked free-foot-overload gate).
 - **DECODE-FIX track started (user "leaning decode fixes"), defect #2 first.** `--harm_quiet_feat total|perc` added
   to `generate.py` (perc = cond-mech §6 dim-35 gate). Offline (`harm_offline.py`): both gates land + orthogonal
-  (TOTAL +40% in lulls, PERC +17% in busy-harmonic; Jaccard 0.20). **⏳ AWAITING by-ear verdict on the Bye Bye 4-arm
-  A/B (GLOBAL/LOCAL/HARM-TOTAL/HARM-PERC in `~/sm-generated/stamina_probe/`).**
+  (TOTAL +40% in lulls, PERC +17% in busy-harmonic; Jaccard 0.20).
+- **✅ SESSION 2 (2026-07-11) — decode-fix track advanced 2 defects; probes `probe_{subtail_position,lick_vs_byebye,
+  onset_window_sweep,harm_fills_middle}.py`, detail `notes/playtest_log.md`.**
+  - **Defect #2 harm_calib gate PASSED by ear** ("did its job"). KEY mechanism nailed: harm_calib is DENSITY-
+    PRESERVING (offset baked into tau) → it TRADES, not adds. HARM-TOTAL +40% silent-lull density but −13% out-of-
+    gate (percussive) — the user's felt "at the expense of percussive themes." TOTAL+PERC compete for one budget.
+  - **Defect #1 (sub-16th tail) → a LENGTH-GATED long-song defect** (jitter 0 in body / short songs; only long
+    songs' tails). **harm_calib EXONERATED** (no-harm Lick reproduces the smear; "HARM-PERC worst" = length
+    confound + salience). Mechanism = the **onset-head sliding-window TRAILING EDGE** (song-end at the final
+    window's under-trained high-local-PE, no later window to heal → quarter-backbone COLLAPSE; user's hypothesis,
+    confirmed by the window arithmetic; Lick collapses harder = longer final window, end at local-PE 5351 ≈ ceiling).
+    Real-chart control (Rule 5): the user's own Bye Bye chart keeps ~50% quarter through the tail → the gen's
+    body→tail collapse is defect-like. **FIX SHIPPED: the HANGOVER PAD** (`onset_logits(tail_hangover=)`;
+    `generate.py --onset_tail_hangover auto`; single-sourced tau+decode). **BY-EAR: "definitely better."**
+  - **Empty MIDDLES ("long empty sections + scattered notes", both long songs) = a SEPARATE bug: global-tau
+    ALLOCATION starves onset-poor regions.** NOT windows (offline sweep: more overlap makes maxgap WORSE via over-
+    smoothing) and NOT harm_calib (keys on harmonic ONSETS a sustained hole lacks; +2 even at gain 20). A
+    local/windowed tau FIXES it offline (maxgap 371→188, energy-gated respects the arc) but is the Rule-13 global-
+    quota anti-pattern → **user SHELVED it** ("too much complexity; master what we have").
+  - **USER DECISIONS (end of session):** silence-pad ADOPTED as the hangover default (`hangover_reflect=False`,
+    correctness — the true future is silence; ear-validated version used reflection → re-confirm); local-tau
+    SHELVED (offline evidence kept, do-not-build without a fresh directive); **OPEN priority = a UNIVERSAL sub-
+    train-length window** — short songs (T≤5400) get NO windowing today, so a ~4800-frame song's end sits at the
+    under-trained ABS-PE tail → the user believes a ~80%-train-length window applied to ALL songs fixes the broad
+    short-song END-degeneration seen even pre-windowing. My `onset_window_sweep` tested smaller-W on Lick's MIDDLES
+    (WRONG population, exp-design Rule 5/11) — this claim is UNTESTED.
 
 ## Open fork (binding question)
-Two live tracks, complementary: (A) **decode-fix the 3 defects** (harm_calib #2 by-ear PENDING → then #1 sub-16th
-tail probe / #3 free-foot gate) to raise base quality; (B) **Phase 2 taste-align the critic (R3)** — the confirmed
-crux for best-of-N, needs the user's preference labels. The defects ARE the reward-model's negative targets, so (A)
-feeds (B). Next decision after the harm_calib verdict.
+Two live tracks, complementary: (A) **decode-fix the 3 defects** — #2 harm_calib PASSED (density-preserving trade,
+documented); #1 tail COLLAPSE fixed (hangover, ear-confirmed) but the empty-MIDDLES half is an open density-
+allocation problem (local-tau shelved); #3 free-foot gate still parked. **Next window direction = the user's
+UNIVERSAL sub-train-length window (test on the SHORT val-set end-degeneration), NOT local tau.** (B) **Phase 2
+taste-align the critic (R3)** — the confirmed crux for best-of-N, needs the user's preference labels; the defects
+ARE its negative targets, so (A) feeds (B).
 
 ## Attribution corrections / method keepers (this thread)
 - HARNESS→DATA→MODEL caught the gate bug before a 4-chart conclusion (Rule 0). The off-grid census (Rule 8, ground

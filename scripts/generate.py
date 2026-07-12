@@ -207,6 +207,12 @@ def parse_args():
                         "envelope over a ROLLING window of this many FRAMES instead of the whole song. None (default) "
                         "= deployed whole-song z. ~3600 (48th grid) ≈ one training-song span; fixes the length-mis-"
                         "scoped arc on >130s songs.")
+    p.add_argument("--onset_tail_hangover", type=str, default="0",
+                   help="EXPERIMENTAL (long-song tail-collapse fix, notes/playtest_log.md 2026-07-11): reflect-pad the "
+                        "audio past song-end by this many FRAMES so the onset head's FINAL window CENTERS on the true "
+                        "end instead of leaving it at the under-trained trailing edge (fixes the tail quarter-backbone "
+                        "collapse on songs longer than the onset window; e.g. Lick the Rainbow). 'auto' = W//2 (~2700 on "
+                        "v2). 0/off (default) = disabled. No-op if the song fits the onset window (byte-identical).")
     p.add_argument("--pattern_temperature", type=float, default=CANONICAL_DECODE["pattern_temperature"],
                    help="footwork sampling temperature (canonical 1.0 — real jack/jump balance; NOT 0.7)")
     p.add_argument("--type_temperature", type=float, default=CANONICAL_DECODE["type_temperature"],
@@ -431,6 +437,13 @@ def main():
     # the onset count, so it keeps the extended absolute PE below — the two fixes compose. onset_window = the
     # trained window (v2 = V2_MSL 5400; v1 = the checkpoint PE size); a song that fits is a no-op (byte-identical).
     onset_window = V2_MSL if is_v2 else trained_ctx
+    # TAIL HANGOVER (the long-song backbone-collapse fix, notes/playtest_log.md 2026-07-11): the onset head's FINAL
+    # window puts the song-end at its under-trained trailing edge -> the tail quarter-backbone collapses. Reflect-pad
+    # the audio memory by `onset_tail_hangover` frames so a full window can CENTER on the true end. 'auto' = W//2 (the
+    # minimum for a full window to place the end at its center); 0/off = disabled. Single-sourced into BOTH tau and
+    # generate() (like onset_window) so they can't drift. No-op unless the song is longer than the onset window.
+    _hv = str(args.onset_tail_hangover).strip().lower()
+    onset_tail_hangover = (onset_window // 2) if _hv == "auto" else max(0, int(float(_hv)))
     if T > trained_ctx:
         from src.generation.transformer import PositionalEncoding
         model.pos_encoding = PositionalEncoding(model.pos_encoding.pe.shape[-1], max_len=T + 128).to(device)
@@ -513,7 +526,8 @@ def main():
         memory = model.encode_audio(audio)
         p_onset = conditioned_p_onset(model, memory, diff, radar=radar_arg, guidance=args.guidance,
                                       phase_calib=song_calib, extra_offset=onset_off, subdiv=subdiv,
-                                      window=onset_window)  # SAME window generate() decodes from (tau-coupling §3)
+                                      window=onset_window,           # SAME window generate() decodes from (tau-coupling §3)
+                                      tail_hangover=onset_tail_hangover)  # SAME hangover generate() uses (tau-coupling §3)
     tau = compute_tau(p_onset, gen_density)
 
     # 6. generate with the CANONICAL full-stack palette + mandatory playability (mirrors export_typed_samples.py)
@@ -527,6 +541,7 @@ def main():
         no_fast_jump=args.no_fast_jump,    # v2: forbid >=2-fresh JUMP at sub-16th spacing (v1 no-op; §8d)
         onset_phase_calib=song_calib, subdiv=subdiv,  # ★ the 16th-unlock + per-song triplet band (baked into tau above)
         onset_window=onset_window,  # ONSET sliding window for long songs (fixes the dead tail; no-op if song fits)
+        onset_tail_hangover=onset_tail_hangover,  # reflect-pad past song-end so the final window centers on it (§ tail-collapse fix)
         onset_logit_offset=onset_off,      # 16th-grid snap + --harm_calib (same offset baked into tau above; None if neither)
         fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
         fatigue_free=args.fatigue_free,
