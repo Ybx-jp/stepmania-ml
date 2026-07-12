@@ -138,8 +138,11 @@ DIRECTION mirror of §1 (`--style` scaled a 16th-native value DOWN to v2 frames;
   proxy, then filtering the stream to pure-16ths). Dump the RAW grid and read it; don't trust an aggregation that
   encodes a too-narrow definition of the defect.
 
-### 5b. PARKED (2026-07-06) — the free-foot-stream-under-hold fix, designed + de-risked, NOT built
-User PARKED this as a detour (wants more playtest diversity first, not hacking). Captured so it's pick-up-ready.
+### 5b. ★ NEXT-UP (2026-07-12, was PARKED 2026-07-06) — the free-foot-stream-under-hold fix (defect #3)
+**Status flipped to NEXT-UP 2026-07-12:** the user chose to BUILD this BEFORE the taste-critic label matrix —
+because #3 is the one open defect that would POLLUTE the labels (it's CANDIDATE-VARYING under `freeze=high` AND
+presence-INVISIBLE to the critic, so labels on it can't even be learned; lineage `taste-critic-arc.md` Decisions
+2026-07-12b). Design directive below; build it structural-primary per [[structural-over-salience]].
 
 **Two failed levers ruled out (measured, not assumed):**
 1. **`hold_stream_floor` tweak** — sweep on Watch Out freeze=high (holds / free-foot-stream-under-hold):
@@ -166,7 +169,29 @@ if stamina_hold_bump is not None:                                              #
 `onset_threshold` IS the per-song tau (`onset = p > onset_threshold`, line 535), so `bump→1.0` can drop even a
 `p≈1` note. SELF-LIMITING: fewer notes → less grind → `E_slow` falls → bump falls → equilibrium at a sustainable
 free-foot rate (thins the stream, does NOT delete the hold). Near-inert where holds aren't grinds (`E_slow` low →
-`excess≈0`), so v1 charts ~unaffected. NEXT: test `stamina_hold_bump=1.0` on Watch Out (measure defect↓, holds held,
-density), tune, set the CANONICAL default, by-ear. Correct metric = `scratchpad/measure_defect.py` (free-foot stream
+`excess≈0`), so v1 charts ~unaffected. Correct metric = `scratchpad/measure_defect.py` (free-foot stream
 ≥4 @≤8th under a hold). Skill line FIXED this session: `conditioning-mechanics §8c` no longer says "stamina off by
 default" (that error burned this session).
+
+**★ DESIGN DIRECTIVE (2026-07-12, user) — TWO fixes, AUTOMATON PRIMARY, thinning is the RESIDUAL safety-net; they
+must be ORDERED or they undermine each other.** The user's principle: **"better hold-aware PATTERNING is a better
+principle than less-bad hold STREAMING"** and **"the automaton is a more reliable mechanism than salience thinning"**
+(salience points the WRONG way here — the offending notes are the loudest). So the priority INVERTS the paragraph
+above: the `stamina_hold_bump` salience-thinning is NOT the primary fix — it is the cleanup for whatever the
+structural fix leaves pinned.
+- **PRIMARY = a STRUCTURAL hold fix (automaton / pattern head).** Spectrum cheapest→best: (1) automaton FORCE-CLOSE —
+  free foot streams under a hold → release the held foot so the section becomes a proper two-foot stream (a decode
+  rule on the final symbols; reliable, blunt) and/or a hold-DURATION cap for the 6-beat monsters; (2) pattern/type-head
+  LOGIT SHAPING — bias AGAINST opening a long hold when a stream is imminent (make the human-like choice at generation,
+  not patch it after); (3) LEARNED (out of decode scope). The user leans 1–2 as the reliable core.
+- **SECONDARY = `stamina_hold_bump`** — thins ONLY the residual one-foot grind the automaton chose NOT to release
+  (e.g. a hold too short for a release to read well).
+- **⚠️ THE INTERACTION (the user's "could come out strangely") = a PIPELINE-ORDERING bug if stacked naively.** The two
+  act at DIFFERENT stages: stamina thins at the ONSET GATE (`on_t`, `typed_model.py:760`, EARLY) while the automaton
+  decides hold-release at SYMBOL RESOLUTION (`close = held & active`, `:919`, LATE). So stamina thins the free-foot
+  stream BEFORE the automaton sees it → the release TRIGGER (the stream) is erased → a monster hold stays OPEN with a
+  sparse awkward trickle = exactly the bad outcome. **Resolution:** compute the hold-release decision on the
+  PRE-thinning free-foot DEMAND (onset intent), and GATE `stamina_hold_bump` OFF on any hold the automaton is about to
+  force-close (thin only the NOT-released residual). Co-tune, by-ear. **NEXT-UP (2026-07-12): build this before the
+  critic label matrix.** Correct metric = `scratchpad/measure_defect.py` (free-foot stream ≥4 @≤8th under a hold);
+  probe song set = fast + `freeze=high` (e.g. Watch Out Pt.2, the original complaint).

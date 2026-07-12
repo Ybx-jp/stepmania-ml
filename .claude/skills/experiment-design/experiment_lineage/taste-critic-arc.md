@@ -130,12 +130,42 @@ The user's OPEN priority, resolved at the onset level (RIGHT population this tim
 - **New residual [H-winddown]** (SEPARATE, pre-existing): neither arm winds down into a silence/outro — candidate =
   the window restores tail p_onset peaks so the stamina breathe arc thins the outro less (queued probe).
 
+## Decisions — 2026-07-12 (b): pre-labeling sequencing + the critic-as-optimizer framing
+A design conversation before spending the label budget. Fork status was audited (which flaws remain, do they POLLUTE
+taste labels):
+- **Fork status:** #1 RESOLVED (hangover + universal window). #2 PARTIAL (harm_calib lever passed but OFF by default,
+  a density-preserving trade). #3 free-foot-under-hold PARKED. empty-middles SHELVED. [H-winddown] NEW/queued.
+- **★ Label-pollution reasoning (the key sequencing logic):** a COMPARATIVE best-of-N matrix at a FIXED song makes
+  any flaw SHARED across candidates CANCEL in the pairwise preference (captures the DIFFERENCES = taste). So
+  [H-winddown] (universal), empty-middles (~conditioning-invariant), and default #2 under-charge (if harm_calib isn't
+  swept) largely wash out — they do NOT need fixing first for clean RELATIVE labels. The danger is a CANDIDATE-VARYING
+  flaw. **#3 is the one trap:** `freeze=high` conditioning TRIGGERS it (varies across candidates) AND it's
+  presence-INVISIBLE to the critic (labels on it can't be learned) — a double liability.
+- **★ USER DECISIONS (locked):** (1) **DO the #3 fix NEXT** (before the critic matrix) — per [[structural-over-salience]]
+  the fix is AUTOMATON-primary (hold-release / duration-cap or pattern-head logit shaping) + `stamina_hold_bump` as
+  the residual, ORDERED (pre-thinning release trigger; gate the bump off on holds about to close). §5b bumped
+  PARKED→NEXT-UP. (2) **Then proceed to the critic** (E0.1 spread set → labels). (3) **EXCLUDE harm_calib as a
+  conditioning/ranking axis for this label round** (its melodic↔percussive trade is a genuine taste question but not
+  for round 1 — keeps the axes clean).
+- **★ E4 (future direction, RECORDED not committed) — critic-as-OPTIMIZER.** The user's "maybe if we cover the gaps,
+  even train from scratch, it could enable automated iterative refinement." Two ORTHOGONAL gaps: (i) INPUT richness —
+  the binary presence grid → the full TYPED symbol grid (tap/hold/tail/roll) + LOCALITY (region scores, not one pooled
+  global verdict; the interpretability arc showed the critic's cue is GLOBAL/pooled) so hold-type (#3) + where-it's-bad
+  become visible; (ii) OBJECTIVE — a preference reward-model (a richer-input critic on the corrupted-corpus objective
+  STILL learns "typical of training", not taste). **The load-bearing insight: the more the critic is used as an
+  OPTIMIZATION TARGET, the more its blind spots become Goodhart/reward-hacking liabilities.** Ladder of rising
+  power+risk: (1) best-of-N SELECTION [tolerates a mediocre critic] → (2) rejection-sampling LOOP → (3) critic-GUIDED
+  decode → (4) RL generator fine-tune [needs a robust, hard-to-hack, taste-aligned, LOCAL critic]. So covering the
+  gaps is the PRECONDITION for rungs 2–4, not polish. **E0.1 still gates the whole ladder** (if best-of-N spread
+  doesn't help even an oracle, the vision is moot) → run it BEFORE any from-scratch train. Label cost is unavoidable
+  regardless of architecture (taste is a supervision problem).
+
 ## Open fork (binding question)
-Two live tracks, complementary: (A) **decode-fix the 3 defects** — #2 harm_calib PASSED (density-preserving trade,
-documented); #1 tail COLLAPSE fixed (hangover, ear-confirmed) + **short-song END-degeneration FIXED + SHIPPED
-(universal window W3600, by-ear PASSED 2026-07-12)**; the empty-MIDDLES half is an open density-allocation problem
-(local-tau shelved); NEW **[H-winddown]** outro-taper lead (pre-existing); #3 free-foot gate still parked. (B) **Phase 2 taste-align the critic (R3)** — the
-confirmed crux for best-of-N, needs the user's preference labels; the defects ARE its negative targets, so (A) feeds (B).
+NEXT ACTION = **the #3 free-foot-under-hold fix** (structural-primary, [[structural-over-salience]]), THEN the E0.1
+best-of-N spread set (harm_calib excluded as an axis). Two tracks: (A) **decode-fix the 3 defects** — #1 FIXED+SHIPPED
+(hangover + universal window); #2 PARTIAL (lever off-default); #3 = NEXT-UP; empty-middles SHELVED; [H-winddown]
+queued. (B) **Phase 2 taste-align the critic (R3)** — the confirmed crux for best-of-N, needs the user's preference
+labels; the defects ARE its negative targets, so (A) feeds (B). E4 (critic-as-optimizer) is recorded, gated on E0.1.
 
 ## Attribution corrections / method keepers (this thread)
 - HARNESS→DATA→MODEL caught the gate bug before a 4-chart conclusion (Rule 0). The off-grid census (Rule 8, ground

@@ -39,9 +39,23 @@ Two complementary tracks; the defects feed the critic (they ARE its negative tar
 - **(A) Decode-fix the 3 defects.** #2 harm_calib = PASSED (density-preserving trade, documented — don't stack gains
   blindly). #1 tail COLLAPSE = FIXED (hangover) + **short-song END-degeneration = FIXED + SHIPPED (universal window
   W3600, by-ear PASSED 2026-07-12)**; the empty-MIDDLES half is OPEN (density allocation, local-tau shelved); NEW
-  **[H-winddown]** outro-taper lead (pre-existing, queued probe). #3 (free-foot-overload during a hold) still PARKED.
+  **[H-winddown]** outro-taper lead (pre-existing, queued probe). **#3 (free-foot-overload during a hold) = NEXT-UP**
+  (flipped from PARKED 2026-07-12; `footspeed_floor_findings.md §5b`).
 - **(B) Phase 2: taste-align the critic (R3)** — the confirmed crux for best-of-N; a preference reward-model on the
-  user's good/bad labels. Not started. The 3 defects are its negative targets.
+  user's good/bad labels. Not started. The 3 defects are its negative targets. E4 (critic-as-OPTIMIZER: richer
+  typed+local input + preference objective → best-of-N/rejection-loop/guided-decode/RL ladder) RECORDED, gated on E0.1
+  (lineage Decisions 2026-07-12b).
+
+## ★ NEXT ACTION (locked 2026-07-12) — the exact sequence
+1. **BUILD the #3 free-foot-under-hold fix** (`footspeed_floor_findings.md §5b`), STRUCTURAL-primary per
+   [[structural-over-salience]]: automaton hold-release / duration-cap (or pattern-head logit shaping) as the primary,
+   `stamina_hold_bump` thinning as the ordered residual (⚠️ pipeline-ordering: compute release on PRE-thinning demand;
+   gate the bump off on holds about to close). Metric `scratchpad/measure_defect.py`; probe on fast + `freeze=high`
+   (Watch Out Pt.2). WHY first: #3 is the one open defect that would POLLUTE taste labels (candidate-VARYING under
+   freeze=high + presence-INVISIBLE to the critic).
+2. **THEN the critic track** — E0.1 best-of-N spread set (kill-switch + seeds labels). **harm_calib EXCLUDED as a
+   conditioning/ranking axis for this label round** (user decision). Comparative-at-fixed-song labeling makes SHARED
+   flaws (wind-down, empty-middles) cancel, so they need not be fixed first.
 
 ## ⏳ AWAITING USER — binding questions
 1. **Silence-pad by-ear re-confirm.** The hangover was ear-validated with REFLECTION; the pad default is now SILENCE
