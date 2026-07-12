@@ -71,18 +71,22 @@ def estimate_bpm(audio_path: str) -> float:
     return float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo)
 
 
-def _sparse_harm_offset(audio_np, gain, quiet_q):
+def _sparse_harm_offset(audio_np, gain, quiet_q, quiet_feat='total'):
     """The sparse-harm-in-quiet ONSET PHRASE CALIBRATOR (ported byte-for-byte from export_typed_samples.py):
     add a per-frame onset-logit boost `gain·quiet_gate·harm_onset` so a sparse harmonic/melodic event (a piano
-    line in a lull) fires where the flat governor would bury it. `quiet_gate` -> 1 as the (box-smoothed) total
-    energy dim-0 drops below the `quiet_q` percentile, 0 above it; dim-36 is the already-0-1 harmonic onset.
-    Rides the SAME onset_logit_offset slot as the grid snap, so tau MUST see it too (it does, below).
+    line in a lull) fires where the flat governor would bury it. `quiet_gate` -> 1 as the (box-smoothed) gate
+    feature drops below the `quiet_q` percentile, 0 above it; dim-36 is the already-0-1 harmonic onset.
+    `quiet_feat`: 'total' = dim-0 TOTAL energy (deployed default, byte-identical); 'perc' = dim-35 PERC_ONSET
+    ABSENCE — the conditioning-mechanics §6 fix, which fires inside an energy-LOUD but percussion-absent melodic
+    solo (a piano lead over a pad) that the total-energy gate MISSES (it once dumped boost onto a loud drum
+    section). Rides the SAME onset_logit_offset slot as the grid snap, so tau MUST see it too (it does, below).
     See conditioning-mechanics §6 / notes/phrasing_coherence_findings.md."""
-    e = audio_np[:, 0].astype(np.float64)
+    gcol = 0 if quiet_feat == 'total' else 35                    # dim-0 total energy | dim-35 perc onset (its absence)
+    e = audio_np[:, gcol].astype(np.float64)
     e = (e - e.min()) / (np.ptp(e) + 1e-9)                       # norm01
     w = 16; e = np.convolve(np.pad(e, w, mode='edge'), np.ones(2 * w + 1) / (2 * w + 1), mode='valid')  # boxsmooth
     q = np.percentile(e, quiet_q)
-    quiet_gate = np.clip((q - e) / (q + 1e-6), 0.0, 1.0)         # 0 above the quiet quantile, ->1 as energy->0
+    quiet_gate = np.clip((q - e) / (q + 1e-6), 0.0, 1.0)         # 0 above the quiet quantile, ->1 as feature->0
     return (gain * quiet_gate * audio_np[:, 36]).astype(np.float32)   # harm onset (dim36) already 0-1
 
 
@@ -198,6 +202,11 @@ def parse_args():
                    help="Stage-2 per-region density relief (canonical 50; 0 disables; needs --fatigue_penalty)")
     p.add_argument("--stamina_breathe", type=float, default=CANONICAL_DECODE["stamina_breathe"],
                    help="Stage-3 difficulty arc — ceiling breathes with audio energy (canonical 1.2; 0 = flat)")
+    p.add_argument("--stamina_breathe_local_win", type=int, default=None,
+                   help="EXPERIMENTAL (long-song fix, notes/stamina_longsong_findings.md): z-normalize the breathe "
+                        "envelope over a ROLLING window of this many FRAMES instead of the whole song. None (default) "
+                        "= deployed whole-song z. ~3600 (48th grid) ≈ one training-song span; fixes the length-mis-"
+                        "scoped arc on >130s songs.")
     p.add_argument("--pattern_temperature", type=float, default=CANONICAL_DECODE["pattern_temperature"],
                    help="footwork sampling temperature (canonical 1.0 — real jack/jump balance; NOT 0.7)")
     p.add_argument("--type_temperature", type=float, default=CANONICAL_DECODE["type_temperature"],
@@ -213,6 +222,10 @@ def parse_args():
                         "tau. Needs the 42-dim highres/highres_v2 features (perc/harm channels).")
     p.add_argument("--harm_quiet_q", type=float, default=40.0,
                    help="percentile of (smoothed) energy below which --harm_calib's quiet gate opens (default 40).")
+    p.add_argument("--harm_quiet_feat", choices=["total", "perc"], default="total",
+                   help="which feature --harm_calib's quiet gate keys on: 'total' (dim-0 total energy, deployed) or "
+                        "'perc' (dim-35 perc-onset ABSENCE — cond-mech §6 fix: fires in an energy-LOUD but "
+                        "percussion-absent melodic solo the total gate misses).")
     # ---- v2 (48th-grid) decode flags — all are v1 no-ops (subdiv=4) BY CONSTRUCTION, so they're safe defaults
     p.add_argument("--no_fast_jump", action=argparse.BooleanOptionalAction, default=True,
                    help="[v2; DEFAULT ON] forbid a >=2-fresh-press JUMP at sub-16th spacing (a 24th/48th gap on the "
@@ -489,7 +502,7 @@ def main():
         if audio_tensor.shape[1] != 42:
             raise SystemExit("--harm_calib needs the 42-dim highres/highres_v2 features (perc/harm channels).")
         harm_t = torch.from_numpy(
-            _sparse_harm_offset(audio_tensor[:T], args.harm_calib, args.harm_quiet_q)).to(device)
+            _sparse_harm_offset(audio_tensor[:T], args.harm_calib, args.harm_quiet_q, args.harm_quiet_feat)).to(device)
         onset_off = harm_t if onset_off is None else onset_off + harm_t
     # the radar fed to BOTH tau and the decode MUST be the same one, else tau is calibrated on a different
     # distribution than generate() decodes from (conditioning-mechanics §3). No --style -> radar=None (null token).
@@ -519,7 +532,7 @@ def main():
         fatigue_free=args.fatigue_free,
         stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),
         stamina_tau=CANONICAL_DECODE["stamina_tau"], stamina_scale=CANONICAL_DECODE["stamina_scale"],
-        stamina_breathe=args.stamina_breathe,
+        stamina_breathe=args.stamina_breathe, stamina_breathe_local_win=args.stamina_breathe_local_win,
         hold_stream_penalty=CANONICAL_DECODE["hold_stream_penalty"],  # suppress holds in dense streams (2026-07-02)
         hold_stream_floor=CANONICAL_DECODE["hold_stream_floor"], hold_stream_win=CANONICAL_DECODE["hold_stream_win"],
         footswitch=CANONICAL_DECODE["footswitch"],  # DEFAULT False: force one-foot jacks, model alternates (2026-07-02)

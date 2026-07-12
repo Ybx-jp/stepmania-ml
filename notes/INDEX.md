@@ -4,6 +4,17 @@ Map of `notes/`, organized by phase and thread. Findings notes (`*_findings.md`)
 results; plans/roadmaps hold forward design; `playtest_log.md` is the subjective play-feel ledger. Arcs are
 roughly chronological; the newest (motif → governor → release) is at the bottom.
 
+## Taste-critic quality arc (2026-07-11 — UN-PARK of ship mode; see lineage `taste-critic-arc.md`, `HANDOFF.md`)
+**UPDATE (2026-07-11):** goal = a taste-aligned critic for best-of-N conditioning SELECTION (kill f48's quality
+VARIANCE). `taste_critic_v2_findings.md` — diagnostic (critic rates the user's OWN charts "fake"; 16th critic can't
+see f48 = the grid wall) → **E1.1 retrained the graded critic on the 48th grid** (`realism_critic_graded_v2`, jitter
+ladder 0.98 = **R1 cleared**) → **E1.2** it catches the tail/placement defect but is presence-blind + rates gens
+above human charts on 2/3 (**R3 taste-alignment still open**). `stamina_longsong_findings.md` — user's long-song
+stamina hypothesis: ceiling IS length-mis-scoped (corr+0.83) but **doesn't bite the chart** (fair test + ear REFUTE;
+OFF worst) — the session's cleanest Rule-7/9 case; `local-z` lever kept as a mild #2 helper. Playtest (2026-07-11)
+enumerated 3 defects = the critic's target list (sub-16th tail / quiet under-charge / hold foot-speed). Decode-fix
+track started on #2: `generate.py --harm_quiet_feat total|perc` (both gates land offline; ⏳ by-ear PENDING).
+
 
 **CURRENT STATE (2026-06-26):** deployed model = **`gen_motif_full_fixed`** (42-dim highres, the H19 clean
 retrain). Two arcs shipped on top of it: (1) the **H15 motif arc** — steerable section-level candle/trill

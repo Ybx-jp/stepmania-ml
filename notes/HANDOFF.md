@@ -1,63 +1,60 @@
-# HANDOFF — ★ v1.0.0 SHIP: v2 is the DEFAULT + the BYO offset detector is WIRED. Remaining = regen personal set, cut/host/announce.
+# HANDOFF — ★ SHIP MODE PAUSED: the TASTE-CRITIC arc is UN-PARKED. Active work = a taste-aligned critic for best-of-N.
 
-**Written 2026-07-09 for the next Claude.** Ship mode is the standing directive ([[ship-mode-park-research]]: cut
-v1.0.0, host, announce; don't wander into parked research — un-park ONLY on the literal phrase "the times have
-changed"). This session cleared the two biggest ship-checklist blockers: the **v2 deploy-swap** and the **BYO
-beat-anchor offset detector**. What's left is mechanical (regenerate the deliverable, document one limitation, cut).
+**Written 2026-07-11 for the next Claude.** The standing "ship v1.0.0" directive is **PAUSED** — on 2026-07-11 the
+user CONSCIOUSLY UN-PARKED the taste-critic thread ("un-park now" = the tripwire override; see
+[[ship-mode-park-research]], now marked partially-superseded). v1.0.0 is DEFERRED, not cancelled; the OTHER parked
+paths (GDL, seq-onset retrain, good-settings formula) stay parked. **No deployed-model change this session** — the
+canonical v2 default is untouched; all new code is experimental + off-by-default.
 
 ## WHERE WE ARE
-- **✅ v2 IS THE DEFAULT (2026-07-09).** Both CLIs (`scripts/generate.py` + `export_typed_samples.py`) default to
-  `--features highres_v2` + `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (42-dim, 48th grid). The v2-only auto
-  knobs (`grid_snap auto`, `auto_b_trip` with `b_trip=0.7`) ship ON; the auto-vs-global b_trip by-ear A/B was WAIVED
-  for the cut (offline-validated + `toulouse_win_anchor` "cut v1" verdict). `--features highres` still reaches the
-  legacy v1 model (`gen_motif_full_fixed`). Validator 25 ✓, 44/44 tests, end-to-end 48-row output confirmed.
-- **✅ BYO "deaf choreography" FIXED — the offset detector is wired.** `src/data/offset_detect.py` recovers `#OFFSET`
-  from audio (full-band onset pulse-train + 31 ms latency cal); `generate.py` uses it as the DEFAULT beat-anchor
-  (extraction skips the detected within-beat phase → frame 0 = downbeat; writes `#OFFSET = −phase` so the untrimmed
-  audio still plays in time). Re-validated vs the `~/sm-personal` oracle: **median 4.6 ms, 19/23 ≤40 ms, Toulouse
-  7.1 ms**. The ~20% half-beat slips: `--offset <reference #OFFSET>` override (the confidence flag is weak, 2/4 — do
-  NOT lean on it). `--no_auto_offset` = pre-fix t=0. Also: BPM STILL must be user-supplied (`--bpm`; estimation is
-  unreliable, [[byo-audio-bpm-footgun]]). Details `notes/byo_offset_detection_findings.md`, tests
-  `tests/test_offset_detect.py`.
-- **✅ `--harm_calib` added to `generate.py`** (the arg-parity sweep result — the one validated lever the public CLI
-  lacked; sparse-harm-in-quiet onset phrase calibrator, off by default). The full canonical decode stack is otherwise
-  shared via `CANONICAL_DECODE` so the two CLIs can't drift.
-- **Sliding-window onset** (Ch.1): BUILT + by-ear PASSED (`toulouse_win_anchor`); no-op when a song fits the trained
-  context. The harder decoder-side windowing stays parked (not needed).
-- **✅ BYO acquisition/assembly TOOLING (2026-07-10, tooling not model; `notes/byo_audio_acquisition_tooling.md`,
-  [[audio-acquisition-tooling]]).** `generate.py --audio` now accepts a YouTube/yt-dlp URL (→ Vorbis `.ogg` cached
-  by video id; also `scripts/pull_audio.py`); `--trim-audio START[,END]` slices a range BEFORE gen; `--sm_difficulty`
-  writes the real `.sm` slot (**default changed**: follows `--difficulty`, was hardcoded `Challenge`); `--append_to
-  CHART.sm` splices a difficulty into an existing song (bpm/subdivision grid guards + `.bak`). Deps: yt-dlp+ffmpeg
-  (+deno) on PATH. ⚠️ Load-bearing: playback `#OFFSET` ≠ generation beat-anchor — all difficulties of one song MUST
-  share one `--offset` ([[byo-audio-bpm-footgun]] 4th mode). On branch `feat/youtube-audio-pull-trim-append`.
+- **Goal (user's words):** f48 raised quality VARIANCE — "banger when the conditioning is right, but I can't predict
+  the right knobs per song." Fix = **SELECTION** (generate N conditioning variants, a critic picks the best), NOT
+  PREDICTION (audio→knobs is the [[good-settings-region]] clean-negative). The critic is the linchpin.
+- **The diagnostic that framed it** (`notes/taste_critic_v2_findings.md`): the taste critic (a) rates the user's OWN
+  hand-made charts mostly "fake" (P(real) 0.32 vs train-real 0.82); (b) was 16th-grid so it CAN'T see f48 output
+  (grid wall, user-predicted); (c) graded objective helps but isn't enough. → a 3-part arc: R1 see-f48, R2 grade,
+  R3 taste-align.
+- **✅ E1.1 DONE — R1 cleared.** `experiments/realism_critic/train_graded_critic_v2.py` →
+  `checkpoints/realism_critic_graded_v2/best_val.pt` (48th grid, warm-started from the binary critic, + a sub-16th
+  JITTER corruption axis). Jitter ladder monotone **0.98** → it grades the sub-16th placement the 16th critic
+  couldn't see.
+- **✅ E1.2 DONE — mixed; R3 (taste) is the confirmed crux.** `scratchpad/critic_catches_defects.py`: the critic
+  CATCHES the tail/placement defect (tail scored −1.59 below body, within-song), but is presence-blind to subtle
+  arm quality and **rates generations above the user's human charts on 2/3 songs**. E1.1 fixed the grid, NOT taste.
+- **STAMINA long-song detour (user-prioritized) CLOSED — hypothesis REFUTED.** The breathing arc's whole-song
+  z-normalization IS length-mis-scoped (corr(len,ceiling-divergence)+0.83) but does NOT bite the chart (fair
+  density test + by-ear: OFF was WORST, GLOBAL best-or-tied). `notes/stamina_longsong_findings.md`. New non-breaking
+  `stamina_breathe_local_win` lever kept as a MILD partial fix for defect #2 (NOT default).
+- **PLAYTEST (2026-07-11, `notes/playtest_log.md`) enumerated 3 real defects = the critic's target list:**
+  **#1** spurious sub-16ths, worst near the END, consistent across songs (critic SEES it); **#2** quiet/harmonic
+  sections under-choreographed (decode leads: harm_calib + local-z); **#3** very-high foot-speed during a hold,
+  worst on fast songs (presence-BLIND → the parked free-foot-overload gate).
 
-## ★ ACTIVE THREAD — the v1.0.0 CUT (nothing research-y is blocking)
-Lineage: `meter-grid-arc.md` (v2 default) + `byo-audio-alignment-arc.md` **Ch.2** (offset, now CLOSED for the ship).
+## ★ ACTIVE THREAD — taste-critic-quality arc (lineage `experiment_lineage/taste-critic-arc.md`)
+Two complementary tracks; the defects feed the critic (they ARE its negative targets):
+- **(A) Decode-fix the 3 defects** to raise base quality. STARTED with **defect #2** (user "leaning decode fixes",
+  flagged harm_calib). Added `generate.py --harm_quiet_feat total|perc` (perc = cond-mech §6 dim-35 gate). Offline
+  (`scratchpad/harm_offline.py`): both gates land + orthogonal (TOTAL +40% density in silent lulls; PERC +17% in
+  busy-harmonic drum-sparse sections; the two target DIFFERENT sections, Jaccard 0.20).
+- **(B) Phase 2: taste-align the critic (R3)** — the confirmed crux for best-of-N; a preference reward-model on the
+  user's good/bad labels (mine `playtest_log.md` + structured pairs). Not started.
 
-## THE v1.0.0 SHIP CHECKLIST
-1. **✅ BYO alignment** — offset detector + beat-anchoring wired into `generate.py`, oracle-validated.
-2. **✅ DEPLOY SWAP** — v2 default in both CLIs (validator 25 ✓).
-3. **Hold-stream `freeze=high` edge** — ships as a documented KNOWN LIMITATION (user call 2026-07-09): a 5–6 beat
-   hold with a one-foot stream under it; only bites `freeze=high` conditioning. The real position-based fix is
-   DESIGNED + PARKED (`notes/footspeed_floor_findings.md §5b`). ▷ TODO: write it into the release notes / README.
-4. **REGEN the personal deliverable** — `~/sm-generated/v2_personal_hard` (34 charts) was built PRE-fix → wrong
-   BPM/offset/density + pre-sliding-window. Regenerate with the new default (v2 + auto offset detector); pass `--bpm`
-   per song (from the user or their `~/sm-personal` reference charts) and `--offset` where the detector flags low
-   confidence. ▷ This is the end-to-end confirmation that the deaf-chore fix landed on real songs (the fix is unit +
-   oracle validated but not yet by-ear'd on a freshly-regenerated personal chart).
-5. **Release:** cut `v1.0.0`, host, announce ([[marketing-track]]).
-6. **PARKED (needs "the times have changed"):** seq-onset retrain (placement ceiling), GDL/meter-equivariance,
-   good-settings tolerance formula, manifold refit + groove-radar retrain, decoder-side sliding window.
+## ⏳ AWAITING USER — the binding gate
+**By-ear verdict on the Bye Bye 4-arm harm_calib A/B**, installed at `~/sm-generated/stamina_probe/` (group has
+Bye Bye {OFF, GLOBAL=base, LOCAL, HARM-TOTAL, HARM-PERC} + Switch/Calling stamina arms). **Question:** in the bare
+spots, does HARM-TOTAL (silent-lull fill) or HARM-PERC (harmonic-passage fill) land the choreography — or does gain
+10 over-boost junk? Log the verdict to `notes/playtest_log.md` (newest on top). Then: lock a #2 fix (gate+gain, fold
+`local-z` in) and move to defect #1 (sub-16th tail probe) or #3 (free-foot gate) — OR, if neither gate lands, #2 is
+an onset-head/retrain matter → it goes to the reward-model's target list, and we pivot to track (B).
 
-## CANONICAL EXPORT DEFAULTS (VALIDATED by `tools/check_export_defaults.py` = 25 ✓)
-The bare `export_typed_samples.py` run reproduces what the user plays. These MUST equal the script's argparse
-defaults. As of 2026-07-09 the DEFAULT regime is **v2** (`gen_motif_v2_48th_cont` + `highres_v2`); `grid_snap`/
-`auto_b_trip`/`grid_snap_keep_triplets`/`triple_pref_thresh` are now ACTIVE (they were v1 no-ops before the swap).
-**Permanent section — keep in every rewrite.** NOTE: the BYO density `×4/subdiv` fix + the offset detector +
-`--harm_calib`/`--offset` are `scripts/generate.py` behaviors and do NOT touch the exporter argparse defaults below
-(generate.py imports `CANONICAL_DECODE` for the shared palette only; the `--harm_calib`/`--harm_quiet_q` lines below
-ARE exporter args too, at their off defaults).
+## THE v1.0.0 SHIP CHECKLIST (DEFERRED — resume when the arc lands or is set down)
+Was one mechanical step from a cut (regen the personal deliverable, doc the hold-stream known-limitation, host,
+announce; [[marketing-track]]). The hold-stream free-foot edge is the same as defect #3 above — the arc may fix it.
+
+## CANONICAL EXPORT DEFAULTS (VALIDATED by `tools/check_export_defaults.py` = 25 ✓ this session)
+The bare `export_typed_samples.py` run reproduces what the user plays; these MUST equal its argparse defaults.
+UNCHANGED this session (the new `generate.py` flags `--stamina_breathe_local_win`/`--harm_quiet_feat` are
+generate.py-only, off by default, and do NOT touch the exporter). **Permanent section — keep in every rewrite.**
 <!-- CANONICAL-EXPORT-DEFAULTS:START (do NOT hand-edit values; re-run tools/check_export_defaults.py after a change) -->
 ```
 checkpoint = checkpoints/gen_motif_v2_48th_cont/best_val.pt
@@ -87,31 +84,25 @@ harm_quiet_q = 40.0
 guidance = 1.0
 ```
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
-NOTE: v2 is a SEPARATE regime — `--features highres_v2` + `gen_motif_v2_48th_cont` + `for_v2()` + the 48th `sm_writer`
-+ `V2_MSL=5400`. v2 decode knobs (all v1 no-ops): `--min_onset_gap` (None→auto 2 on v2); `--grid_snap auto`; the
-triplet band via `--onset_phase_calib "0,1.0,b_trip"`; `--auto_b_trip`. Do NOT mix `highres_v2` with the v1 checkpoint.
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- Branch **`feat/byo-sliding-window-onset`** (off `main`; pushed) holds the v2 deploy-swap + `--harm_calib` + the
-  offset detector + that docs refresh. **Verify its PR state via `gh pr list`; do not trust a number written here.**
-- Branch **`feat/youtube-audio-pull-trim-append`** (off `feat/byo-sliding-window-onset`, 2026-07-10) = the BYO
-  acquisition/assembly tooling (URL `--audio`, `--trim-audio`, `--sm_difficulty`, `--append_to`) + this docs refresh.
-  Its PR is based on `feat/byo-sliding-window-onset` (clean diff, since the generate.py edits depend on that branch);
-  **verify number/state/base via `gh pr view` — retarget to `main` if byo lands first.**
-- Gitignored / not committed: `outputs/`, `transcripts/`, scratchpad probes (`$CLAUDE_JOB_DIR/tmp/*`). Untracked and
-  NOT mine: `.claude/commands/begin.md` (left unstaged). Test charts under `~/sm-generated/` are gitignored.
+- On branch **`explore/taste-critic-quality-resolution`** (off `feat/youtube-audio-pull-trim-append`). Holds this
+  session's work: the v2 graded-critic trainer, the stamina probe, the non-breaking `generate.py`/`typed_model.py`
+  levers, and these docs. NOT yet PR'd (mid-investigation, experimental code, awaiting the by-ear gate) — open a PR
+  only when the arc reaches a shippable conclusion.
+- Pre-existing untracked/unstaged NOT mine (leave alone): `.claude/commands/`, `teaching/`,
+  `notes/grid_snap_findings.md` (modified before this session).
 
 ## READ-FIRST (in order)
-Memory [[ship-mode-park-research]] (directive) → the SHIP CHECKLIST above (what's left for v1.0.0) →
-`generation-defaults §0` (v2 is now the default) → **`notes/byo_offset_detection_findings.md`** (the wired offset
-detector) → lineage `experiment_lineage/{meter-grid-arc.md, byo-audio-alignment-arc.md Ch.2}` → memories
-[[meter-4-4-grid]], [[personal-reference-charts]], [[byo-audio-bpm-footgun]]. Load-bearing skills:
-**generation-defaults, conditioning-mechanics §6, experiment-design**.
+Memory [[ship-mode-park-research]] (the un-park block) → this HANDOFF → lineage
+`experiment_lineage/taste-critic-arc.md` → `notes/taste_critic_v2_findings.md` + `notes/stamina_longsong_findings.md`
+→ `notes/playtest_log.md` (2026-07-11 entry) → memories [[taste-critic-transfer]], [[meter-4-4-grid]]. Load-bearing
+skills: **conditioning-mechanics** (§6 harm gates, §7 hold-stream, §8 stamina), **experiment-design** (Rule 7/9 —
+the stamina detour is the exemplar), **generation-defaults**.
 
 ## DISCIPLINE
-**Match the fix to the FELT property** (density≠placement — the `×4/subdiv` fix was real but the wrong axis; the ears
-caught it). **A playback-sync argument is NOT a choreography argument** (the "offset red herring" overturn). **Use the
-oracle** (`~/sm-personal`) to validate an audio estimator BEFORE trusting it — it killed 3 confident-but-wrong
-detector variants (DFT/kick/tiebreak) and just RE-validated the productionized detector (median 4.6 ms). **BPM must
-be user-supplied.** Ship mode: don't wander into parked research. One change at a time; match the verb to the
-evidence ([[claim-precision]]).
+**The EAR is the deciding vote** — every offline metric (ceiling divergence, ladder AUC, critic margin) is a proxy;
+the stamina detour is the cautionary tale (a +0.83 cheap-probe correlation that the fair test + ears REFUTED). **Run
+the fair test before committing a conclusion** (Rule 7/9, necessary≠sufficient). **Match the verb to the evidence**
+([[claim-precision]] — the user corrected GLOBAL→LOCAL on the bridge). **One change at a time.** Ship mode is PAUSED,
+not off — don't wander into the OTHER parked paths.

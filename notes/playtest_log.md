@@ -8,6 +8,72 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-11 — Stamina long-song EXONERATED by ear; 3 real defects surfaced (quiet-section under-choreography, sub-16th tail, hold foot-speed)
+
+**WHAT WAS PLAYED** — 3-arm stamina probe (`~/sm-generated/stamina_probe/`): {Calling 125s *control*, Switch 217s,
+Bye Bye 364s} × {**OFF** `stamina_ceiling=0` / **GLOBAL** deployed whole-song z-norm / **LOCAL** the new rolling-window
+`stamina_breathe_local_win=3600`}, all v2 Hard, manifold density ~0.107. Tests the user's hypothesis that the breathing
+arc's whole-song z-normalization (tuned on the ≤130s corpus) neuters choreography on longer songs. Branch
+`explore/taste-critic-quality-resolution`.
+
+**RAW FEEDBACK** (verbatim) —
+- **Calling:** "global and off were pretty close. local perhaps slightly worse."
+- **Switch:** "global a bit better than off, **'tasteful edit'** came to mind [the original design intent]. local close.
+  all feel very similar — but the stamina system wasn't meant to make charts drastically different, just quiet the excess."
+- **Bye Bye:** "global was **really bad in the quiet parts where I would have expected choreography with the harmonic
+  onsets** — reminded me we explored this with **harm_calib and I kinda left that alone... perhaps that was a mistake?**
+  stamina off was **much worse**, a mid-energy bridge had disjointed choreography; both had misses but **LOCAL somewhat
+  recovered the bridge** (user correction to first report — *not* global), and **both LOCAL and GLOBAL beat OFF** there.
+  **awkward sub-16th notes near the end** (global maybe too). **increased
+  count of sub-16th notes near the end is a consistent finding among many songs.** local may have slightly recovered notes
+  in quiet sections, maybe slightly better than the other 2. **all 9 had spurious 16ths, Bye Bye worst. all songs had ≥1
+  instance of very high foot speed during a hold, Bye Bye worst.**"
+
+**COMMENTARY / HYPOTHESIS** —
+1. **STAMINA EXONERATED — hypothesis REFUTED, offline AND by ear.** Density-by-section (`scratchpad/density_by_section.py`)
+   showed OFF≈GLOBAL≈LOCAL in section shape (corr→real Bye Bye 0.68/0.74/0.67 — GLOBAL best); the ear agrees — GLOBAL is
+   the best-or-tied arm (Switch global>off; Bye Bye bridge: **both LOCAL and GLOBAL beat OFF's "disjointed"**, with
+   **LOCAL** the one that recovered it). Turning stamina OFF made it WORSE, the opposite of "neuters choreography." The
+   ceiling IS length-mis-scoped (corr(len,global-vs-local ceiling divergence)=+0.83, `scratchpad/probe_stamina_longsong.py`)
+   but at deployed density it sheds only ~4% of onsets → doesn't bite the DENSITY. **Method note:** the cheap CEILING probe
+   looked confirmatory on the density hypothesis; the fair AR-loop test + the ear overturned THAT direction (exp-design Rule
+   7/9 — necessary≠sufficient). The user's reframe is right: stamina "just quiets the excess," and it does — GLOBAL stays
+   the DEFAULT. **BUT `local-z` is NOT worthless (corrected):** it subtly RECOVERED the Bye Bye bridge + some quiet-section
+   notes — i.e. exactly the long-song quiet sections it targets, which is the SAME axis as defect #2 (quiet under-charge).
+   So keep the `local-z` lever (a mild partial #2 fix), even though it's not the density-culprit fix it was hypothesized to
+   be. The user's length instinct was right on the QUIET-SECTION axis, wrong on the "stamina neuters density" axis.
+2. **[H-quiet-choreo] UNDER-CHOREOGRAPHY of quiet/harmonic sections = the ONSET-HEAD melodic under-placement (cond-mech
+   §8d), NOT stamina.** Same defect as the 2026-07-08 Toulouse "dead spots where it should be charting notes." The user's
+   own pointer — **`harm_calib`** (sparse-harm-in-quiet onset phrase calibrator, BUILT + OFF by default) — is the designed
+   lever. CAVEAT (cond-mech §6): harm_calib keys on dim-0 TOTAL energy → misses energy-LOUD melodic solos; gate on
+   `perc_onset` dim-35 ABSENCE instead. Targeted A/B warranted (the user is asking whether leaving it off was a mistake).
+3. **[H-subtail] SPURIOUS SUB-16th NOTES, worst NEAR THE END, CONSISTENT across many songs** — new robust finding. Two
+   testable mechanisms: (a) `grid_snap` is OFF at Hard by design ("fast 48th runs legit there") → nothing vetoes spurious
+   pure-48th `{1,5,7,11}` cells at Hard; (b) the tail concentration points at PE-EXTRAPOLATION degradation past the trained
+   context on long songs (connects to 07-08 "OOD-tail collapse"). Cheap probe: sub-16th rate vs normalized song position,
+   long vs short.
+4. **[H-holdfoot] VERY HIGH FOOT-SPEED DURING A HOLD, ≥1×/song, Bye Bye (174bpm) worst** — reconfirms the KNOWN
+   free-foot-stream-under-a-hold defect (cond-mech §7 / `footspeed_floor_findings.md §5b`), the one shipping as a documented
+   KNOWN LIMITATION. The ear says it's NOT just a `freeze=high` edge — it shows on plain Hard gens, worst on the fastest
+   song. The designed free-foot-overload gate (PARKED) is the fix; priority bumped.
+
+**CONNECTING THREAD** — a stamina probe incidentally enumerated the concrete "bad" signals that make gens feel off:
+spurious sub-16ths (esp. tail), hold foot-speed, under-charted quiet sections, occasional disjointed bridges. **These ARE
+the targets of the un-parked TASTE-CRITIC arc** (lineage `taste-critic-arc.md`): a taste-aligned critic for best-of-N must
+penalize exactly these — and E1.1's 48th graded critic ALREADY grades sub-16th JITTER monotonically (0.98), so it can
+likely flag defect #3 today. So the defects both (a) give the critic concrete targets and (b) are individually cheap decode
+leads (harm_calib, grid_snap-at-Hard, free-foot gate). Decode-fix vs critic-select are COMPLEMENTARY.
+
+**ACTION / NEXT** —
+- [x] Stamina long-song hypothesis REFUTED (offline + ear). Thread CLOSED; GLOBAL stays default.
+- [x] `local-z` flag: KEEP (corrected — subtly recovers long-song quiet/bridge sections = a mild partial #2 fix, not a
+      density-culprit fix). Fold into the defect-#2 (quiet under-charge) investigation, not reverted.
+- [ ] [H-quiet-choreo] A/B `harm_calib` (perc-gated) on Bye Bye quiet sections — the user's flagged lead; converges with
+      `local-z` on the same quiet-section axis.
+- [ ] [H-subtail] probe sub-16th rate vs song position (grid_snap-at-Hard vs PE-tail).
+- [ ] [H-holdfoot] un-park the free-foot-overload gate? (reconfirmed, worst on fast songs).
+- [ ] Feed all three as concrete NEGATIVE targets into the taste-critic reward-model spec (E2).
+
 ## 2026-07-09 — Sliding-window PASS + "cut v1"; v2 admitted to the canonical default
 
 **WHAT WAS PLAYED** — `toulouse_win_anchor` (v2 `gen_motif_v2_48th_cont`, 128 BPM, 48th grid, anchor-beat +

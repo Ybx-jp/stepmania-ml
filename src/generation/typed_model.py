@@ -424,6 +424,7 @@ class LayeredTypedChartGenerator(nn.Module):
                  footswitch_pen=4.0, fatigue_cap=30.0, footswitch=True,
                  stamina_ceiling=None, stamina_tau=8.0, stamina_scale=15.0, stamina_max_bump=0.45,
                  stamina_breathe=0.0, stamina_breathe_win=96, stamina_breathe_floor=0.4,
+                 stamina_breathe_local_win=None,
                  hold_stream_penalty=0.0, hold_stream_win=16, hold_stream_floor=0.25):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
@@ -690,13 +691,26 @@ class LayeredTypedChartGenerator(nn.Module):
                 w = max(int(stamina_breathe_win) * f16, 1)                    # phrase window: frames -> subdiv-scaled
                 env = torch.nn.functional.avg_pool1d(p_onset.unsqueeze(1), kernel_size=2 * w + 1,
                                                      stride=1, padding=w, count_include_pad=False).squeeze(1)  # (B,T) phrase energy
-                if lengths is not None:  # z-normalize over VALID frames per song (pad frames excluded)
+                if stamina_breathe_local_win and stamina_breathe_local_win > 0:
+                    # LOCAL-z (2026-07-11, notes/stamina_longsong_findings.md): z-normalize the phrase envelope
+                    # against a ROLLING window instead of the WHOLE song. The whole-song z (else-branches below)
+                    # means something DIFFERENT on a long verse/chorus/breakdown song than on the <=130s training
+                    # corpus it was tuned on (corr(song_len, global-vs-local ceiling divergence)=+0.83): the arc
+                    # thins by whole-song energy RANK, mis-placed vs the local phrase. A rolling ~training-song-sized
+                    # window judges each section against its NEIGHBOURS. None (default) = deployed whole-song z, so
+                    # this branch is inert unless the caller opts in. (Single-song generation => no pad contamination.)
+                    lhw = max(int(stamina_breathe_local_win) // 2, 1); ek = env.unsqueeze(1)
+                    lmu = torch.nn.functional.avg_pool1d(ek, 2 * lhw + 1, 1, lhw, count_include_pad=False).squeeze(1)
+                    lex2 = torch.nn.functional.avg_pool1d(ek * ek, 2 * lhw + 1, 1, lhw, count_include_pad=False).squeeze(1)
+                    z = (env - lmu) / (lex2 - lmu ** 2).clamp(min=1e-6).sqrt()
+                elif lengths is not None:  # z-normalize over VALID frames per song (pad frames excluded)
                     vmask = (torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)).float()
                     mu = (env * vmask).sum(1, keepdim=True) / vmask.sum(1, keepdim=True).clamp(min=1)
                     var = ((env - mu) ** 2 * vmask).sum(1, keepdim=True) / vmask.sum(1, keepdim=True).clamp(min=1)
+                    z = (env - mu) / var.clamp(min=1e-6).sqrt()
                 else:
                     mu = env.mean(1, keepdim=True); var = env.var(1, keepdim=True, unbiased=False)
-                z = (env - mu) / var.clamp(min=1e-6).sqrt()
+                    z = (env - mu) / var.clamp(min=1e-6).sqrt()
                 # FLOOR the effective ceiling at stamina_breathe_floor x base: without it, a low-energy outro
                 # (z very negative) collapses the ceiling to ~0 -> max thinning -> EMPTY tail = abrupt early ending
                 # (worse at high breathe). The floor keeps low-energy/low-workload sections (outros) from being
