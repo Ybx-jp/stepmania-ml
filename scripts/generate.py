@@ -572,6 +572,8 @@ def main():
         hold_stream_penalty=CANONICAL_DECODE["hold_stream_penalty"],  # suppress holds in dense streams (2026-07-02)
         hold_stream_floor=CANONICAL_DECODE["hold_stream_floor"], hold_stream_win=CANONICAL_DECODE["hold_stream_win"],
         footswitch=CANONICAL_DECODE["footswitch"],  # DEFAULT False: force one-foot jacks, model alternates (2026-07-02)
+        hold_release_run=CANONICAL_DECODE["hold_release_run"],  # DEFECT-#3 free-foot-under-hold force-close (2026-07-12, §5c)
+        hold_release_gap=CANONICAL_DECODE["hold_release_gap"], hold_max_beats=CANONICAL_DECODE["hold_max_beats"],
         bpm=bpm, radar=radar_arg,  # SAME radar tau was computed from (conditioning-mechanics §3)
         style=None, guidance_scale=(args.guidance if style_spec else 1.0),
     )

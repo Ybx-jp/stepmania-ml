@@ -317,6 +317,22 @@ def parse_args():
                    help='A/B: ALSO emit a second "Edit" chart with hold_stream_penalty=this value, so a folder holds '
                         'baseline "Challenge" (--hold_stream_penalty, default 0) vs the fix "Edit" vs the "original" '
                         'for a by-ear baseline-vs-fix comparison. 0 = single-arm (no A/B).')
+    p.add_argument('--hold_release_run', type=int, default=CANONICAL_DECODE['hold_release_run'],
+                   help='[DEFECT-#3 free-foot force-close, §5c; DEFAULT 4 = ON, by-ear passed] while a hold pins one '
+                        'foot: an 8th is the fastest allowable free-foot note under it; a note FASTER than an 8th '
+                        '(precomputed onset LOOKAHEAD) concludes the hold ON the current note so the freed foot '
+                        'travels into the fast run; a run of this many 8ths also releases (3-note flourish is free). '
+                        'Fires only on a real defect -> byte-identical where none. 0/None = OFF. §5c.')
+    p.add_argument('--hold_release_gap', type=int, default=CANONICAL_DECODE['hold_release_gap'],
+                   help='the SPEED LIMIT under a hold (default: an 8th = subdiv//2 frames). Free-foot notes at this '
+                        'spacing accumulate toward --hold_release_run; anything FASTER (gap < this: 16th/24th/48th + '
+                        'irregular) force-releases the hold immediately (release on the FIRST note via lookahead).')
+    p.add_argument('--hold_max_beats', type=float, default=CANONICAL_DECODE['hold_max_beats'],
+                   help='[DEFECT-#3 duration cap, §5c; DEFAULT 6] force-close any hold open longer than this many '
+                        'beats regardless of what streams underneath (the quiet "monster" holds). None = no cap.')
+    p.add_argument('--ab_hold_release', action='store_true',
+                   help='A/B: emit the "Edit" arm with --hold_release_run FLIPPED (baseline OFF -> Edit ON, or vice '
+                        'versa), shared-RNG, for the by-ear gate on the free-foot-under-hold force-close.')
     p.add_argument('--footswitch', action=argparse.BooleanOptionalAction, default=CANONICAL_DECODE['footswitch'],
                    help='[DEFAULT OFF, playtest-validated] whether the fatigue governor may foot a same-panel run as '
                         'a FOOTSWITCH (alternating feet). OFF forces one-foot jacks -> the model ALTERNATES instead '
@@ -749,6 +765,8 @@ def main():
                           stamina_breathe=args.stamina_breathe,  # Stage-3 ARC: ceiling breathes with audio energy
                           hold_stream_penalty=args.hold_stream_penalty,  # suppress holds in dense streams (0=off)
                           hold_stream_floor=args.hold_stream_floor, hold_stream_win=args.hold_stream_win,
+                          hold_release_run=args.hold_release_run, hold_release_gap=args.hold_release_gap,  # DEFECT-#3 force-close (§5b; None=off)
+                          hold_max_beats=args.hold_max_beats,  # DEFECT-#3 duration cap (§5c; None=off)
                           footswitch=args.footswitch,  # DEFAULT False = forbid footswitch footing (force one-foot jacks)
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
@@ -794,6 +812,12 @@ def main():
             ab_overrides['footswitch'] = not args.footswitch   # Edit arm = the opposite of the (default OFF) baseline
         if args.ab_no_fast_jump:
             ab_overrides['no_fast_jump'] = not args.no_fast_jump  # Edit arm = uncapped (sub-16th jumps restored)
+        if args.ab_hold_release:
+            # Edit arm = the OPPOSITE of the baseline: if release is OFF, turn the FULL fix ON (8th-run release=4 +
+            # speed limit is automatic + 6-beat duration cap); if ON, turn it OFF.
+            turn_on = args.hold_release_run is None
+            ab_overrides['hold_release_run'] = (4 if turn_on else None)
+            ab_overrides['hold_max_beats'] = (6.0 if turn_on else None)
         if args.ab_onset_window and onset_window is not None:
             # Edit arm = SINGLE-PASS (today's default); Challenge stays WINDOWED. The window shifts p_onset so the
             # single-pass arm needs its OWN tau (recomputed here) — else it would flood/starve past the windowed tau.

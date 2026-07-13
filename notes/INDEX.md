@@ -128,8 +128,16 @@ protects sparse holds) + **`footswitch=False`** — a new footswitch on/off knob
 FOOTSWITCH STRATEGY not intrinsic jacks (forbidding it collapses same-panel runs 81–85%); playtest "sooooo much
 better", forbidding footswitch made the model ALTERNATE (more creative). Method keepers: pooled-vs-PAIRED baseline for
 a defect-vs-X slope; confirm a marginal lead at higher n; SHARED-RNG A/B (common random numbers) to isolate a decode
-knob from sampling noise. **OPEN:** free-foot-overload gate (robust successor to the density proxy); tasteful 16th-jack
+knob from sampling noise. **OPEN:** tasteful 16th-jack
 penalty on the intrinsic residue; graded footswitch policy. Lineage `.../experiment_lineage/hold-in-stream-arc.md`.
+**UPDATE (2026-07-12): the FREE-FOOT-OVERLOAD gate — SHIPPED + CANONICAL (`footspeed_floor_findings.md §5c`).** The robust
+structural successor to the `hold_stream_penalty` density proxy: `generate()` `hold_release_run=4`/`hold_release_gap=None(→8th)`/
+`hold_max_beats=6` (now in `CANONICAL_DECODE`, both CLIs default ON). An 8th is the fastest allowable free-foot note under a
+hold; a FASTER note concludes the hold ON the current note via the precomputed non-causal onset LOOKAHEAD (release on the FIRST
+note of the fast run → freed foot travels); 8th-run→release on the 4th; 6-beat duration cap. BY-EAR "much better, maybe totally
+fixed"; automaton-only (salience residual UNNEEDED). Metric `scratchpad/measure_defect.py` (rebuilt; validated vs the documented
+holdfix 2/holdbug 4 anchor). ★ METHOD SCAR: a persist-exclusion metric HID the defect 4× (dropped the release-coincident note) —
+the ear was ground truth. Residual accepted: a hold that OPENS on a fast note (two-foot hold-entry).
 **METRICS-HALF CONFIRMATION (2026-07-02, after the ship — playtest was PRIMARY):** rerunning `probe_quality_variance.py`
 under the new `CANONICAL_DECODE` shows the BPM→quality defect (r=−0.68) is **FULLY resolved → +0.11** (perm p 0.56),
 quality −2.07 → +1.48, 30/30 songs up — a defect-blind realism critic converged on the ears (clean 1-var: critic

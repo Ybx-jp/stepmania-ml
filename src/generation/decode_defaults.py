@@ -42,6 +42,15 @@ CANONICAL_DECODE: dict = {
     # be one-foot jacks. Playtest: OFF forced the model to ALTERNATE (more creative, less brutal voltage); japa1
     # "sooooo much better". Set the DEPLOYED default OFF for now; revisit a graded footswitch policy later.
     "footswitch": False,
+    # ★ FREE-FOOT-UNDER-HOLD FORCE-CLOSE (defect #3; 2026-07-12, by-ear PASSED "much better, maybe totally fixed").
+    # While a hold pins one foot: (a) an 8th is the fastest allowable free-foot note under it — a note FASTER than an
+    # 8th (via the precomputed non-causal onset LOOKAHEAD) concludes the hold ON the current note so the freed foot
+    # travels into the fast run; (b) a run of 8ths reaching hold_release_run force-releases; (c) hold_max_beats caps
+    # duration. Fires ONLY on a real defect -> byte-identical where none (no-op). See notes/footspeed_floor_findings.md
+    # §5c + conditioning-mechanics §7. hold_release_gap=None -> generate() resolves it to an 8th (subdiv//2).
+    "hold_release_run": 4,          # 8th-run length under a hold that triggers release (the 3-note flourish is free)
+    "hold_release_gap": None,       # speed limit (frames); None -> an 8th = subdiv//2; faster-than-this force-releases
+    "hold_max_beats": 6.0,          # force-close any hold open longer than this many beats (the quiet monster cap)
 }
 
 

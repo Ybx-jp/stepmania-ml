@@ -130,6 +130,26 @@ The user's OPEN priority, resolved at the onset level (RIGHT population this tim
 - **New residual [H-winddown]** (SEPARATE, pre-existing): neither arm winds down into a silence/outro — candidate =
   the window restores tail p_onset peaks so the stamina breathe arc thins the outro less (queued probe).
 
+## Results — 2026-07-12 session 2 (DEFECT #3 free-foot-under-hold FIXED, by-ear PASSED, canonicalized; `notes/footspeed_floor_findings.md §5c`)
+The #3 fix, built structural-primary ([[structural-over-salience]]) before the label matrix per the 07-12b decision below.
+- **The metric was the story (a 4-round attribution scar).** Rebuilt `scratchpad/measure_defect.py` (the prior one was lost
+  to the gitignore-free scratchpad); validated it vs the documented anchor EXACTLY (holdfix 2 / holdbug 4). But my
+  `require_persist` "escape-note" exclusion (discard the note that co-occurs with the hold's tail) kept REPORTING 0 while
+  the user's EAR heard a real defect — **4 rounds** (byear → v2 speed-limit → v3 lookahead), each time the ear was right
+  and the metric was hiding the release-coincident note. Corrected metric (`hold_speed_violations`) = a note under a
+  PERSISTING hold (pin continues past it) followed by a faster-than-8th note. LESSON: match the metric to the FELT property;
+  the ear is ground truth (Rule 8), and "0 by my metric" is not "0" until the metric is proven to SEE the property.
+- **The fix chain:** (v1) automaton force-close on the Nth free-foot 8th-run note (release the pinned foot → two-foot
+  stream). Sweep 21→1 8th-runs over 10 songs, 0 over-release, holds SHORTENED-not-deleted. (v2) added a SPEED LIMIT (8th =
+  fastest allowable) + 6-beat DURATION CAP — but released on the 2nd fast note, leaving the 1st stuck. (v3, the WIN) the
+  user's exact rule: conclude the hold ON THE FIRST note of a fast run so the freed foot travels into it — implemented via
+  the **precomputed NON-CAUSAL onset schedule** (`onset[:,t+1:t+gap].any()` looks ahead → release NOW). Watch Out
+  persist-violations 4→0; by-ear "much better, maybe totally fixed."
+- **SHIPPED CANONICAL:** `hold_release_run=4`/`hold_release_gap=None(→8th)`/`hold_max_beats=6` in `CANONICAL_DECODE`, both
+  CLIs default ON, byte-identical where no defect fires. **`stamina_hold_bump` salience residual NOT built (unneeded)** —
+  the automaton alone drove it to 0, VALIDATING [[structural-over-salience]] decisively. Residual accepted (by-ear fine):
+  a hold that OPENS on a fast note (a two-foot hold-ENTRY the lookahead can't touch — can't release a hold the frame it opens).
+
 ## Decisions — 2026-07-12 (b): pre-labeling sequencing + the critic-as-optimizer framing
 A design conversation before spending the label budget. Fork status was audited (which flaws remain, do they POLLUTE
 taste labels):
@@ -161,10 +181,10 @@ taste labels):
   regardless of architecture (taste is a supervision problem).
 
 ## Open fork (binding question)
-NEXT ACTION = **the #3 free-foot-under-hold fix** (structural-primary, [[structural-over-salience]]), THEN the E0.1
-best-of-N spread set (harm_calib excluded as an axis). Two tracks: (A) **decode-fix the 3 defects** — #1 FIXED+SHIPPED
-(hangover + universal window); #2 PARTIAL (lever off-default); #3 = NEXT-UP; empty-middles SHELVED; [H-winddown]
-queued. (B) **Phase 2 taste-align the critic (R3)** — the confirmed crux for best-of-N, needs the user's preference
+NEXT ACTION = **the E0.1 best-of-N spread set** (harm_calib excluded as an axis) — the #3 fix that gated it is now DONE.
+Two tracks: (A) **decode-fix the 3 defects** — #1 FIXED+SHIPPED (hangover + universal window); #2 PARTIAL (harm_calib lever
+off-default); **#3 ✅ FIXED+SHIPPED+CANONICAL (2026-07-12, automaton force-close via onset lookahead, by-ear passed)**;
+empty-middles SHELVED; [H-winddown] queued. (B) **Phase 2 taste-align the critic (R3)** — the confirmed crux for best-of-N, needs the user's preference
 labels; the defects ARE its negative targets, so (A) feeds (B). E4 (critic-as-optimizer) is recorded, gated on E0.1.
 
 ## Attribution corrections / method keepers (this thread)

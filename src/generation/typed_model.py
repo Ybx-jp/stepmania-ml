@@ -451,7 +451,8 @@ class LayeredTypedChartGenerator(nn.Module):
                  stamina_ceiling=None, stamina_tau=8.0, stamina_scale=15.0, stamina_max_bump=0.45,
                  stamina_breathe=0.0, stamina_breathe_win=96, stamina_breathe_floor=0.4,
                  stamina_breathe_local_win=None,
-                 hold_stream_penalty=0.0, hold_stream_win=16, hold_stream_floor=0.25):
+                 hold_stream_penalty=0.0, hold_stream_win=16, hold_stream_floor=0.25,
+                 hold_release_run=None, hold_release_gap=None, hold_max_beats=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -661,6 +662,16 @@ class LayeredTypedChartGenerator(nn.Module):
         gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = self.bos.expand(B, 1, -1)
         held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
+        # DEFECT-#3 free-foot-stream-under-hold force-close (§5b): while a hold pins one foot, if the FREE foot
+        # streams >= hold_release_run notes at <= hold_release_gap (8th) spacing, RELEASE the held foot so the
+        # section becomes a two-foot stream. hold_release_run=None -> skip -> BYTE-IDENTICAL (and v1 no-op via the
+        # onset intent being the trigger). Gap default = an 8th (subdiv//2). Run counter + last-free-foot frame:
+        hold_release_gap = int(hold_release_gap) if hold_release_gap is not None else max(1, subdiv // 2)  # 8th = speed limit
+        hold_max_frames = int(round(hold_max_beats * subdiv)) if hold_max_beats is not None else None      # duration cap (beats->frames)
+        ff_run = torch.zeros(B, dtype=torch.long, device=device)             # free-foot stream length while a hold is open
+        ff_last = torch.full((B,), -999, dtype=torch.long, device=device)    # frame of last free-foot press (<=8th gap check)
+        ff_last_uh = torch.zeros(B, dtype=torch.bool, device=device)         # was the last free-foot note UNDER a hold?
+        hold_start = torch.full((B, NUM_PANELS), -1, dtype=torch.long, device=device)  # frame each open hold began (dur cap)
         prev_pat = torch.full((B,), -1, dtype=torch.long, device=device)    # previous note's pattern (for rep penalty)
         next_foot = torch.zeros(B, dtype=torch.long, device=device)         # 0=left, 1=right (crossover automaton)
         if pattern_bias is not None:
@@ -918,11 +929,51 @@ class LayeredTypedChartGenerator(nn.Module):
                 proposed = typ + 1                                            # symbol 1..4
                 close = held & active                                         # model notes a held panel -> close it
                 free_act = (~held) & active                                   # fresh note on a free panel
+                if hold_release_run is not None:                              # DEFECT-#3 free-foot force-close (§5b/§5c)
+                    opening = free_act & ((proposed == 2) | (proposed == 4))   # (B,4) hold(s) OPENING this very frame
+                    hold_open = held.any(1) | opening.any(1)                   # (B,) a hold is open (incl. one opening now)
+                    # PRE-THINNING demand (ordering guard): the free-foot INTENT this frame reads the raw onset,
+                    # NOT the stamina-thinned on_t -> a future stamina_hold_bump can't erase the release trigger.
+                    # EXCLUDE the opening hold-head itself (~opening): it's a hold, not a free-foot stream note, else
+                    # a lone hold-open would falsely start a run. A note simultaneous with a hold-OPEN (.H1.) DOES count.
+                    ff_demand = ((~held) & panel_bits[pat].bool() & onset[:, t].unsqueeze(1) & ~opening).any(1)   # (B,)
+                    gap = t - ff_last                                          # frames since the last free-foot note
+                    in_stream = ff_demand & hold_open & (gap > 0) & (gap <= hold_release_gap)   # within an 8th
+                    ff_run = torch.where(ff_demand & hold_open,                # streaming under an open hold:
+                                         torch.where(gap <= hold_release_gap, ff_run + 1, torch.ones_like(ff_run)),
+                                         torch.where(hold_open, ff_run, torch.zeros_like(ff_run)))   # hold up: hold run; else 0
+                    # ★ SPEED LIMIT via NON-CAUSAL LOOKAHEAD (user 2026-07-12): an 8th is the FASTEST allowable note
+                    # under a hold. The onset schedule is PRECOMPUTED for all frames, so when a free-foot note under an
+                    # already-open hold is FOLLOWED within < an 8th (any onset in t+1..t+gap-1: 16th/24th/48th + irregular
+                    # 4-5f) by another onset, CONCLUDE THE HOLD ON THIS note -> the freed foot travels DURING it for the
+                    # fast note (release on the FIRST note of the run, per the user's rule). `held.any(1)` (not hold_open)
+                    # requires the hold to predate THIS frame, so a hold's own .H1. open frame can't insta-close.
+                    hi = min(t + hold_release_gap, T)
+                    next_fast = (onset[:, t + 1:hi].any(1) if hi > t + 1
+                                 else torch.zeros(B, dtype=torch.bool, device=device))  # a note faster than an 8th ahead
+                    # BACKWARD guard for the .H1. edge (a fast note whose predecessor was the hold's OPEN-frame note):
+                    back_fast = (gap > 0) & (gap < hold_release_gap) & ff_last_uh
+                    fast_release = ff_demand & held.any(1) & (next_fast | back_fast)
+                    run_release = ff_run >= hold_release_run                   # a run of 8ths reaching the threshold
+                    # ★ DURATION CAP (hold_max_beats): force-close any hold open longer than hold_max_frames beats,
+                    # regardless of what's underneath (the quiet 'monster' holds). None -> no cap.
+                    if hold_max_frames is not None:
+                        dur_close = held & (hold_start >= 0) & ((t - hold_start) >= hold_max_frames)
+                    else:
+                        dur_close = torch.zeros_like(held)
+                    force_close = (held & (fast_release | run_release).unsqueeze(1)) | dur_close
+                    close = close | force_close
+                    ff_last = torch.where(ff_demand, torch.full_like(ff_last, t), ff_last)
+                    ff_last_uh = torch.where(ff_demand, hold_open, ff_last_uh)  # was THIS free-foot note under a hold?
+                    ff_run = torch.where(force_close.any(1), torch.zeros_like(ff_run), ff_run)   # reset after release
                 prop = torch.where(proposed == 3, torch.ones_like(proposed), proposed)  # tail-on-free -> tap
                 state = torch.zeros(B, NUM_PANELS, dtype=torch.long, device=device)
                 state = torch.where(close, torch.full_like(state, 3), state)  # tail closes the hold
                 state = torch.where(free_act, prop, state)                    # tap/head/roll on free panels
                 held = (held & ~close) | (free_act & ((prop == 2) | (prop == 4)))
+                if hold_release_run is not None:  # track each open hold's START frame (for the duration cap)
+                    hold_start = torch.where(held & (hold_start < 0), torch.full_like(hold_start, t), hold_start)
+                    hold_start = torch.where(~held, torch.full_like(hold_start, -1), hold_start)  # clear on release
                 fresh_press = free_act                                        # panels FRESHLY pressed (what a foot hits)
             else:
                 state = torch.where(active, typ + 1, torch.zeros_like(typ))   # stateless per-panel symbol

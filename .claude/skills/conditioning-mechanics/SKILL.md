@@ -258,8 +258,27 @@ missed `dens` (a FRACTION — doesn't scale with `f16`); same class as the `--st
 (A/B: broken was "significantly worse" but the defect PERSISTS):** the gate suppresses the hold-HEAD on onset density,
 but the felt pathology is a LONG hold (5–6 beats) with a sustained ONE-FOOT stream (8ths @148bpm) running underneath —
 not addressed by head-gating. Correct metric = free-foot stream ≥4 notes @≤8th UNDER a hold: holdfix 2, holdbug 4.
-The real fix is a FREE-FOOT-OVERLOAD gate (force-close the hold when the free foot streams) — IN PROGRESS. See
-`notes/footspeed_floor_findings.md §5`.
+The real fix is a FREE-FOOT-OVERLOAD gate (force-close the hold when the free foot streams) — ✅ BUILT + SHIPPED, below.
+**★ HOLD FORCE-CLOSE — `hold_release_run` / `hold_release_gap` / `hold_max_beats` (defect #3; SHIPPED CANONICAL DEFAULT
+2026-07-12, by-ear "much better, maybe totally fixed"; `notes/footspeed_floor_findings.md §5c`).** The structural successor
+to `hold_stream_penalty` for the free-foot-stream-under-a-hold pathology (a long hold pins one foot while the free foot
+streams). In `generate()`'s `hold_aware` block, right after `free_act` (`typed_model.py` ~:929), it force-closes an OPEN
+hold (folds into `close`) under three rules — the user's spec: **(1) SPEED LIMIT via NON-CAUSAL LOOKAHEAD** — an 8th
+(`hold_release_gap`, default `None`→`subdiv//2`) is the fastest allowable free-foot note under a hold; because the onset
+schedule is PRECOMPUTED for all frames, when a free-foot note under an already-open hold is FOLLOWED within < an 8th by
+another onset (`onset[:,t+1:t+gap].any()`: 16th/24th/48th + irregular), the hold CONCLUDES ON THE CURRENT note → the freed
+foot travels into the fast run (release on the FIRST note, not the 2nd). **(2) 8th-RUN** — a run of `hold_release_run`
+(=4) 8th-spaced free-foot notes force-releases (the 3-note flourish is free). **(3) DURATION CAP** — `hold_max_beats` (=6)
+force-closes any hold open longer than that (`hold_start` per-panel age), catching quiet 'monster' holds. **PRE-THINNING
+ORDERING GUARD** baked in: the trigger reads the raw `onset` intent, not the stamina-thinned `on_t`, so a future
+`stamina_hold_bump` can't erase it (never needed — automaton alone drives the defect to 0). Fires ONLY on a real defect →
+**byte-identical where none** (a no-op on clean charts + v1 where the pattern is absent). `hold_release_run=0/None` = OFF.
+**★ METRIC TRAP (bit 4× this arc):** the defect is INVISIBLE to a persist-exclusion metric — the release note co-occurs
+with the tail frame, so discarding it as a two-foot 'escape' HIDES the exact note the player feels. The correct metric
+(`scratchpad/measure_defect.py hold_speed_violations`, `freefoot_stream_runs`) counts a note under a PERSISTING hold (pin
+continues past it) followed by a faster-than-8th note — and the EAR was ground truth every round. Residual (accepted): a
+hold that OPENS on a fast note (a two-foot hold-ENTRY) — the lookahead can't release a hold the frame it opens.
+See `notes/footspeed_floor_findings.md §5c`, memory [[structural-over-salience]].
 **Metric caveat (2026-07-02):** the realism critic reads the BINARY note-PRESENCE grid (tap/hold/tail/roll all →
 "present"), so this knob is PRESENCE-BLIND to it — it changes tap-vs-hold type + a downstream same-panel-repeat jack,
 neither of which moves the grid much. Do NOT validate `hold_stream_penalty` on the presence critic (a rerun of

@@ -127,6 +127,7 @@ DECODE = dict(
     onset_phase_calib=(0.0, 1.0),                      # ★ THE 16th-UNLOCK — un-buries 16th-offbeats so they fire where audio affords; b8=0, b16≈1.0
     hold_stream_penalty=8.0, hold_stream_floor=0.45, hold_stream_win=16,  # HOLD-IN-STREAM fix (2026-07-02): suppress holds in dense streams; floor protects sparse holds
     footswitch=False,                                  # (2026-07-02) forbid footswitch footing -> model ALTERNATES same-panel runs (playtest "sooooo much better")
+    hold_release_run=4, hold_release_gap=None, hold_max_beats=6.0,  # ★ FREE-FOOT-UNDER-HOLD force-close (defect #3, 2026-07-12, by-ear PASSED): 8th = fastest allowable note under a hold; a faster note concludes the hold ON that note (onset LOOKAHEAD -> freed foot travels); 6-beat duration cap. Byte-identical where no defect. §5c
 )
 # generate() supplies the rest of the governor internals — DO NOT hand-set unless retuning:
 #   stamina_breathe_floor=0.4 (outro-collapse fix), stamina_max_bump=0.45, stamina_breathe_win=96,
