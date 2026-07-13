@@ -41,7 +41,7 @@ def parse_args():
     p.add_argument('--max_len', type=int, default=768); p.add_argument('--difficulty', type=int, default=3)
     p.add_argument('--min_len', type=int, default=6); p.add_argument('--max_gap', type=int, default=2)
     p.add_argument('--penalties', default='0,3,6')                # baseline first, then the fix doses
-    p.add_argument('--out', default='cache/holdstream_fix.csv')
+    p.add_argument('--out', default='outputs/probe_results/holdstream_fix.csv')
     return p.parse_args()
 
 

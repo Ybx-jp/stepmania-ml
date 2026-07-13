@@ -27,7 +27,7 @@ Experiment-design guards:
 
 Usage:
   SMOKE : python probe_quality_features.py --data_dir data/ --audio_dir data/ --n 8  --k 1
-  FULL  : python probe_quality_features.py --data_dir data/ --audio_dir data/ --n 64 --k 3 --out cache/quality_features.csv
+  FULL  : python probe_quality_features.py --data_dir data/ --audio_dir data/ --n 64 --k 3 --out outputs/probe_results/quality_features.csv
 """
 import warnings, os
 warnings.filterwarnings('ignore'); os.environ['AUDIOREAD_LOG_LEVEL'] = 'ERROR'
@@ -66,7 +66,7 @@ def parse_args():
     p.add_argument('--k', type=int, default=3, help='#generation samples per song, critic-averaged (de-noise the target)')
     p.add_argument('--max_len', type=int, default=768)
     p.add_argument('--cache_dir', default='cache/samples_v3')  # 42-dim highres cache
-    p.add_argument('--out', default='cache/quality_features.csv')
+    p.add_argument('--out', default='outputs/probe_results/quality_features.csv')
     p.add_argument('--difficulty', type=int, default=None, help='restrict to one difficulty class (0-3) to avoid pooling')
     return p.parse_args()
 

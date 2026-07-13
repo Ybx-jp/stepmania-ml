@@ -57,7 +57,7 @@ def parse_args():
     p.add_argument('--n', type=int, default=40); p.add_argument('--k', type=int, default=3)
     p.add_argument('--max_len', type=int, default=768)
     p.add_argument('--difficulty', type=int, default=3)     # Hard by default (the tempo-defect tier)
-    p.add_argument('--out', default='cache/bpm_hold_decomp.csv')
+    p.add_argument('--out', default='outputs/probe_results/bpm_hold_decomp.csv')
     return p.parse_args()
 
 

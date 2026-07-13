@@ -10,7 +10,7 @@ It maps the exporter's ~20 flags onto a few friendly controls (conditioning MODE
 instead of remembering `--style "chaos=q0.99" --guidance 3.0`, a governor PRESET
 instead of three stamina knobs), shows the exact command it will run, and streams
 generation output live. Nothing here is ML logic — it just builds an argv and
-shells out to experiments/generation_typed/export_typed_samples.py.
+shells out to scripts/export_typed_samples.py.
 """
 import os
 import sys
@@ -23,7 +23,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXPORTER = os.path.join("experiments", "generation_typed", "export_typed_samples.py")
+EXPORTER = os.path.join("scripts", "export_typed_samples.py")
 
 # The deployed highres model (gen_motif_full_fixed) vs the older style/base checkpoint.
 MODELS = {

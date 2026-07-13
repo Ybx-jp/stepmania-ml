@@ -58,7 +58,7 @@ def parse_args():
     p.add_argument('--max_len', type=int, default=768); p.add_argument('--difficulty', type=int, default=3)
     p.add_argument('--min_len', type=int, default=6)   # a stream = >=6 alternating single-tap onsets
     p.add_argument('--max_gap', type=int, default=2)   # 8th (2) / 16th (1) spacing; not slower
-    p.add_argument('--out', default='cache/stream_holdjack.csv')
+    p.add_argument('--out', default='outputs/probe_results/stream_holdjack.csv')
     return p.parse_args()
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""SECOND-FACTOR HUNT for the flip-point g0, on the CLEAN k=4 labels (cache/flip_point_v2.csv).
+"""SECOND-FACTOR HUNT for the flip-point g0, on the CLEAN k=4 labels (outputs/probe_results/flip_point_v2.csv).
 
 Question: SB (env_strongbeat_frac) predicts the per-song flip guidance g0 only WEAKLY across 32 songs
 (Spearman +0.29 clean / +0.39 censored, down from the small-n +0.72). The weakening is localized to a
@@ -47,7 +47,7 @@ def main():
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--seed', type=int, default=42); p.add_argument('--n_build', type=int, default=60)
     p.add_argument('--cache_dir', default='cache/samples_v3'); p.add_argument('--max_len', type=int, default=768)
-    p.add_argument('--flip_csv', default='cache/flip_point_v2.csv')
+    p.add_argument('--flip_csv', default='outputs/probe_results/flip_point_v2.csv')
     p.add_argument('--n_perm', type=int, default=500)
     args = p.parse_args(); set_seed(args.seed)
 

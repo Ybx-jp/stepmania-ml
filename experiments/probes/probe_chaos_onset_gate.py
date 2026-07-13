@@ -135,7 +135,7 @@ def parse_args():
     p.add_argument('--gate_gain', type=float, default=3.0, help='ADD-gate strength (replace-unlock variant)')
     p.add_argument('--desmear_gain', type=float, default=4.0, help='DESMEAR subtract strength (keep-unlock variant)')
     p.add_argument('--measures', type=int, default=8, help='#measures in the ASCII grid dump')
-    p.add_argument('--out', default='cache/chaos_onset_gate.csv')
+    p.add_argument('--out', default='outputs/probe_results/chaos_onset_gate.csv')
     return p.parse_args()
 
 

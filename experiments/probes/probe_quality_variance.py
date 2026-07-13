@@ -42,7 +42,7 @@ def parse_args():
     p.add_argument('--max_len', type=int, default=768)
     p.add_argument('--checkpoint', default=DEPLOYED_CHECKPOINT)
     p.add_argument('--critic', default='checkpoints/realism_critic_graded/best_val.pt')
-    p.add_argument('--out', default='cache/quality_variance_hard.csv')
+    p.add_argument('--out', default='outputs/probe_results/quality_variance_hard.csv')
     return p.parse_args()
 
 

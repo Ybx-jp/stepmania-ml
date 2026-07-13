@@ -132,3 +132,6 @@ transcripts/
 
 # personal learning material (interview prep), not repo content
 teaching/
+
+# session scratch (working files, not repo content)
+scratchpad/

@@ -19,7 +19,7 @@ concentration metrics: entropy, Gini, top-mass) should predict tolerance from au
 
 Uses the SAME onset path as the deployed decode (conditioned_p_onset). Features are computed at the BASE
 onset affordance (radar=None, guidance=1, calib off) = a pure audio+difficulty song property available at
-deployment. No AR generation -> cheap (onset forward only). Merges with cache/backbone_tolerance.csv by title.
+deployment. No AR generation -> cheap (onset forward only). Merges with outputs/probe_results/backbone_tolerance.csv by title.
 """
 import warnings, os
 warnings.filterwarnings('ignore')
@@ -104,8 +104,8 @@ def parse_args():
     p.add_argument('--n', type=int, default=40, help='#Hard songs (match the tolerance CSV order)')
     p.add_argument('--max_len', type=int, default=768)
     p.add_argument('--cache_dir', default='cache/samples_v3')
-    p.add_argument('--tol_csv', default='cache/backbone_tolerance.csv')
-    p.add_argument('--out', default='cache/tolerance_audio_density.csv')
+    p.add_argument('--tol_csv', default='outputs/probe_results/backbone_tolerance.csv')
+    p.add_argument('--out', default='outputs/probe_results/tolerance_audio_density.csv')
     return p.parse_args()
 
 

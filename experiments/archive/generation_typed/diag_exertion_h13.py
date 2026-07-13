@@ -36,7 +36,7 @@ from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits, create_datasets
 from src.data.audio_features import AudioFeatureExtractor, AudioFeatureConfig
 from src.generation.typed_model import LayeredTypedChartGenerator
-import experiments.generation_typed.diag_maskpredict_staged as S  # reuse the staged pipeline
+import experiments.archive.generation_typed.diag_maskpredict_staged as S  # co-archived 2026-07-12  # reuse the staged pipeline
 
 AD = S.AD
 CKPT = PROJECT_ROOT / "checkpoints/gen_staged_onset/maskpredict.pt"

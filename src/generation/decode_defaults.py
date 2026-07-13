@@ -1,7 +1,7 @@
 """Single source of truth for the CANONICAL decode palette (the playtest-validated full stack).
 
 Both the public CLI (`scripts/generate.py`) and the playtest exporter
-(`experiments/generation_typed/export_typed_samples.py`) import `CANONICAL_DECODE` and use it for
+(`scripts/export_typed_samples.py`) import `CANONICAL_DECODE` and use it for
 their argparse defaults, so the two CANNOT silently drift apart. This module is the executable form
 of the `generation-defaults` skill — change a value HERE and every entry point moves together.
 

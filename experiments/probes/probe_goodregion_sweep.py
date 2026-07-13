@@ -68,7 +68,7 @@ def parse_args():
     p.add_argument('--difficulty', type=int, default=3, help='3=Hard')
     p.add_argument('--chaos', default='0.2,0.5,0.9', help='--style chaos values to sweep (voltage/air pinned to the loved corner)')
     p.add_argument('--guidance', default='1.5,3.0', help='CFG guidance values to sweep')
-    p.add_argument('--out', default='cache/goodregion_smoke.csv')
+    p.add_argument('--out', default='outputs/probe_results/goodregion_smoke.csv')
     return p.parse_args()
 
 

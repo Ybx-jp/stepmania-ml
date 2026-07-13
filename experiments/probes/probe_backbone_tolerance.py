@@ -97,7 +97,7 @@ def parse_args():
     p.add_argument('--cache_dir', default='cache/samples_v3')
     p.add_argument('--spec', default='chaos=0.9,voltage=0.7,air=0.5,freeze=0.5')
     p.add_argument('--guidance', default='1.0,1.5,2.0,2.5,3.0')
-    p.add_argument('--out', default='cache/backbone_tolerance.csv')
+    p.add_argument('--out', default='outputs/probe_results/backbone_tolerance.csv')
     return p.parse_args()
 
 

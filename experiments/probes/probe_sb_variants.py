@@ -3,7 +3,7 @@
 (2026-07-04.) The deployed SB uses onset_env (dim13, coarse ~93ms hop). Test variants — especially on
 highres_onset (dim34, ~5.8ms hop, built to resolve on-grid transients, H4) — and strong-beat CONTRAST (ratio
 of on-beat to off-beat energy) vs the aggregate FRACTION. No generation/model — raw audio features only. Judged by
-LOO-CV R2 vs the n=40 tolerance labels (cache/backbone_tolerance.csv)."""
+LOO-CV R2 vs the n=40 tolerance labels (outputs/probe_results/backbone_tolerance.csv)."""
 import warnings; warnings.filterwarnings('ignore')
 import sys, csv, argparse
 from pathlib import Path
@@ -33,7 +33,7 @@ def main():
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--seed', type=int, default=42); p.add_argument('--n', type=int, default=40)
     p.add_argument('--cache_dir', default='cache/samples_v3'); p.add_argument('--max_len', type=int, default=768)
-    p.add_argument('--tol_csv', default='cache/backbone_tolerance.csv')
+    p.add_argument('--tol_csv', default='outputs/probe_results/backbone_tolerance.csv')
     args = p.parse_args(); set_seed(args.seed)
     val_ds = load_val_dataset(args.data_dir, args.audio_dir, args.seed, args.cache_dir)
     songs = build_songs(val_ds, args.n, difficulty=3, max_len=args.max_len)

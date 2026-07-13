@@ -91,8 +91,8 @@ def parse_args():
     p.add_argument('--cache_dir', default='cache/samples_v3')
     p.add_argument('--spec', default='chaos=0.9,voltage=0.7,air=0.5,freeze=0.5')
     p.add_argument('--guidance', default='1.0,1.25,1.5,1.75,2.0,2.25,2.5,3.0', help='DENSER grid in the cliff zone')
-    p.add_argument('--sb_csv', default='cache/tolerance_audio_density.csv')
-    p.add_argument('--out', default='cache/flip_point.csv')
+    p.add_argument('--sb_csv', default='outputs/probe_results/tolerance_audio_density.csv')
+    p.add_argument('--out', default='outputs/probe_results/flip_point.csv')
     return p.parse_args()
 
 

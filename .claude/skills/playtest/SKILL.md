@@ -46,7 +46,7 @@ Close the loop between the generator and the user's hands. Two jobs:
 
 ## Exporting sets
 
-Driver: `experiments/generation_typed/export_typed_samples.py` (default checkpoint
+Driver: `scripts/export_typed_samples.py` (default checkpoint
 `checkpoints/gen_style/best_val.pt`, which supports difficulty + radar + reference-style + CFG).
 Run from the repo root in the `stepmania-chart-gen` conda env. Writes one playable folder per song
 (original audio + `chart.sm` with generated `Challenge` + original chart for A/B) to `--out_dir`.

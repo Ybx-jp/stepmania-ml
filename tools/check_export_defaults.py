@@ -18,7 +18,7 @@ from pathlib import Path
 warnings.filterwarnings("ignore")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "experiments" / "generation_typed"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 HANDOFF = PROJECT_ROOT / "notes" / "HANDOFF.md"
 START, END = "<!-- CANONICAL-EXPORT-DEFAULTS:START", "<!-- CANONICAL-EXPORT-DEFAULTS:END"

@@ -47,7 +47,7 @@ def parse_args():
     p.add_argument('--seed', type=int, default=42); p.add_argument('--checkpoint', default=DEPLOYED_CHECKPOINT)
     p.add_argument('--n', type=int, default=48); p.add_argument('--max_len', type=int, default=768)
     p.add_argument('--difficulty', type=int, default=3)     # Hard by default (the saturated tier)
-    p.add_argument('--out', default='cache/quality_choreo_hard.csv')
+    p.add_argument('--out', default='outputs/probe_results/quality_choreo_hard.csv')
     return p.parse_args()
 
 

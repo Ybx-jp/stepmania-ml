@@ -34,7 +34,7 @@ def parse_args():
     p.add_argument('--seed', type=int, default=42); p.add_argument('--difficulty', type=int, default=3)
     p.add_argument('--n', type=int, default=200, help='cap (val has ~176 Hard)'); p.add_argument('--max_len', type=int, default=768)
     p.add_argument('--checkpoint', default=DEPLOYED_CHECKPOINT)
-    p.add_argument('--out', default='cache/onset_head_bpm.csv')
+    p.add_argument('--out', default='outputs/probe_results/onset_head_bpm.csv')
     return p.parse_args()
 
 
