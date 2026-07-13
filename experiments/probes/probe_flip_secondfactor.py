@@ -20,7 +20,8 @@ import warnings; warnings.filterwarnings('ignore')
 import sys, csv, argparse
 from pathlib import Path
 import numpy as np
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(1, str(Path(__file__).resolve().parent))  # probes dir (sibling probe imports)
 from src.utils.reproducibility import set_seed
 from probe_quality_features import load_val_dataset, build_songs
 from scipy.stats import spearmanr

@@ -6,6 +6,8 @@ rebuilding the whole corpus. Compares v1 (16th) vs v2 (48th) on the SAME songs:
 Guards the scope's "piecemeal drift" risk (parser re-gridded but features not, or vice-versa).
 """
 import numpy as np
+import sys as _sys; from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # repo root (src imports)
 from src.utils.data_splits import split_chart_files
 from src.data.dataset import StepManiaDataset
 from src.data.stepmania_parser import StepManiaParser

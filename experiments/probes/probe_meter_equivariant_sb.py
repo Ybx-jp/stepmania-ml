@@ -22,7 +22,8 @@ import sys
 from pathlib import Path
 import numpy as np
 from scipy.stats import spearmanr
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(1, str(Path(__file__).resolve().parent))  # probes dir (sibling probe imports)
 # The detector now lives in the shared module so the decode pipeline reuses the SAME validated statistic
 # this probe exercises (single source of truth). This probe stays the VALIDATION reference for it.
 from src.data.meter_detect import _read as read, chart_triplet_frac, phase_hist, strong_readings

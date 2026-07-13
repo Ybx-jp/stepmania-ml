@@ -4,12 +4,20 @@ This project follows the ML Workbench methodology. All ML work must adhere to th
 
 ## Project Overview
 
-- **Task**: Multi-class classification (4 difficulty classes: Beginner, Easy, Medium, Hard)
-- **Architecture**: LateFusionClassifier with Conv1D backbone, dual audio/chart encoders
-- **Baselines**: MLPBaseline, PooledFeatureBaseline (in `src/models/baseline.py`)
-- **Data**: StepMania charts (.sm/.ssc files) + audio features (MFCC, onset, spectral)
-- **Primary metric**: Macro F1 (imbalanced classes with class weighting)
-- **MLflow experiment name**: `stepmania-difficulty-classifier`
+- **Task**: Audio-conditioned StepMania chart **generation** — given a song + a target difficulty,
+  write a playable chart (onset → panel pattern → tap/hold type), with groove/style conditioning.
+- **Deployed model**: `LayeredTypedChartGenerator` (`src/generation/typed_model.py`), checkpoint
+  `checkpoints/gen_motif_v2_48th_cont/best_val.pt` on 42-dim `highres_v2` features (48th grid).
+- **Canonical decode**: `src/generation/decode_defaults.py` + `decode_harness.py` are the single
+  source for the decode palette / tau pipeline. Consult the `generation-defaults` and
+  `conditioning-mechanics` skills BEFORE setting or measuring any generation knob.
+- **Primary metrics**: onset F1 and phase shares offline; **the user's ear is the deciding vote**
+  (playtests in `notes/playtest_log.md`). A learned taste critic supplements both.
+- **Data**: StepMania charts (.sm/.ssc) + audio features. Four feature-cache generations exist —
+  `python tools/cache.py status` is the map; never mix a cache with the wrong checkpoint.
+- **Legacy sub-project**: the difficulty **classifier** (LateFusionClassifier in `src/models/`,
+  `scripts/train.py`, MLflow experiment `stepmania-difficulty-classifier`). It seeded the project,
+  warm-started the generator's audio encoder, and backs the critic — maintained, not active.
 
 ## Experiment Methodology
 
@@ -115,16 +123,24 @@ This seeds: `torch`, `torch.cuda`, `numpy`, `random`, and sets `cudnn.determinis
 ## Key Commands
 
 ```bash
-# Train classifier
+# Generate a chart for your own song (BYO audio; --bpm strongly recommended)
+python scripts/generate.py --audio song.ogg --difficulty Hard --bpm 174 --out MyGenerated
+
+# Canonical dataset-bound export (the playtest/eval path; bare defaults = the deployed config)
+python experiments/generation_typed/export_typed_samples.py --data_dir data/ --audio_dir data/
+
+# Validate the canonical defaults & repo layout
+python tools/check_export_defaults.py
+python tools/check_repo_layout.py
+
+# Feature-cache map / drift check
+python tools/cache.py status
+
+# Legacy classifier train/evaluate
 python scripts/train.py --config config/model_config.yaml --data_dir data/ --audio_dir data/
-
-# Train baseline
-python scripts/train.py --config config/model_config.yaml --data_dir data/ --audio_dir data/ --model_type mlp_baseline
-
-# Evaluate
 python scripts/evaluate.py --checkpoint checkpoints/<exp>/best_val_loss.pt --config config/model_config.yaml --data_dir data/ --audio_dir data/
 
-# Run tests
+# Run tests (includes layout + canonical-default enforcement)
 pytest tests/
 ```
 
@@ -133,23 +149,29 @@ pytest tests/
 ```
 stepmania-chart-generator/
 ├── config/                    # YAML configs (model, data, experiments)
-├── scripts/
-│   ├── train.py               # Training with MLflow, seed, model selection
-│   └── evaluate.py            # Evaluation with plots and metrics
+├── scripts/                   # Public CLIs: generate.py (BYO song), batch_generate.py,
+│                              #   pull_audio.py, train.py / evaluate.py (legacy classifier)
 ├── src/
-│   ├── config/                # Path management, ExperimentConfig dataclass
-│   ├── data/                  # Dataset, parser, audio features, groove radar
-│   ├── evaluation/            # Evaluation utilities (compute_metrics, load_and_evaluate)
-│   ├── losses/                # Contrastive and ordinal losses
-│   ├── models/                # LateFusionClassifier, baselines, components
-│   ├── training/              # BaseTrainer, Trainer, ContrastiveTrainer, callbacks
-│   ├── utils/                 # Reproducibility, data splits, audio I/O
-│   └── visualization/         # Plotting functions (confusion matrix, etc.)
-├── checkpoints/               # Saved model weights
-├── outputs/                   # Evaluation plots and artifacts
-├── mlruns/                    # MLflow experiment tracking
-└── tests/                     # Unit tests
+│   ├── data/                  # Parser, dataset, audio features, groove radar, offset/meter detect
+│   ├── generation/            # typed_model, decode_defaults/harness (CANONICAL), sm_writer, manifold
+│   ├── models/                # Legacy classifier (LateFusionClassifier, baselines) — critic backbone
+│   ├── training/, losses/     # Trainers, callbacks, contrastive/ordinal losses
+│   └── utils/, visualization/ # Reproducibility, splits, audio I/O, plots
+├── experiments/               # Research code — conventions in experiments/README.md
+│   ├── generation_typed/      # Active generator lab: live trainers + canonical exporter
+│   ├── probes/                # Cross-cutting standalone probes (run from repo root)
+│   ├── realism_critic/        # Taste/realism critic
+│   └── archive/               # Retired trainers (byte-faithful; do not modernize)
+├── tools/                     # check_export_defaults.py, check_repo_layout.py, cache.py, chart_ui.py
+├── notes/                     # Findings per experiment + playtest log (notes/INDEX.md is the map)
+├── cache/                     # Feature caches + fitted artifacts (tools/cache.py status)
+├── checkpoints/               # Trained weights (deployed: gen_motif_v2_48th_cont)
+├── outputs/                   # Generated sets, probe results, evaluation artifacts
+└── tests/                     # Unit + regression tests (KV-cache bit-identity, layout, defaults)
 ```
+
+**Layout rules are enforced** by `tools/check_repo_layout.py` (run via pytest): no `.py` at repo
+root; new trainers must be added to its allowlist deliberately; no result CSVs/logs in `cache/`.
 
 ## Reference Materials
 
