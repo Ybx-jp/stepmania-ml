@@ -140,7 +140,7 @@ python tools/cache.py status
 python scripts/train.py --config config/model_config.yaml --data_dir data/ --audio_dir data/
 python scripts/evaluate.py --checkpoint checkpoints/<exp>/best_val_loss.pt --config config/model_config.yaml --data_dir data/ --audio_dir data/
 
-# Run tests (includes layout + canonical-default enforcement)
+# Run tests (layout + defaults + GOLDEN DECODE enforcement; -m 'not golden' skips the ~4-min GPU golden run)
 pytest tests/
 ```
 
@@ -162,7 +162,7 @@ stepmania-chart-generator/
 │   ├── probes/                # Cross-cutting standalone probes (run from repo root)
 │   ├── realism_critic/        # Taste/realism critic
 │   └── archive/               # Retired trainers (byte-faithful; do not modernize)
-├── tools/                     # check_export_defaults.py, check_repo_layout.py, cache.py, chart_ui.py
+├── tools/                     # Validators (check_export_defaults, check_repo_layout, bless_golden) + cache.py, chart_ui.py
 ├── notes/                     # Findings per experiment + playtest log (notes/INDEX.md is the map)
 ├── cache/                     # Feature caches + fitted artifacts (tools/cache.py status)
 ├── checkpoints/               # Trained weights (deployed: gen_motif_v2_48th_cont)
