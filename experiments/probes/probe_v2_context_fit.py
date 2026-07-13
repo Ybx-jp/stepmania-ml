@@ -5,6 +5,8 @@ Directly measures the model that v2 would retrain (NOT train_factorized's differ
 forward+backward at each (T, batch, precision), reports peak CUDA memory + step time. Cheap, decisive.
 """
 import time, torch, torch.nn.functional as F
+import sys as _sys; from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # repo root (src imports)
 from src.generation.typed_model import (LayeredTypedChartGenerator, NUM_PANELS, NUM_SYMBOLS,
                                          NUM_PATTERNS, NUM_TYPES)
 

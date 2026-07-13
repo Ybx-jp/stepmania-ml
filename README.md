@@ -157,24 +157,27 @@ python scripts/evaluate.py --checkpoint checkpoints/ordinal_exp/standard_ordinal
     --config config/model_config.yaml --data_dir data/ --audio_dir data/
 ```
 
-**Phase 2 — generator:**
+**Phase 2 — generator** (the live trainers; earlier lineage steps are preserved in
+[`experiments/archive/`](experiments/archive/generation_typed/README.md)):
 ```bash
-# layered typed generator on musical features (chroma/HPSS/metric-phase)
-python experiments/generation_typed/train_stage1.py
-# groove-radar conditioning + classifier-free guidance
-python experiments/generation_typed/train_radar.py
+# legacy v1 model (42-dim highres features, 16th grid) -> checkpoints/gen_motif_full_fixed
+python experiments/generation_typed/train_motif_figure.py
+# deployed v2 model (48th grid, beat-synchronous)      -> checkpoints/gen_motif_v2_48th_cont
+python experiments/generation_typed/train_motif_figure_v2.py
 ```
 
 **Generate a chart for your own song** (no dataset needed — just an audio file):
 ```bash
-python scripts/generate.py --audio path/to/song.ogg --difficulty Hard --out MyGenerated
-# optional: --bpm 174 (else estimated), --style "chaos=q0.7" (groove feel)
+python scripts/generate.py --audio path/to/song.ogg --difficulty Hard --bpm 174 --out MyGenerated
+# --bpm is strongly recommended (the auto-estimate suffers octave errors and the CLI warns loudly);
+# optional: --style "chaos=q0.7" (groove feel)
 ```
 `--out` is the **group** folder; the song is nested inside it as `MyGenerated/<title>/{chart.sm, audio}`,
 because StepMania expects `Songs/<group>/<song>/<files>` (a bare song folder dropped into `Songs/` becomes
 an empty group and won't show). Drop the `MyGenerated` folder into your StepMania Songs directory to play.
-Uses the deployed 42-dim model and the shipped groove manifold; BPM is auto-estimated; songs longer than the
-model's ~3–4 min context are truncated. Requires the weights (see below).
+Uses the deployed 42-dim model and the shipped groove manifold. Whole songs are charted — the sinusoidal
+positional encoding is extended past the trained context and the onset head is tiled over in-distribution
+windows for long songs (no truncation). Requires the weights (see below).
 
 **Evaluate on held-out songs** (A/B vs the human chart — needs the training dataset on disk):
 ```bash
@@ -202,9 +205,9 @@ pytest tests/
 - 4-panel (DDR-style) charts. Difficulty: Beginner / Easy / Medium / Hard.
 - **Holds are supported. Rolls are not** — there are zero rolls in the training data (0/675), so
   the model never learns to place them. A data limit, stated rather than hidden.
-- **Song length is capped to the model's trained context (~3–4 min).** The generator's positional
-  encoding is 2048 sixteenth-note frames; longer songs are charted up to that point and truncated
-  (with a warning), not chunked. A windowed long-song decode is future work.
+- **Long songs are supported, with a caveat.** Songs past the trained context are handled by extending
+  the positional encoding and tiling the onset head over in-distribution windows; quality in the
+  extrapolated region is validated by ear on a handful of songs, not exhaustively.
 - **Musicality is improved, not solved.** Onset F1 in the high-0.7s means most notes land on-beat,
   not every note; and the AR decoder has an awkward cold-start.
 - **Chaos / syncopation is in-distribution-bounded (a studied, bounded behavior, not an open defect).** The
@@ -255,11 +258,15 @@ src/
   generation/   tokenizer, transformer, factorized, typed, sm_writer, evaluation
   losses/       contrastive + ordinal losses
   training/     trainers, callbacks
-experiments/    one folder per experiment (baselines → transformer → factorized → typed →
-                conditioning → musical-features → realism-critic)
-notes/          a findings write-up per experiment + the playtest log
+experiments/    research code, one folder per lineage (see experiments/README.md for conventions)
+  generation_typed/   the active generator lab + live trainers + canonical exporter
+  probes/             cross-cutting standalone probes (quality attribution, BPM, grid checks)
+  realism_critic/     taste/realism critic
+  archive/            retired trainers, kept byte-faithful for checkpoint reproducibility
+notes/          a findings write-up per experiment + the playtest log (see notes/INDEX.md)
+tools/          repo utilities: canonical-defaults validator, layout checker, cache registry CLI
 checkpoints/    trained weights
-tests/          unit + regression tests (incl. KV-cache bit-identity)
+tests/          unit + regression tests (incl. KV-cache bit-identity, repo-layout conventions)
 ```
 
 ---

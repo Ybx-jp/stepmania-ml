@@ -11,8 +11,9 @@ warnings.filterwarnings('ignore')
 from pathlib import Path
 import numpy as np
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(1, str(Path(__file__).resolve().parent))  # probes dir (sibling probe imports)
 from src.utils.reproducibility import set_seed
 from probe_quality_features import load_val_dataset
 from probe_backbone_tolerance import _onsets, on_grid_share, quarter_representation, sixteenth_anchoring, ONSET_ENV_DIM

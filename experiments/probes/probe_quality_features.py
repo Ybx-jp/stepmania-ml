@@ -35,8 +35,9 @@ import argparse, sys
 from pathlib import Path
 import numpy as np, torch, yaml
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(1, str(Path(__file__).resolve().parent))  # probes dir (sibling probe imports)
 from src.utils.reproducibility import set_seed
 from src.utils.data_splits import create_data_splits, create_datasets, discover_chart_files
 from src.models import LateFusionClassifier

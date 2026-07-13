@@ -36,8 +36,9 @@ import argparse, sys, csv
 from pathlib import Path
 import numpy as np, torch
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(1, str(Path(__file__).resolve().parent))  # probes dir (sibling probe imports)
 sys.path.insert(0, str(PROJECT_ROOT / 'experiments' / 'realism_critic'))
 from src.utils.reproducibility import set_seed
 from choreography_metrics import note_starts, transition_matrix, kl                 # noqa: E402
