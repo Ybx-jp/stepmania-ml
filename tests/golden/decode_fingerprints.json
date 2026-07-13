@@ -1,0 +1,150 @@
+{
+  "_meta": {
+    "blessed_at": "2026-07-13T00:20:56",
+    "git_sha": "b973d68",
+    "gpu": "NVIDIA GeForce RTX 3060",
+    "note": "Byte-determinism is per-machine/torch-version; re-bless after an environment change.",
+    "torch": "2.9.1+cu128"
+  },
+  "cases": {
+    "v1_legacy": {
+      "00_Dead Heat": {
+        "bpms": "0.000=177.0",
+        "charts": {
+          "dance-single:Beginner:4": {
+            "author": "original",
+            "hold_heads": 4,
+            "hold_tails": 4,
+            "n_measures": 85,
+            "n_rows": 1360,
+            "notes_sha256": "03d0616cc445ed90",
+            "rolls": 0,
+            "taps": 111
+          },
+          "dance-single:Challenge:4": {
+            "author": "generated",
+            "hold_heads": 3,
+            "hold_tails": 3,
+            "n_measures": 85,
+            "n_rows": 1360,
+            "notes_sha256": "59f233b5e157501e",
+            "rolls": 0,
+            "taps": 123
+          }
+        },
+        "file_sha256": "b1a83bb7e968e966",
+        "offset": "0.0"
+      },
+      "01_A Stupid Barber": {
+        "bpms": "0.000=132.07",
+        "charts": {
+          "dance-single:Challenge:4": {
+            "author": "generated",
+            "hold_heads": 8,
+            "hold_tails": 8,
+            "n_measures": 55,
+            "n_rows": 880,
+            "notes_sha256": "2441adaf906c3077",
+            "rolls": 0,
+            "taps": 175
+          },
+          "dance-single:Easy:4": {
+            "author": "original",
+            "hold_heads": 16,
+            "hold_tails": 16,
+            "n_measures": 55,
+            "n_rows": 880,
+            "notes_sha256": "9bf7945271dd5f6b",
+            "rolls": 0,
+            "taps": 145
+          }
+        },
+        "file_sha256": "8b7ea9cc3bb3739b",
+        "offset": "-1.872"
+      }
+    },
+    "v2_deployed": {
+      "00_Giudecca": {
+        "bpms": "0.000=155.0",
+        "charts": {
+          "dance-single:Challenge:11": {
+            "author": "generated",
+            "hold_heads": 2,
+            "hold_tails": 2,
+            "n_measures": 75,
+            "n_rows": 3600,
+            "notes_sha256": "3feb0b80ddeb1602",
+            "rolls": 0,
+            "taps": 776
+          },
+          "dance-single:Hard:11": {
+            "author": "original",
+            "hold_heads": 0,
+            "hold_tails": 0,
+            "n_measures": 75,
+            "n_rows": 3600,
+            "notes_sha256": "a8851aaf3095eb06",
+            "rolls": 0,
+            "taps": 1377
+          }
+        },
+        "file_sha256": "2f2b1541ae3f731c",
+        "offset": "0.72"
+      },
+      "01_Dead Heat": {
+        "bpms": "0.000=177.0",
+        "charts": {
+          "dance-single:Beginner:4": {
+            "author": "original",
+            "hold_heads": 4,
+            "hold_tails": 4,
+            "n_measures": 85,
+            "n_rows": 4080,
+            "notes_sha256": "d1eaa2287a6bda84",
+            "rolls": 0,
+            "taps": 111
+          },
+          "dance-single:Challenge:4": {
+            "author": "generated",
+            "hold_heads": 4,
+            "hold_tails": 4,
+            "n_measures": 85,
+            "n_rows": 4080,
+            "notes_sha256": "210aff2c12f4100e",
+            "rolls": 0,
+            "taps": 107
+          }
+        },
+        "file_sha256": "c2a6635db0ff7af1",
+        "offset": "0.0"
+      },
+      "02_A Stupid Barber": {
+        "bpms": "0.000=132.07",
+        "charts": {
+          "dance-single:Challenge:4": {
+            "author": "generated",
+            "hold_heads": 20,
+            "hold_tails": 20,
+            "n_measures": 55,
+            "n_rows": 2640,
+            "notes_sha256": "77366abe5d30b9e4",
+            "rolls": 0,
+            "taps": 144
+          },
+          "dance-single:Easy:4": {
+            "author": "original",
+            "hold_heads": 16,
+            "hold_tails": 16,
+            "n_measures": 55,
+            "n_rows": 2640,
+            "notes_sha256": "01999506751ff2a4",
+            "rolls": 0,
+            "taps": 145
+          }
+        },
+        "file_sha256": "4e9f3e5d2ae3ebc6",
+        "offset": "-1.872"
+      }
+    }
+  }
+}

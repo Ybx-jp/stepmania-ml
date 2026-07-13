@@ -46,3 +46,8 @@ full = [
 # packages, exclude tests/notebooks/experiments/outputs/docs.
 [tool.setuptools.packages.find]
 exclude = ["tests*", "notebooks*", "experiments*", "outputs*", "docs*", "mlruns*", "checkpoints*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "golden: slow GPU golden-decode regression (deselect with -m 'not golden' for quick runs)",
+]

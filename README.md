@@ -264,9 +264,9 @@ experiments/    research code, one folder per lineage (see experiments/README.md
   realism_critic/     taste/realism critic
   archive/            retired trainers, kept byte-faithful for checkpoint reproducibility
 notes/          a findings write-up per experiment + the playtest log (see notes/INDEX.md)
-tools/          repo utilities: canonical-defaults validator, layout checker, cache registry CLI
+tools/          validators (defaults, layout, golden-decode regression) + cache registry CLI
 checkpoints/    trained weights
-tests/          unit + regression tests (incl. KV-cache bit-identity, repo-layout conventions)
+tests/          unit + regression tests (KV-cache bit-identity, layout, golden decode output)
 ```
 
 ---

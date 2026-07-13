@@ -133,5 +133,7 @@ transcripts/
 # personal learning material (interview prep), not repo content
 teaching/
 
-# session scratch (working files, not repo content)
-scratchpad/
+# session scratch: ignore logs/artifacts but KEEP .py committable (metric scripts like
+# scratchpad/measure_defect.py are work-product a prior session lost once — don't re-lose them)
+scratchpad/*
+!scratchpad/*.py
