@@ -28,7 +28,11 @@ mechanism; **this skill is the config VALUES.**
 > defaults, so they CANNOT drift apart — the palette values live in exactly one place (verified: both CLIs resolve
 > byte-identical defaults). The module also exports `apply_phase_calib()` (the `tau`↔16th-unlock coupling, shared
 > so it can't diverge either) and `calib_arg_default()`/`parse_phase_calib()`. **To change the canonical palette,
-> edit the dict in that module — never a script's literal.** This replaced the old failure mode where
+> edit the dict in that module — never a script's literal — and expect `tests/test_decode_golden.py` to FAIL:
+> the bare canonical export on 3 pinned songs is fingerprinted (`tests/golden/`, 2026-07-13), so ANY decode-behavior
+> change must either be a verified no-op or deliberately re-blessed (`python tools/bless_golden.py`) with the
+> regenerated json committed IN THE SAME change — its diff is the reviewable record of what moved. An unexpected
+> golden failure = a regression, not a prompt to re-bless.** This replaced the old failure mode where
 > `scripts/generate.py` drifted stale (`pattern_temperature=0.7`, stamina/breathe off, no 16th-unlock) while the
 > exporter moved on. Current canonical values: `pattern_temperature=1.0`, `type_temperature=0.4`,
 > `fatigue_penalty=2`/`fatigue_free=6`, `stamina_ceiling=50`/`breathe=1.2`, **`hold_stream_penalty=8`/`floor=0.45`

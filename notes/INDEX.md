@@ -5,6 +5,17 @@ results; plans/roadmaps hold forward design; `playtest_log.md` is the subjective
 roughly chronological; the newest (motif → governor → release) is at the bottom.
 
 ## Taste-critic quality arc (2026-07-11 — UN-PARK of ship mode; see lineage `taste-critic-arc.md`, `HANDOFF.md`)
+**UPDATE (2026-07-13 — status corrections + the INFRASTRUCTURE layer):** the 07-12 entry below is superseded on two
+points: the **universal window PASSED by-ear and SHIPPED as the canonical default** (W3600, both CLIs;
+`universal_window_findings.md`) and **defect #3 free-foot-under-hold was FIXED + canonicalized**
+(`footspeed_floor_findings.md §5c`, hold_release_* knobs). Separately, a two-PR **repo reorg** landed (PRs #75/#76):
+root probes → `experiments/probes/`, 75 closed-arc scripts → `experiments/archive/` (conclusions still live in these
+notes — only the apparatus moved), the canonical exporter → **`scripts/export_typed_samples.py`** (compat shim at the
+old path), probe results → `outputs/probe_results/`, layout enforced by `tools/check_repo_layout.py`, feature-cache
+registry `tools/cache.py`. And a **golden decode regression harness** (PR #77): the bare canonical export on 3 pinned
+songs is fingerprinted in `tests/golden/`; any decode-behavior change must pass `tests/test_decode_golden.py` or
+deliberately re-bless (`tools/bless_golden.py`) — mutation-validated (window-off changed only the window-affected song).
+Ship v1.0.0 now has a schedule (packaging decoupled from R3; memory `project-end-state-plan`).
 **UPDATE (2026-07-11):** goal = a taste-aligned critic for best-of-N conditioning SELECTION (kill f48's quality
 VARIANCE). `taste_critic_v2_findings.md` — diagnostic (critic rates the user's OWN charts "fake"; 16th critic can't
 see f48 = the grid wall) → **E1.1 retrained the graded critic on the 48th grid** (`realism_critic_graded_v2`, jitter

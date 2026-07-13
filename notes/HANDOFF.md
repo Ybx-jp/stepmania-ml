@@ -1,8 +1,31 @@
-# HANDOFF — ★ Active = taste-critic-quality arc. Decode-fix track: DEFECT #3 free-foot-under-hold FIXED + CANONICALIZED. Next = the critic best-of-N (E0.1).
+# HANDOFF — ★ Active = taste-critic-quality arc (next = E0.1 best-of-N). NEW: repo REORGANIZED (PRs #75/#76), GOLDEN decode regression (PR #77), ship v1.0.0 now SCHEDULED (parallel packaging track).
 
-**Written 2026-07-12 for the next Claude.** Ship v1.0.0 is PAUSED (taste-critic thread un-parked 2026-07-11; the OTHER
-parked paths — GDL, seq-onset retrain, good-settings formula — stay parked). **This session BUILT + SHIPPED the DEFECT #3
-free-foot-under-hold fix as a CANONICAL DEFAULT (by-ear "much better, maybe totally fixed").**
+**Updated 2026-07-13 for the next Claude** (arc content from the 07-12 session that FIXED defect #3; infra/plan delta
+from the 07-13 reorg session). Ship v1.0.0 is no longer just "paused" — it has a SCHEDULE that runs PARALLEL to the
+research arc (memory [[project-end-state-plan]]): packaging (v1.0.0 tag → HF weights+video+samples → narrative post
+~week 6 / early Sept 2026) is DECOUPLED from R3 research (full reward model, HARD STOP ~week 12, kill criteria
+pre-stated). The OTHER parked paths (GDL, seq-onset retrain, good-settings formula) stay parked.
+
+## ★ REPO GEOGRAPHY CHANGED (2026-07-12/13 reorg — PRs #75, #76; verify via `gh pr view`)
+- **The canonical exporter is now `scripts/export_typed_samples.py`** (a compat shim at the old
+  `experiments/generation_typed/` path keeps every historical command/import working — but write NEW references
+  against `scripts/`).
+- Former ROOT probes → `experiments/probes/` (27 files, arc-map README). 75 closed-arc scripts (17 dead trainers +
+  58 probe/diag/eval) → `experiments/archive/generation_typed/` (byte-faithful; do NOT modernize). The living
+  `generation_typed/` (~48 files) has an arc-map README.
+- **Probe RESULT files (csv/log/txt) live in `outputs/probe_results/`, not `cache/`** (old files migrated; the ~20
+  live probes' default paths repointed). `cache/` = feature caches + fitted artifacts ONLY (`tools/cache.py status`
+  = the registry; manifests written). 50 dead checkpoint dirs → `checkpoints/archive/` (live 7 at canonical paths).
+- **Layout is ENFORCED**: `tools/check_repo_layout.py` via pytest (no root .py, trainer allowlist, no results in
+  cache/). Conventions: `experiments/README.md`. `scratchpad/`: logs gitignored, `.py` committable (metric scripts).
+- **★ GOLDEN DECODE REGRESSION (PR #77, memory [[golden-decode-regression]]):** the bare canonical export on 3
+  pinned songs (Stupid Barber T=2624 control / Giudecca T=3577 just under W3600 / Dead Heat T=4080 window fires)
+  ×{v2, v1} is fingerprinted in `tests/golden/`. **Any decode-behavior change must pass `tests/test_decode_golden.py`
+  or deliberately re-bless (`python tools/bless_golden.py`) committing the json diff in the same change.** Slow
+  (~4 min GPU): `pytest -m "not golden"` for quick runs. Mutation-validated (window-off changed ONLY Dead Heat).
+
+**The 07-12 session BUILT + SHIPPED the DEFECT #3 free-foot-under-hold fix as a CANONICAL DEFAULT (by-ear "much
+better, maybe totally fixed").**
 
 ## WHERE WE ARE
 - **Deployed model UNCHANGED:** v2 48th-grid `gen_motif_v2_48th_cont` + `--features highres_v2`, both CLIs default to it.
@@ -16,8 +39,8 @@ free-foot-under-hold fix as a CANONICAL DEFAULT (by-ear "much better, maybe tota
   the freed foot travels into it). A run of `hold_release_run` 8ths → release (3-note flourish free). `hold_max_beats`
   duration cap for quiet monster holds. Code in `typed_model.generate()` `hold_aware` block (~:929). **`stamina_hold_bump`
   salience residual was NOT built — unneeded (automaton alone drives the defect to 0), validating [[structural-over-salience]].**
-- **Metric (rebuilt this session):** `scratchpad/measure_defect.py` (`scratchpad/` is NOT gitignored → now committed, unlike
-  the prior lost copy). Validated vs the documented anchor EXACTLY (holdfix 2 / holdbug 4). ★ **A/B installs for reference:**
+- **Metric (rebuilt this session):** `scratchpad/measure_defect.py` (COMMITTED — scratchpad `.py` files stay
+  committable by the 07-13 gitignore rule; only scratchpad logs/artifacts are ignored). Validated vs the documented anchor EXACTLY (holdfix 2 / holdbug 4). ★ **A/B installs for reference:**
   `~/sm-generated/holdrelease_{byear,v2,v3}` (v3 = the shipped lookahead fix; Challenge=fix, Edit=baseline-off).
 - **Goal (user's words):** f48 raised quality VARIANCE → fix = SELECTION (a critic picks the best of N conditioning
   variants), plus DECODE-FIXING the concrete defects. #3 was the last defect that would POLLUTE taste labels
@@ -50,8 +73,12 @@ Two complementary tracks; the defects feed the critic (they ARE its negative tar
 2. **Silence-pad by-ear re-confirm (still open from a prior session):** the hangover pad default is SILENCE
    (`hangover_reflect=False`). Re-confirm on the next long-song play. Installed A/B: `~/sm-generated/stamina_probe/Lick`.
 
-## THE v1.0.0 SHIP CHECKLIST (DEFERRED — resume when the arc lands or is set down)
-Regen the personal deliverable, doc the (now-fixed) hold-stream limitation, host, announce ([[marketing-track]]).
+## THE v1.0.0 SHIP TRACK (★ SCHEDULED 2026-07-13 — runs PARALLEL to the arc, does NOT wait for R3)
+Per [[project-end-state-plan]] (user decision, 8+ hrs/wk): **weeks 1-2** cut v1.0.0 (regen the personal set —
+defect #3 is FIXED so there's no hold-stream "known limitation" to document anymore — README pass, tag);
+**weeks 2-4** HF weights + model card (re-confirm pack licenses per `RELEASE_CRITERIA.md`) + demo video + sample
+pack; **weeks 4-6** the narrative post ([[marketing-track]] thesis, publish WITHOUT waiting for R3). The R3/best-of-N
+research is the sequel post, win or null. Resume experience-library guardrails get edited as each milestone lands.
 
 ## CANONICAL EXPORT DEFAULTS (VALIDATED by `tools/check_export_defaults.py`)
 The bare `export_typed_samples.py` run reproduces what the user plays; these MUST equal its argparse defaults.
@@ -92,15 +119,16 @@ guidance = 1.0
 <!-- CANONICAL-EXPORT-DEFAULTS:END -->
 
 ## BRANCH / PR STATE (verify ALL live state via `gh pr view` / `git log origin/main`)
-- On branch **`explore/taste-critic-quality-resolution`** (off `feat/youtube-audio-pull-trim-append`). This session's #3
-  work: `src/generation/{typed_model,decode_defaults}.py`, `experiments/generation_typed/export_typed_samples.py`,
-  `scripts/generate.py`, `notes/footspeed_floor_findings.md §5c`, `scratchpad/{measure_defect,sweep_measure}.py`, this
-  refresh. The docs refresh lands on a `docs/...` branch → PR to `main` (protected).
+- The 07-12 arc work (`explore/taste-critic-quality-resolution`) merged via **PR #74**; the reorg via **PR #75**
+  (phase 1) + **PR #76** (phase 2). The golden harness + this refresh live on **`feat/golden-decode-regression`
+  (PR #77)** — verify its state via `gh pr view 77`.
 - Verify the current commit/PR via `git log` / `gh pr list` (don't trust this doc's state).
-- Still untracked, NOT mine (leave alone): `.claude/commands/`, `.claude/worktrees/`.
+- Still untracked, NOT mine (leave alone): `.claude/commands/`.
 
 ## READ-FIRST (in order)
-Memory [[taste-critic-transfer]] (active thread) + [[structural-over-salience]] (the #3 principle, now VALIDATED) → this
+Memory [[taste-critic-transfer]] (active thread) + [[project-end-state-plan]] (the ship schedule) +
+[[repo-layout-phase1]]/[[golden-decode-regression]] (where things live now + the decode gate) +
+[[structural-over-salience]] (the #3 principle, now VALIDATED) → this
 HANDOFF → lineage `experiment_lineage/taste-critic-arc.md` (Results 2026-07-12 session 2 = the #3 fix) →
 `notes/footspeed_floor_findings.md §5c` (the fix + the 4-round metric scar) → `notes/playtest_log.md`. Load-bearing skills:
 **conditioning-mechanics** (§7 now covers the hold force-close lever + the metric trap), **generation-defaults** (§1 palette
@@ -111,4 +139,6 @@ the persist-exclusion hid the defect 4×).
 **The EAR is the deciding vote** — the persist-based metric reported "0 defect" FOUR TIMES while the user heard a real one;
 each round the ear was right (match the metric to the FELT property, not a convenient aggregate). **The onset schedule is
 PRECOMPUTED/non-causal** — a decode rule CAN look ahead at upcoming onsets (the lookahead trick that fixed #3). **One change
-at a time. Match the verb to the evidence** ([[claim-precision]]). Ship mode is PAUSED, not off.
+at a time. Match the verb to the evidence** ([[claim-precision]]). **Decode changes face the GOLDEN gate** — pass
+`tests/test_decode_golden.py` or deliberately re-bless with the json diff committed alongside (never bless over an
+unexpected failure). Ship mode is SCHEDULED (parallel packaging track), not waiting on the arc.
