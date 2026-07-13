@@ -1,0 +1,871 @@
+#!/usr/bin/env python3
+"""
+Export playable .sm song folders from the typed hold-aware generator.
+
+Loads the style checkpoint and, for each of N val songs, generates a FULL-LENGTH
+typed chart (taps + holds, hold-aware decoding, KV-cached) conditioned on the real
+audio + difficulty, then writes a StepMania song folder: the original audio + a .sm
+holding the generated chart (as "Challenge") and the original chart (for A/B), both
+with hold/tail symbols. Drop a folder into StepMania and play it.
+
+Step 3 (style): pass --reference <some_chart.sm> to generate every song IN THE STYLE OF
+that chart, and --guidance 2-3 to amplify the effect (classifier-free guidance).
+
+Usage:
+    # plain (audio + difficulty only)
+    python scripts/export_typed_samples.py \
+        --data_dir data/ --audio_dir data/ --out_dir outputs/typed_samples --num_songs 8
+
+    # in the style of a reference chart, amplified
+    python scripts/export_typed_samples.py \
+        --data_dir data/ --audio_dir data/ --out_dir outputs/style_samples --num_songs 8 \
+        --reference "data/.../SomeSong/SomeSong.sm" --guidance 2.5
+"""
+
+import warnings, os
+warnings.filterwarnings('ignore'); os.environ['AUDIOREAD_LOG_LEVEL'] = 'ERROR'
+import argparse, re, shutil, sys
+from pathlib import Path
+import numpy as np, torch, yaml
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+from src.utils.reproducibility import set_seed
+from src.utils.data_splits import split_chart_files
+from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
+from src.data.stepmania_parser import StepManiaParser, INFERENCE_GATES
+from src.data.meter_detect import detect_triple_pref  # audio duple/triplet classifier for --auto_b_trip
+from src.generation.typed_model import MOTIF_DIM
+from src.generation.decode_defaults import (CANONICAL_DECODE, calib_arg_default, parse_phase_calib, grid_snap_offset,
+                                             UNIVERSAL_ONSET_WINDOW)
+from src.generation.decode_harness import (
+    conditioned_p_onset, compute_tau, make_feature_extractor, load_generator, chaos_onset_gate_offset, MODEL_ARCH)
+from src.generation.motif_codebook import FIGURE_CLASSES
+from src.generation.typed import symbol_histogram, pair_holds
+from src.generation.sm_writer import charts_to_sm
+from src.generation.playtest_export import enforce_playability
+from src.generation.evaluation import DifficultyCritic
+
+DEFAULT_BPM = 150.0
+
+
+# ── cold-cache prefetch ──────────────────────────────────────────────────────────────────────
+# Audio feature extraction (MFCC / chroma / HPSS / highres-onset) is single-threaded CPU work and, on a
+# COLD cache, DOMINATES wall time: it runs inline before each song while the GPU sits ~idle between decodes
+# (the AR decode is kernel-launch-bound, not compute-bound). We overlap the two by extracting UPCOMING songs'
+# features in worker processes while the GPU decodes the current one — a classic prefetching DataLoader.
+# Values are unchanged (same `ds[i]`, same per-index on-disk cache, just warmed in parallel) → BYTE-IDENTICAL
+# charts; only the SCHEDULE changes. `--prefetch_workers 0` restores the old synchronous path.
+class _OrderedView(torch.utils.data.Dataset):
+    """Maps a decode position -> (dataset_index, sample) following the selected `order`."""
+    def __init__(self, ds, order):
+        self.ds, self.order = ds, list(order)
+
+    def __len__(self):
+        return len(self.order)
+
+    def __getitem__(self, pos):
+        idx = self.order[pos]
+        return idx, self.ds[idx]
+
+
+def _first(batch):
+    return batch[0]   # batch_size=1 -> hand back the (idx, sample) tuple unbatched
+
+
+def _prefetch_samples(ds, order, workers):
+    """Yield (idx, sample) for each idx in `order`, in order; prefetch ahead when workers >= 1."""
+    if not workers or workers < 1:                       # synchronous fallback == the old behavior exactly
+        for idx in order:
+            yield idx, ds[idx]
+        return
+    from torch.utils.data import DataLoader
+    loader = DataLoader(
+        _OrderedView(ds, order), batch_size=1, shuffle=False, num_workers=workers,
+        collate_fn=_first, prefetch_factor=2, persistent_workers=False, pin_memory=False,
+    )
+    it = iter(loader)
+    try:
+        for item in it:
+            yield item
+    finally:
+        del it, loader                                   # tear workers down promptly if the consumer breaks
+
+
+# Sparse-harm-in-quiet phrase calibrator (Step 1 mechanism, notes/phrasing_coherence_findings.md). MUST match
+# probe_phrasing_coherence.py:sparse_harm_offset exactly (boxsmooth win 16, norm01, highres dims energy=0 harm=36).
+def _sparse_harm_offset(audio_np, gain, quiet_q):
+    e = audio_np[:, 0].astype(np.float64)
+    e = (e - e.min()) / (np.ptp(e) + 1e-9)                       # norm01
+    w = 16; e = np.convolve(np.pad(e, w, mode='edge'), np.ones(2 * w + 1) / (2 * w + 1), mode='valid')  # boxsmooth
+    q = np.percentile(e, quiet_q)
+    quiet_gate = np.clip((q - e) / (q + 1e-6), 0.0, 1.0)         # 0 above the quiet quantile, ->1 as energy->0
+    return (gain * quiet_gate * audio_np[:, 36]).astype(np.float32)   # harm onset (dim36) already 0-1
+
+
+# ============================================================================================
+# THE KNOB MAP — how all these args fit together (read before adding/trusting a flag)
+# --------------------------------------------------------------------------------------------
+# This script grew a LOT of knobs across experiments. They are NOT a flat bag — they are one
+# decode PIPELINE with a lever at each stage. Read in decode order; STATUS tags tell you what to
+# actually use. Authoritative mechanism: the `conditioning-mechanics` skill (§ refs below).
+#
+#   STATUS legend:  [LIVE] use it  ·  [DEFAULT] on unless you change it  ·  [OPT-IN] off until you pass it
+#                   [DEPRECATED] superseded, kept only for legacy/ablation  ·  [TRAP] off-manifold/guarded
+#                   [NICHE] narrow special-case
+#
+# 0. SELECT songs ....... --num_songs --groove_select --difficulty_select --song_filter --seed
+#
+# 1. CONDITION (one groove profile, fed to the onset+pattern heads). FOUR routes write the SAME
+#    slot and OVERRIDE each other — pick EXACTLY ONE (precedence high→low; cond-mechanics §1-§3):
+#       --reference / --reference_self  StyleEncoder latent from a full chart        [LIVE/NICHE]
+#       --style "stream=high,..."        manifold partial-spec (the CORRECT radar)    [LIVE]
+#       --match_radar                    the song's OWN 5-dim radar via the manifold  [LIVE]
+#       --radar "chaos=0.9"              mean-pin — OFF-MANIFOLD SMEAR, errors w/o --radar_ood  [TRAP]
+#    --guidance amplifies whichever is set (CFG; 1=off, 1.5-2.5 musical, >3 dissolves backbone). [LIVE]
+#
+# 2. ONSET / DENSITY (which frames fire). cond-mechanics §6.
+#    density target priority:  --target_density  >  manifold E[density|style]  >  source chart.
+#       --onset_phase_calib "b8,b16"  un-buries off-beats so 16ths float w/ audio  [LIVE, DEFAULT-ON "0,1.0"] the 16th lever ("knee not node", song-dep ~0.5-2.0)
+#       --onset_phase_alloc "q,8,16"  flat per-phase QUOTA — SMEARS (exp-design Rule 13)   [DEPRECATED]
+#       --onset_phase_penalty         downbeat gate; does NOT rescue chaos                 [NICHE]
+#    (NOTE: onset is DECOUPLED from motif/figure by design — cond-mechanics §1. Don't re-couple.)
+#
+# 3. PATTERN (which panels): --pattern_temperature (1.0≈real) --repetition_penalty --jump_bias
+#    --prefer --no_crossovers · H15 figure knobs: --motif (continuous) --figure (discrete, soft/capped)
+#
+# 4. TYPE (tap/hold/roll): --type_temperature
+#
+# 5. GOVERNORS (decode-time biomechanics; ALL need bpm [auto from chart] + fatigue on). cond-mech §8.
+#    per-NOTE footwork:  --fatigue_penalty  the two-foot model, RELEASE default 2  [DEFAULT]
+#                        --jack_penalty     OLD single-foot, superseded by fatigue  [DEPRECATED]
+#                        --fatigue_free --max_jack_run (hard cap 2)
+#    per-REGION density:  --stamina_ceiling  Stage-2 relief, DEFAULT 50              [DEFAULT, <=0=off]
+#                         --stamina_breathe  Stage-3 difficulty ARC, DEFAULT 1.2     [DEFAULT, inert w/o ceiling]
+#                         --stamina_tau --stamina_scale
+#    NOT exposed here (use generate() validated defaults): stamina_breathe_floor=0.4 (the outro-collapse
+#    fix), stamina_max_bump=0.45, stamina_breathe_win=96. Expose them only if you need to retune.
+#    NOTE: this exporter's BARE DEFAULT IS THE ONE CANONICAL CONFIG (the `generation-defaults` skill) — model
+#    gen_motif_full_fixed (42-dim highres) + FULL governor (fatigue 2 + stamina@50 + breathe 1.2) + pattern_temp
+#    1.0 + onset_phase_calib "0,1.0" (the 16th-unlock). Run it with NO flags to reproduce what the user plays.
+#    The shipped generate()/scripts/generate.py release center is SEPARATE and conservative (fatigue-only,
+#    pattern_temp 0.7 = stale) — it is NOT the reference for matching playtests; mirror THIS exporter.
+#
+# 6. PLAYABILITY (MANDATORY — enforce_playability FORCES hold_aware + no_jump/cross_during_hold ON
+#    regardless of the flags). --override_playability REASON to deviate (needs explicit approval).
+#
+# 7. OUTPUT: --out_dir --install --songs_dir --max_len --checkpoint --features
+#
+# NOTE on --fatigue_free: defaults 6.0 here vs 12.0 in generate(); BOTH are inside the vouched 6-12 range
+#   (governor_release_region.md) — 12 = design-note default (barrier set high), 6 = the more-gating end this
+#   exporter has always playtested. Not a bug, just two valid points in the band.
+# ============================================================================================
+
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
+    p.add_argument('--out_dir', default='outputs/typed_samples')
+    p.add_argument('--checkpoint', default='checkpoints/gen_motif_v2_48th_cont/best_val.pt',
+                   help='DEFAULT = the v1.0 canonical model (gen_motif_v2_48th_cont, 42-dim on the 48th grid). '
+                        'Legacy gen_motif_full_fixed is the 16th-grid v1 — pair it with --features highres. '
+                        'gen_style/gen_stage1 are 23/41-dim — pair them with --features base/stage1.')
+    p.add_argument('--features', choices=['base', 'stage1', 'highres', 'highres_v2'], default='highres_v2',
+                   help='DEFAULT highres_v2=42-dim on the data-layer-v2 48th grid (timesteps_per_beat=12, beat-sync; '
+                        'the v1.0 canonical model gen_motif_v2_48th_cont) -- auto-selects the for_v2() parser + the '
+                        '48th-grid .sm writer + v2 context length. highres=42-dim 16th grid (cache/samples_v3, the '
+                        'legacy gen_motif_full_fixed). stage1=41-dim (legacy gen_stage1); base=23-dim (gen_style). '
+                        'Pair highres_v2 ONLY with a v2 checkpoint; do NOT mix with gen_motif_full_fixed (grid mismatch).')
+    p.add_argument('--seed', type=int, default=42)
+    p.add_argument('--num_songs', type=int, default=8)
+    p.add_argument('--hardest', action='store_true',
+                   help="for each selected song, generate its HARDEST available difficulty instead of the "
+                        "first-in-dataset-order (which is usually Beginner -- too sparse to reveal decode/groove "
+                        "subtleties). Keeps ALL songs (unlike --difficulty_select Hard, which drops songs lacking "
+                        "a Hard chart). Applies on the non-groove path.")
+    p.add_argument('--relax_gates', action='store_true',
+                   help="INFERENCE-only reach: build the song pool with the WIDENED parser gates "
+                        "(BPM avg [40,320], length [30,600]s, gimmick-guarded) instead of the training "
+                        "gates ([60,200]/[75,130]). Reaches real songs generate() can already chart but "
+                        "the dataset filter hides. Forces cache_dir=None (the valid-song set shifts, so the "
+                        "index-keyed feature cache would go stale). Independent of the data-layer-v2 grid "
+                        "refactor; see notes/constraint_relaxation_roadmap.md. NOTE: v2 (--features highres_v2) "
+                        "now uses these widened gates BY DEFAULT (so --relax_gates is redundant there); use "
+                        "--strict_gates to opt back into the narrow training gates on v2.")
+    p.add_argument('--strict_gates', action='store_true',
+                   help="v2 only: force the NARROW training gates (bpm[60,200]/len[75,130]/simul2) that v2 export "
+                        "otherwise widens by default. For reproducing a pre-fix v2 run; drops ~55%% of viable songs.")
+    p.add_argument('--prefetch_workers', type=int, default=min(4, os.cpu_count() or 1),
+                   help='worker processes that pre-extract UPCOMING songs\' audio features while the GPU '
+                        'decodes the current song (overlaps CPU extraction with GPU decode -> big win on a '
+                        'COLD feature cache). 0 = synchronous (old inline behavior). Output is byte-identical.')
+    p.add_argument('--reference', type=str, default=None,
+                   help='path to a reference .sm/.ssc chart: generate every song IN THE STYLE OF this chart (Step 3)')
+    p.add_argument('--reference_difficulty', type=str, default=None,
+                   help='which difficulty of the reference chart to use (name, e.g. Hard); default = hardest available')
+    p.add_argument('--guidance', type=float, default=1.0,
+                   help='classifier-free guidance scale; >1 amplifies the reference style (2-3 is a good range)')
+    # palette defaults sourced from the CANONICAL single source of truth (src/generation/decode_defaults.py)
+    p.add_argument('--type_temperature', type=float, default=CANONICAL_DECODE['type_temperature'])
+    p.add_argument('--pattern_temperature', type=float, default=CANONICAL_DECODE['pattern_temperature'],
+                   help='which-panels sampling temperature; 1.0 matches real panel balance & jack rate')
+    p.add_argument('--repetition_penalty', type=float, default=CANONICAL_DECODE['repetition_penalty'],
+                   help='>1 further discourages repeating the previous note; 1.0 already matches real')
+    p.add_argument('--jump_bias', type=float, default=0.0, help='pattern preference: + = more jumps, - = fewer')
+    p.add_argument('--no_crossovers', action='store_true', help='forbid crossover steps (foot automaton)')
+    p.add_argument('--no_jump_during_hold', action='store_true',
+                   help='forbid jumps while a hold is open (one free foot); pad-playable holds')
+    p.add_argument('--override_playability', default=None, metavar='REASON',
+                   help='DELIBERATELY deviate from the MANDATORY pad-playability constraints (hold_aware, '
+                        'no_jump_during_hold, no_cross_during_hold). Requires EXPLICIT user approval; pass the '
+                        'reason. Without this, those constraints are FORCED ON regardless of the flags below.')
+    p.add_argument('--no_cross_during_hold', action='store_true',
+                   help='forbid the free foot fast-crossing panels while a hold is open (the B4U one-foot '
+                        'jacks-during-hold awkwardness; brings hold_burst ~6.9%%->4.7%% vs real 4.0%%)')
+    p.add_argument('--onset_phase_alloc', type=str, default=None,
+                   help='[DEPRECATED — SMEARS, prefer --onset_phase_calib] phase-aware onset threshold: target note shares "quarter,8th,16th" (real ~"0.707,0.252,0.041"). '
+                        'Redistributes the density budget across phases so the model\'s own 16th confidence wins 16th '
+                        'slots instead of losing to 8ths (which a single threshold buries). None = single threshold.')
+    p.add_argument('--onset_phase_calib', type=str, default=calib_arg_default(),
+                   help='[LIVE — the validated 16th-unlock lever; NOW DEFAULT-ON] per-phase calibration offset '
+                        '"b8,b16" (logit space) for VARIABLE per-song chaos: corrects the model\'s 16th '
+                        'under-confidence so the 16th count floats with the audio (chaotic songs get many, calm '
+                        'songs ~none). DEFAULT "0,1.0" = the unlock16_b10 by-ear sweet spot; it is "a KNEE not a '
+                        'node" so the right b16 is song-dependent (~0.5 calm -> 1.0 -> 2.0 near-all-16ths on dense '
+                        'songs). Preferred over the flat --onset_phase_alloc quota. "0,0" or "" = single threshold (off).')
+    p.add_argument('--auto_b_trip', action=argparse.BooleanOptionalAction, default=True,
+                   help='[DEFAULT ON] DUPLE/TRIPLET SWITCH (v2/48th-grid only): apply the triplet phase band ONLY '
+                        'to triplet-feel songs. The band magnitude = the 3rd element of --onset_phase_calib (default '
+                        '0.7 if absent); a per-song AUDIO meter detector (triple_pref > --triple_pref_thresh) '
+                        'decides. Triplet songs get the band (committal greens), DUPLE songs get b_trip=0 (no '
+                        'band -> no added busyness). Needs per-song audio+BPM (falls back to the global calib if '
+                        'undetectable). On the 16th grid (v1) the detector is SKIPPED (empty band -> no-op). '
+                        '--no-auto_b_trip reverts to a fixed global b_trip (the 3rd --onset_phase_calib element).')
+    p.add_argument('--triple_pref_thresh', type=float, default=0.0,
+                   help='meter threshold for --auto_b_trip: triple_pref > this => triplet-feel => band on. Default '
+                        '0.0 (the detector boundary; triplet seeds sit +0.16..+0.79, duple songs -0.37..-0.68).')
+    p.add_argument('--grid_snap', choices=['auto', 'off', 'all'], default='auto',
+                   help='[DEFAULT auto] 16th-GRID SNAP (v2/48th-grid only): veto onsets on the pure-48th positions '
+                        '{1,5,7,11}@subdiv=12 (keep-triplets) so notes land on the 16th grid — how humans author '
+                        'LOW/MID charts (real 48th-usage ~0%% at Beginner/Easy/Medium). Preserves the density '
+                        'budget (same note count, snapped on-grid) via a -30 logit offset single-sourced into BOTH '
+                        'tau and decode. Fixes v2 busy-low-diff off-grid jitter (8-23%% of Beginner/Easy notes on '
+                        '24th/48th cells the originals never use). auto = ON for difficulty <= Medium, OFF at Hard '
+                        '(fast 48th runs legit there + the v2 sub-16th win lives at Hard); all = every difficulty; '
+                        'off = never. v1 (16th grid) = no-op. See --no-grid_snap_keep_triplets. '
+                        'notes/grid_snap_findings.md.')
+    p.add_argument('--grid_snap_keep_triplets', action=argparse.BooleanOptionalAction, default=True,
+                   help='[DEFAULT ON] with --grid_snap, KEEP the triplet family ({2,4,8,10}@subdiv=12) and veto '
+                        'ONLY the pure-48th positions {1,5,7,11} — kills 48th jitter but PRESERVES triplets (real '
+                        'even at Medium: 君のハート orig 6%%) so it composes with --auto_b_trip. '
+                        '--no-grid_snap_keep_triplets = full snap (drop triplets too; 16th grid only).')
+    p.add_argument('--target_density', type=float, default=None,
+                   help='override per-chart density (notes/frame) for the onset threshold; default = match the '
+                        'source chart. Use to couple density to chaos (real high-chaos charts run ~0.34 vs ~0.22 '
+                        'baseline) so raising chaos ADDS off-beats instead of replacing the quarter backbone.')
+    p.add_argument('--onset_phase_penalty', type=float, default=0.0,
+                   help='[NICHE] metric gate: off-beat onsets need higher confidence (on-beat 0, 8th -p, 16th -2p). '
+                        '~0.5-1.5 restores the downbeat under chaos conditioning. 0 = off.')
+    p.add_argument('--max_jack_run', type=int, default=CANONICAL_DECODE['max_jack_run'],
+                   help='HARD 16th-jack cap: max consecutive same-panel 16th-adjacent presses. =2 (default, '
+                        'user-approved) allows a justified 2-note 16th jack, hard-forbids 3+. 0/negative = off.')
+    p.add_argument('--min_onset_gap', type=int, default=None,
+                   help='FOOTSPEED FLOOR (frames): min pairwise spacing between onsets; the timing-domain sibling of '
+                        '--max_jack_run. None (default) = auto (2 on the 48th grid -> forbids 1-frame 48th flams but '
+                        'keeps 2-frame triplet-16ths; 1 on the 16th grid = no-op). Raise to 3 to also drop 24ths.')
+    p.add_argument('--no_fast_jump', action=argparse.BooleanOptionalAction, default=True,
+                   help='NO FAST-JUMP CAP (default ON): forbid a >=2-fresh-press JUMP at SUB-16th spacing '
+                        '(since_onset < frames-per-16th; a 24th/48th gap on the 48th grid) -> forces a playable '
+                        'SINGLE but KEEPS the onset. The two-foot sibling of --max_jack_run; closes the hole where a '
+                        'sub-16th jump (D+U->L+R in ~69ms) evades the fatigue governor. v1 (16th grid) = no-op. '
+                        'Pass --no-no_fast_jump to A/B the uncapped (unsteppable) version by ear.')
+    p.add_argument('--jack_penalty', type=float, default=0.0,
+                   help='[DEPRECATED] OLD single-foot jack governor (lambda). SUPERSEDED by --fatigue_penalty (the two-foot model '
+                        'generalizes it), so default 0 = off. Set >0 only to use the jack governor INSTEAD of fatigue. '
+                        'notes/foot_exertion_findings.md')
+    p.add_argument('--fatigue_penalty', type=float, default=CANONICAL_DECODE['fatigue_penalty'],
+                   help='PER-FOOT FATIGUE governor (lambda) — the RELEASE per-note governor (default 2.0). Two-foot '
+                        'biomechanical simulator; governs jacks AND jump streams via min-exertion footing (generalizes '
+                        'the jack governor; required for --stamina_ceiling). Good range 1.5-3 (matches real jack dist, '
+                        'density held); 0=off. notes/governor_release_region.md')
+    p.add_argument('--fatigue_free', type=float, default=CANONICAL_DECODE['fatigue_free'],
+                   help='free exertion zone for the fatigue governor (a rested jump/jack passes; only streams '
+                        'gated). 6 and generate()\'s 12 are BOTH in the vouched 6-12 range (governor_release_'
+                        'region.md): 12 = design-note default (barrier set high), 6 = the more-gating end this '
+                        'exporter has always playtested. <6 jump-starves, >=18 silent.')
+    p.add_argument('--stamina_ceiling', type=float, default=CANONICAL_DECODE['stamina_ceiling'],
+                   help='STAGE-2 STAMINA governor (per-region DENSITY): a slow exertion accumulator thins UPCOMING '
+                        'onset density only where sustained workload is high (a CEILING, never a global dent). Needs '
+                        '--fatigue_penalty (the foot model supplies the cost). DEFAULT 50 (the full-governor playtest '
+                        'value; 25 thins harder toward natural density). <=0 = off. notes/foot_fatigue_design.md "STAGE 2".')
+    p.add_argument('--stamina_tau', type=float, default=CANONICAL_DECODE['stamina_tau'], help='stamina slow-decay (beats, ~several measures)')
+    p.add_argument('--stamina_scale', type=float, default=CANONICAL_DECODE['stamina_scale'], help='excess-workload scale for the tau bump (tanh)')
+    p.add_argument('--stamina_breathe', type=float, default=CANONICAL_DECODE['stamina_breathe'],
+                   help='[DEFAULT 1.2 = arc ON] STAGE-3 ARC: make the stamina ceiling BREATHE with audio energy (high '
+                        'at climaxes -> keep the spicy notes, low in verses -> rest) = a difficulty arc. Needs '
+                        '--stamina_ceiling (inert without it). 0 = flat (no arc). notes/foot_fatigue_design.md "STAGE 3".')
+    p.add_argument('--hold_stream_penalty', type=float, default=CANONICAL_DECODE['hold_stream_penalty'],
+                   help='[HOLD-IN-STREAM fix, DEFAULT 8 = ON] suppress hold-heads in dense STREAM sections. The type '
+                        'head opens holds where a human streams (probe_stream_holdjack.py); the pinned foot then '
+                        'forces jacks (no_cross_during_hold + fatigue). Gated on local onset density so SPARSE '
+                        'musical holds stay. 0=off. notes/hold_in_stream_findings.md.')
+    p.add_argument('--hold_stream_floor', type=float, default=CANONICAL_DECODE['hold_stream_floor'],
+                   help='local onset density below which --hold_stream_penalty is exactly 0 (protects sparse holds).')
+    p.add_argument('--hold_stream_win', type=int, default=CANONICAL_DECODE['hold_stream_win'],
+                   help='frames for the --hold_stream_penalty density gate.')
+    p.add_argument('--ab_hold_stream', type=float, default=0.0,
+                   help='A/B: ALSO emit a second "Edit" chart with hold_stream_penalty=this value, so a folder holds '
+                        'baseline "Challenge" (--hold_stream_penalty, default 0) vs the fix "Edit" vs the "original" '
+                        'for a by-ear baseline-vs-fix comparison. 0 = single-arm (no A/B).')
+    p.add_argument('--hold_release_run', type=int, default=CANONICAL_DECODE['hold_release_run'],
+                   help='[DEFECT-#3 free-foot force-close, §5c; DEFAULT 4 = ON, by-ear passed] while a hold pins one '
+                        'foot: an 8th is the fastest allowable free-foot note under it; a note FASTER than an 8th '
+                        '(precomputed onset LOOKAHEAD) concludes the hold ON the current note so the freed foot '
+                        'travels into the fast run; a run of this many 8ths also releases (3-note flourish is free). '
+                        'Fires only on a real defect -> byte-identical where none. 0/None = OFF. §5c.')
+    p.add_argument('--hold_release_gap', type=int, default=CANONICAL_DECODE['hold_release_gap'],
+                   help='the SPEED LIMIT under a hold (default: an 8th = subdiv//2 frames). Free-foot notes at this '
+                        'spacing accumulate toward --hold_release_run; anything FASTER (gap < this: 16th/24th/48th + '
+                        'irregular) force-releases the hold immediately (release on the FIRST note via lookahead).')
+    p.add_argument('--hold_max_beats', type=float, default=CANONICAL_DECODE['hold_max_beats'],
+                   help='[DEFECT-#3 duration cap, §5c; DEFAULT 6] force-close any hold open longer than this many '
+                        'beats regardless of what streams underneath (the quiet "monster" holds). None = no cap.')
+    p.add_argument('--ab_hold_release', action='store_true',
+                   help='A/B: emit the "Edit" arm with --hold_release_run FLIPPED (baseline OFF -> Edit ON, or vice '
+                        'versa), shared-RNG, for the by-ear gate on the free-foot-under-hold force-close.')
+    p.add_argument('--footswitch', action=argparse.BooleanOptionalAction, default=CANONICAL_DECODE['footswitch'],
+                   help='[DEFAULT OFF, playtest-validated] whether the fatigue governor may foot a same-panel run as '
+                        'a FOOTSWITCH (alternating feet). OFF forces one-foot jacks -> the model ALTERNATES instead '
+                        '(more creative, less brutal voltage; japa1 "sooooo much better"). --footswitch re-enables.')
+    p.add_argument('--ab_footswitch', action='store_true',
+                   help='A/B: emit the "Edit" arm with footswitch FLIPPED vs the default, for a shared-RNG '
+                        'footswitch on/off diagnostic — runs that VANISH depended on footswitch relief; runs that '
+                        'PERSIST are intrinsic jacks (excessive voltage).')
+    p.add_argument('--ab_no_fast_jump', action='store_true',
+                   help='A/B: emit the "Edit" arm with the no-fast-jump cap FLIPPED vs the default (ON), for a '
+                        'shared-RNG by-ear diagnostic on the v2 48th grid — Challenge = capped (jumps forced to '
+                        'playable singles), Edit = uncapped (the sub-16th jumps restored). v1 grid: both arms identical.')
+    p.add_argument('--onset_window', type=int, default=UNIVERSAL_ONSET_WINDOW,
+                   help='[UNIVERSAL SUB-TRAIN-LENGTH WINDOW — CANONICAL DEFAULT 3600, by-ear-validated 2026-07-12] tile '
+                        'the ONSET head over local-PE windows of this many frames for EVERY song longer than it, so a '
+                        "song's END leaves the under-trained abs-PE tail (v2 train len median 3120/max 5128 -> single-"
+                        'pass fires only ~30%% of real tail notes past ~3800; probe_universal_window.py). 3600 = p75 '
+                        'train length. Single-sourced into BOTH tau (conditioned_p_onset window=) and decode (generate '
+                        'onset_window=). 0 = OFF (single-pass, the pre-2026-07-12 behavior). v1/16th grid = no-op. A song '
+                        'shorter than W = byte-identical no-op.')
+    p.add_argument('--onset_tail_hangover', default='auto',
+                   help='hangover pad (frames) so the true song-END centers in a window (else it sits at the final '
+                        "window's under-trained trailing edge). auto = --onset_window//2; 0 = off. Silence-padded "
+                        '(the physically-correct future). No-op when --onset_window is 0 or the song fits.')
+    p.add_argument('--ab_onset_window', action='store_true',
+                   help='A/B: with --onset_window W, emit Challenge = WINDOWED (the fix) and the "Edit" arm = SINGLE-PASS '
+                        '(today\'s default), each with its OWN tau, shared RNG — the by-ear gate for the universal window.')
+    p.add_argument('--harm_calib', type=float, default=0.0,
+                   help='[STEP-1 phrase calibrator] sparse-harm-in-quiet onset logit boost (gain·quiet_gate·harm) '
+                        'so the head allocates for a sparse melodic/harmonic event in a quiet phrase (the HSL '
+                        'piano-solo under-placement). Needs --features highres (perc/harm channels). ~10 to start; '
+                        '0 = off. notes/phrasing_coherence_findings.md.')
+    p.add_argument('--harm_quiet_q', type=float, default=40.0,
+                   help='energy percentile defining "quiet" for --harm_calib (frames below it get the boost).')
+    p.add_argument('--chaos_onset_gate', type=float, default=0.0,
+                   help='[EXPERIMENTAL — chaos×onset gate, notes/chaos_onset_gate_scope.md] tie off-beat placement '
+                        'to LOCAL audio: raise an off-beat onset logit by gain·chaos·offbeat·saliency (saliency = '
+                        'norm01 max(highres-onset dim41, perc dim35)) so high chaos ADDS anchored off-beats and NONE '
+                        'in silence — vs the flat 16th-unlock that smears. Needs --features highres + a chaos --style. '
+                        'Pair with --onset_phase_calib "0,0" to REPLACE the unlock (else it stacks). 0 = off; ~3 to start.')
+    p.add_argument('--motif', type=str, default=None,
+                   help='H15 continuous motif-knob conditioning (gen_motif_full/local2), e.g. '
+                        '"candle=3,trill=-2" or raw "3=3,10=-2". Aliases: candle=3, trill=10, jacksweep=0, '
+                        'bracket=1. Sets a GLOBAL motif vector (CFG-amplifiable with --guidance).')
+    p.add_argument('--figure', type=str, default=None,
+                   help='H15 discrete figure-token conditioning (gen_motif_full), e.g. "sweep" -> a constant '
+                        f'per-section figure schedule. One of {[c for c in FIGURE_CLASSES if c != "sparse"]}.')
+    p.add_argument('--prefer', type=str, default=None, help='panel preference, e.g. "U,R" to favor Up+Right')
+    # ⛔ --radar is DISABLED by default. It MEAN-PINS unset dims (others at the dataset mean), which is OFF-MANIFOLD:
+    # the radar dims are correlated (stream/voltage/air/chaos r 0.71-0.92), so a single-dim pin at high values
+    # SMEARS (chaos=0.9 g3 -> 16th-share 0.98, quarter backbone ~0) -- a knob-shaped artifact, NOT the deployed
+    # knob. The CORRECT path is --style (RadarManifold conditional-fill + projection; coupled dims move together,
+    # backbone preserved). See the conditioning-mechanics skill §2 + its misalignment catalog ("mean-pin vs
+    # manifold conditional-fill"). Only --radar_ood (a deliberate, labeled "see the raw OOD reach" test) re-enables it.
+    p.add_argument('--radar', type=str, default=None,
+                   help='[TRAP] DISABLED (mean-pin = OFF-MANIFOLD smear, not the real knob). Use --style for the manifold '
+                        'path. For a deliberate OOD reach test, pass --radar_ood too. See conditioning-mechanics skill §2.')
+    p.add_argument('--radar_ood', action='store_true',
+                   help='acknowledge that --radar is an off-manifold mean-pin (OOD smear) and run it anyway '
+                        '(deliberate raw-reach test only). Without this, --radar errors out.')
+    p.add_argument('--match_radar', action='store_true',
+                   help="condition each song's generation on its OWN source-chart radar (with --guidance) so "
+                        "the output matches the original's groove profile -- avoids profile drift when you "
+                        "selected/expected a specific feel. Overrides --radar; pair with --guidance 1.5-2.5.")
+    p.add_argument('--reference_self', action='store_true',
+                   help="per-song style conditioning: encode each song's OWN source chart as the StyleEncoder "
+                        "latent (the full-chart path vs match_radar's 5-dim summary). Pair with --guidance ~2.")
+    p.add_argument('--style', type=str, default=None,
+                   help="MANIFOLD-AWARE groove steering: a PARTIAL spec over named axes, e.g. "
+                        "\"stream=high,chaos=low,air=low\". Unspecified dims are conditional-filled from the real "
+                        "covariance and the whole point is projected onto the manifold, so coupled dims stay "
+                        "coherent (vs --radar's pin-others-at-mean, which goes OOD). Levels low/mod/high (or "
+                        "q0.9 / a raw 0-1 value); per-song difficulty. Pair with --guidance ~1.5. Overrides --radar.")
+    p.add_argument('--max_len', type=int, default=1440)  # full 2-min songs (KV-cache makes it cheap)
+    p.add_argument('--install', action='store_true',
+                   help="After exporting, copy the set into the StepMania songs dir (no sudo).")
+    p.add_argument('--songs_dir', default=None,
+                   help="Destination for --install (default: $SM_SONGS_DIR or ~/sm-generated).")
+    p.add_argument('--groove_select', default='none',
+                   choices=['none', 'rich', 'stream', 'voltage', 'air', 'freeze', 'chaos'],
+                   help="GROOVE-VALIDATE the set: pick songs that read strongly on this axis so the set "
+                        "actually tests the hypothesis (freeze=holds, stream/voltage=density, air=jumps, "
+                        "chaos=syncopation; 'rich'=strong across all). Reports the chosen songs' radar. "
+                        "'none' = first-N by seed order (legacy).")
+    p.add_argument('--difficulty_select', default=None, choices=['Beginner', 'Easy', 'Medium', 'Hard'],
+                   help="Restrict groove-selected songs to this difficulty class (harder = more revealing).")
+    p.add_argument('--song_filter', default=None,
+                   help="Comma-separated case-insensitive substrings; keep only songs whose title/path matches "
+                        "one (e.g. 'japa1,deja loin,oh world,high school love'). Applied after groove_select.")
+    return p.parse_args()
+
+
+def safe_name(s):
+    s = re.sub(r'[^\w\- ]+', '', (s or 'untitled').strip(), flags=re.UNICODE).strip()
+    return (s or 'untitled')[:60]
+
+
+def typed_binary(t):
+    t = np.asarray(t); return ((t == 1) | (t == 2) | (t == 4)).astype(np.float32)
+
+
+def main():
+    args = parse_args(); set_seed(args.seed)
+    if args.radar and not args.radar_ood:  # fail FAST (before the slow data load) -- see conditioning-mechanics §2
+        raise SystemExit(
+            "⛔ --radar is DISABLED: it mean-pins unset dims (others at the dataset mean) = OFF-MANIFOLD, which\n"
+            "   SMEARS at high single-dim values (a knob-shaped artifact, not the deployed knob). Use --style for\n"
+            "   the manifold conditional-fill (e.g. --style \"chaos=q0.99\"). If you truly want the raw off-manifold\n"
+            "   reach test, re-run with --radar_ood. See the conditioning-mechanics skill §2.")
+    phase_alloc = ([float(x) for x in args.onset_phase_alloc.split(',')]
+                   if args.onset_phase_alloc else None)  # phase-aware threshold shares (q,8th,16th)
+    phase_calib = parse_phase_calib(args.onset_phase_calib)  # per-phase logit offset (b8, b16) for variable chaos
+    # --- duple/triplet b_trip SWITCH: resolve the triplet-song band magnitude + strip the global 3rd element ---
+    # (so the band is applied PER SONG below, not globally). auto_b_trip_val=None => switch inactive.
+    _b8b16 = ((float(phase_calib[0]), float(phase_calib[1])) if phase_calib and len(phase_calib) >= 2
+              else (0.0, 1.0))  # the 16th-unlock stays global; only b_trip becomes per-song
+    auto_b_trip_val = None
+    if args.auto_b_trip:
+        auto_b_trip_val = float(phase_calib[2]) if (phase_calib and len(phase_calib) > 2) else 0.7
+        phase_calib = _b8b16  # duple default when the per-song switch says "no band"
+    _tp_cache: dict = {}  # chart_file -> triple_pref (avoid re-loading audio if a song repeats)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # H15 motif-knob conditioning (continuous): build a GLOBAL (1, MOTIF_DIM) vector from "name/idx=z" pairs.
+    MOTIF_ALIAS = {'candle': 3, 'trill': 10, 'jacksweep': 0, 'bracket': 1}
+    motif_vec = None
+    if args.motif:
+        motif_vec = torch.zeros(1, MOTIF_DIM)
+        for tok in args.motif.split(','):
+            key, val = tok.split('='); key = key.strip()
+            idx = MOTIF_ALIAS.get(key, None)
+            idx = int(key) if idx is None else idx
+            motif_vec[0, idx] = float(val)
+        motif_vec = motif_vec.to(device)
+        print(f"motif conditioning: {args.motif} -> knob vector {motif_vec.cpu().numpy().round(1).tolist()}")
+    # H15 figure-token conditioning (discrete): a constant per-section figure schedule built per song (needs T).
+    figure_tok = None
+    if args.figure:
+        FIG_ALIAS = {'sweep': 'sweep/staircase', 'candle': 'candle/cross', 'jump': 'jump/bracket'}
+        figure_tok = FIGURE_CLASSES.index(FIG_ALIAS.get(args.figure, args.figure))
+        print(f"figure conditioning: '{args.figure}' -> token {figure_tok} ({FIGURE_CLASSES[figure_tok]})")
+    _, val_files, _ = split_chart_files(root=args.data_dir, random_state=args.seed)  # discover + seeded split (harness)
+    if args.song_filter:  # restrict to named songs UP FRONT (before the pool cap) so they're loaded at all
+        terms = [t.strip().lower() for t in args.song_filter.split(',') if t.strip()]
+        val_files = [f for f in val_files if any(t in f.lower() for t in terms)]
+        print(f"SONG-FILTER pre-restricted val_files to {len(val_files)} file(s) matching {terms}")
+        if not val_files:
+            raise SystemExit(f"--song_filter {terms!r} matched no val files under {args.data_dir}.")
+    with open(PROJECT_ROOT / "config/model_config.yaml") as f:
+        msl = yaml.safe_load(f)['classifier']['max_sequence_length']
+    # data-layer-v2 (48th grid): the config msl (1440) is the 16th-grid value = only 120 beats on the 3x-finer grid,
+    # which TRUNCATES every song to ~1/3 (the 150-vs-450-tap bug). Use the v2 training sequence length (V2_MSL=5400,
+    # train_motif_figure_v2) so the full song is charted; also raise the per-song T cap (--max_len) to match, since
+    # T=min(mask.sum(), max_len) would otherwise re-clip it. Both the dataset msl AND the T cap must be v2-sized.
+    if args.features == 'highres_v2':
+        V2_MSL = 5400
+        msl = V2_MSL
+        if args.max_len < V2_MSL:
+            print(f"highres_v2: raising --max_len {args.max_len} -> {V2_MSL} (48th grid; the 1440 default clips the "
+                  f"song to 120 beats).")
+            args.max_len = V2_MSL
+    # feature set: base (23-dim) vs stage1 (41-dim musical) vs highres (42-dim, + high-res onset)
+    feat_ext, audio_dim, cache = make_feature_extractor(args.features)  # harness = single source of the feature ladder
+    # decode phase-band period: 4 = the 16th grid (highres), 12 = the data-layer-v2 48th grid (highres_v2). Drives
+    # onset_phase_calib/penalty/alloc + phase_shares + the tau-side calib so triplet cells resolve (Phase 5). The
+    # tau path (conditioned_p_onset) and generate() MUST get the SAME subdiv or the 16th-unlock/tau decouple.
+    subdiv = feat_ext.config.timesteps_per_beat if feat_ext is not None else 4
+    # widen the candidate pool when groove-selecting (parsing is cheap; audio is extracted only for the
+    # chosen songs) so the selector has enough songs to find strong-on-axis ones.
+    pool = args.num_songs * (40 if args.groove_select != 'none' else 8)
+    # Parser selection. data-layer-v2 (subdiv==12) MUST use for_v2() so note cells are quantized on the SAME 48th
+    # grid as the audio; and cache_dir=None because the feature cache is index-keyed and this is a SUBSET pool
+    # (a cached 48th feature at index i could belong to a different song -> [[dataset-cache-footgun]]).
+    # --relax_gates: widen the parser gates for reach (inference-only) and likewise disable the index-keyed cache.
+    if subdiv == 12:
+        if args.features != 'highres_v2':
+            raise SystemExit("subdiv=12 requires --features highres_v2 (48th grid); see generation-defaults §0.")
+        # v2 export DEFAULTS to the widened INFERENCE_GATES (bpm[40,320]/len[30,600]/simul4/gimmick-guarded):
+        # this is the inference/export path (generate() validates nothing), the model handles the extra songs,
+        # and there's no cache downside (v2 is cache_dir=None regardless). +55% val reach vs the narrow TRAINING
+        # gates. --strict_gates restores the narrow training gates (to reproduce a pre-fix v2 run). for_v2()'s
+        # OWN default stays narrow so the v2 TRAINING cache build is unaffected.
+        infer_parser = (StepManiaParser.for_v2() if args.strict_gates
+                        else StepManiaParser.for_v2(**INFERENCE_GATES))
+        ds_cache = None
+    elif args.relax_gates:
+        infer_parser = StepManiaParser.for_inference()
+        ds_cache = None
+    else:
+        infer_parser = None
+        ds_cache = cache
+    ds = StepManiaDataset(chart_files=val_files[:pool], audio_dir=args.audio_dir,
+                          max_sequence_length=msl, feature_extractor=feat_ext, cache_dir=ds_cache,
+                          parser=infer_parser)
+
+    # v2 (48th grid): build the positional-encoding at V2 capacity (5504) so a full ~3min song fits — the default
+    # 2048-frame build would index pe out of range past ~68s on the finer grid (truncated/abrupt-ending chart). The
+    # pe is a fixed sinusoid, so a fresh larger buffer is byte-identical to the checkpoint's over the shared range.
+    v2_arch = dict(MODEL_ARCH, max_len=5504) if subdiv == 12 else None
+    model = load_generator(args.checkpoint, audio_dim, device, arch=v2_arch)  # builds + loads (strict=False) + .eval()
+    critic = DifficultyCritic(device=device)
+
+    # Step 3: optional reference chart -> condition every generated song on its style
+    style_vec, style_label = None, None
+    if args.reference:
+        ref_chart = ds.parser.parse_file(args.reference)
+        if ref_chart is None:
+            raise SystemExit(f"could not parse reference chart: {args.reference}")
+        cands = [n for n in ref_chart.note_data if n.difficulty_name]
+        if args.reference_difficulty:
+            want = args.reference_difficulty.rstrip(':').strip().lower()
+            cands = [n for n in cands if n.difficulty_name.rstrip(':').strip().lower() == want] or cands
+        ref_nd = max(cands, key=lambda n: n.difficulty_value)  # hardest available (or filtered)
+        ref_typed = ds.parser.convert_to_tensor_typed(ref_chart, ref_nd)[:args.max_len]
+        ref_t = torch.from_numpy(ref_typed.astype(np.int64)).unsqueeze(0).to(device)
+        ref_mask = torch.ones(1, ref_t.shape[1], dtype=torch.bool, device=device)
+        with torch.no_grad():
+            style_vec = model.encode_style(ref_t, ref_mask)  # (1,d) latent, reused for every song
+        ref_dens = float((ref_typed != 0).any(1).mean())
+        style_label = f"{ref_chart.title or Path(args.reference).stem} [{ref_nd.difficulty_name.rstrip(':').strip()}]"
+        print(f"\nstyle reference: {style_label}  (density {ref_dens:.3f}, {len(ref_typed)} frames)  "
+              f"guidance={args.guidance}")
+
+    # groove-radar target: base at the dataset mean, override the requested dims
+    RADAR_DIMS = ['stream', 'voltage', 'air', 'freeze', 'chaos']
+    radar_vec = None
+    if args.radar:  # guarded at main() entry -> only reached with --radar_ood (deliberate off-manifold reach test)
+        radars = [m['groove_radar'].to_vector() for m in ds.valid_samples if 'groove_radar' in m]
+        base = np.mean(radars, 0).astype(np.float32) if radars else np.full(5, 0.5, np.float32)
+        for tok in args.radar.split(','):
+            k, _, v = tok.strip().partition('=')
+            k = k.strip().lower()
+            if k in RADAR_DIMS:
+                base[RADAR_DIMS.index(k)] = float(v)
+        radar_vec = torch.from_numpy(base).unsqueeze(0).to(device)  # (1,5), reused for every song
+        print(f"\ngroove radar target: {dict(zip(RADAR_DIMS, base.round(2).tolist()))}  guidance={args.guidance}")
+
+    # manifold-aware steering: load the fitted manifold (cache, else fit from this dataset) for --style
+    manifold = None
+    if args.style:
+        from src.generation.radar_manifold import RadarManifold
+        mp = Path('cache/radar_manifold.npz')
+        if mp.exists():
+            manifold = RadarManifold.load(mp)
+        else:
+            manifold = RadarManifold.from_loaded_datasets(ds)
+            print("⚠️  cache/radar_manifold.npz missing; fit from this split only "
+                  "(run diag_radar_manifold.py to persist the full-data manifold).")
+        manifold.parse_spec(args.style)  # validate axis names up front
+        print(f"\nmanifold style: '{args.style}'  guidance={args.guidance} (per-song, difficulty-bucketed)")
+
+    # build pattern-preference bias from CLI knobs
+    from src.generation.typed import make_pattern_bias
+    panel_prefs = None
+    if args.prefer:
+        names = {'L': 0, 'D': 1, 'U': 2, 'R': 3}
+        panel_prefs = [0.0, 0.0, 0.0, 0.0]
+        for tok in args.prefer.upper().split(','):
+            if tok.strip() in names:
+                panel_prefs[names[tok.strip()]] = 1.5
+    pattern_bias = (make_pattern_bias(jump=args.jump_bias, panel_prefs=panel_prefs)
+                    if (args.jump_bias or panel_prefs) else None)
+
+    out_root = Path(args.out_dir); out_root.mkdir(parents=True, exist_ok=True)
+
+    # Groove-validate the set: pick songs that read strongly on the axis under test (else the playtest
+    # can't reveal the hypothesis -- e.g. B4U has 3 holds, useless for a hold fix). Report the profile.
+    if args.groove_select != 'none':
+        from src.data.song_selection import select_by_groove, radar_table, RADAR_DIMS
+        dcls = ['Beginner', 'Easy', 'Medium', 'Hard'].index(args.difficulty_select) if args.difficulty_select else None
+        order = select_by_groove(ds, n=args.num_songs, by=args.groove_select, difficulty=dcls)
+        print(f"\nGROOVE-SELECTED by '{args.groove_select}'"
+              f"{f' (difficulty={args.difficulty_select})' if args.difficulty_select else ''} "
+              f"-- {len(order)} songs, strongest first:")
+        print(radar_table(ds, order))
+    else:
+        order = range(len(ds.valid_samples))
+
+    if args.song_filter:  # keep only named songs (match title or chart_file path), preserving order
+        terms = [t.strip().lower() for t in args.song_filter.split(',') if t.strip()]
+        def _match(i):
+            m = ds.valid_samples[i]
+            hay = f"{m.get('chart', None) and getattr(m['chart'], 'title', '') or ''} {m['chart_file']}".lower()
+            return any(t in hay for t in terms)
+        order = [i for i in order if _match(i)]
+        print(f"\nSONG-FILTERED to {terms}: {len(order)} matching sample(s).")
+        if not order:
+            raise SystemExit(f"--song_filter {terms!r} matched no songs. Check titles/paths in {args.data_dir}.")
+    # difficulty restriction works WITH or WITHOUT groove_select (else the per-song loop takes the first
+    # difficulty in dataset order, which can be Beginner -- wrong for a jack/coherence playtest).
+    if args.difficulty_select and args.groove_select == 'none':
+        dcls = ['Beginner', 'Easy', 'Medium', 'Hard'].index(args.difficulty_select)
+        order = [i for i in order if ds.valid_samples[i]['difficulty_class'] == dcls]
+        print(f"DIFFICULTY-FILTERED to {args.difficulty_select}: {len(order)} sample(s).")
+    # --hardest: stable-sort so each song's HARDEST difficulty comes first -> the per-song dedup (which keeps
+    # the first occurrence of each chart_file) then picks the hardest available, keeping every song.
+    if args.hardest:
+        order = sorted(order, key=lambda i: -ds.valid_samples[i]['difficulty_class'])
+        print(f"HARDEST-per-song ordering applied ({len(order)} samples).")
+
+    print(f"\n{'song':<34} {'diff':<8} {'gen_dens':>8} {'ref_dens':>8} {'holds':>6} {'critic':>9}")
+    print("-" * 80)
+
+    exported, seen = 0, set()
+    for i, sample in _prefetch_samples(ds, order, args.prefetch_workers):
+        if exported >= args.num_songs:
+            break
+        meta = ds.valid_samples[i]
+        if meta['chart_file'] in seen:
+            continue
+        T = min(int(sample['mask'].sum().item()), args.max_len)
+        nd = next((n for n in meta['chart'].note_data if n.difficulty_name == meta['difficulty_name']
+                   and n.difficulty_value == meta['difficulty_value']), None)
+        if nd is None:
+            continue
+        audio_np = sample['audio'][:T].numpy().astype(np.float32)
+        orig_typed = ds.parser.convert_to_tensor_typed(meta['chart'], nd)[:T]
+        diff_idx = meta['difficulty_class']
+
+        # radar conditioning: match this song's own source profile (so output ~ original feel), else the
+        # fixed --radar target (or none).
+        radar_for_gen = radar_vec
+        style_density = None
+        if manifold is not None:  # manifold-aware: build a coherent on-manifold target for THIS difficulty
+            tvec, tinfo = manifold.build_target(args.style, diff_idx)
+            radar_for_gen = torch.from_numpy(tvec).unsqueeze(0).to(device)
+            style_density = tinfo['density']     # SOURCE-CHART-FREE density target (difficulty + style)
+            if style_density is not None and subdiv != 4:  # the manifold is fit on the 16th grid (density = frac of
+                style_density *= 4.0 / subdiv    # 16th-frames); on the finer v2 grid the SAME notes/beat is a smaller
+                # frame-fraction, so scale by 4/subdiv (=1/3 on the 48th grid) or --style over-places ~subdiv/4x.
+            if exported == 0:  # print the resolved target once (it varies slightly by difficulty)
+                print(f"  -> target ({DIFFICULTY_NAMES[diff_idx]}): "
+                      + " ".join(f"{d}={tvec[k]:.2f}" for k, d in enumerate(RADAR_DIMS))
+                      + f"  Mahal d={tinfo['mahalanobis']:.2f}{' (projected)' if tinfo['projected'] else ''}"
+                      + (f"  density~{style_density:.3f} (manifold, no source chart)" if style_density else ""))
+        if args.match_radar:
+            radar_for_gen = torch.from_numpy(
+                meta['groove_radar'].to_vector().astype(np.float32)).unsqueeze(0).to(device)
+        # style conditioning: per-song self-reference (encode this song's own source chart) vs global --reference
+        style_for_gen = style_vec
+        if args.reference_self:
+            ref_t = torch.from_numpy(np.asarray(orig_typed)).long().unsqueeze(0).to(device)
+            ref_mask = torch.ones(1, ref_t.shape[1], device=device)
+            with torch.no_grad():
+                style_for_gen = model.encode_style(ref_t, ref_mask)
+
+        # duple/triplet SWITCH: apply the triplet band (b_trip) only if this song reads triplet-feel. Feeds BOTH
+        # the tau path AND generate() with the SAME per-song calib (the single-source rule, conditioning-mechanics §6).
+        song_calib = phase_calib
+        if auto_b_trip_val is not None and subdiv != 4:  # v1 (16th grid) has an empty triplet band -> skip the detector
+            cf = meta['chart_file']
+            if cf not in _tp_cache:
+                r = detect_triple_pref(cf)
+                _tp_cache[cf] = (r['triple_pref'] if r else None)
+            tp = _tp_cache[cf]
+            song_title = getattr(meta['chart'], 'title', '') or Path(cf).stem
+            if tp is None:  # no audio/BPM -> keep the global calib (least surprising), warn
+                print(f"  [auto_b_trip] {song_title[:30]:30} meter undetected -> global calib")
+            else:
+                is_trip = tp > args.triple_pref_thresh
+                b = auto_b_trip_val if is_trip else 0.0
+                song_calib = (_b8b16[0], _b8b16[1], b)
+                print(f"  [auto_b_trip] {song_title[:30]:30} triple_pref={tp:+.2f} -> "
+                      + (f"TRIPLET (b_trip={b:.2f})" if is_trip else "duple (band off)"))
+
+        # onset threshold matched to THIS chart's real density
+        audio = torch.from_numpy(audio_np).unsqueeze(0).to(device)
+        diff = torch.tensor([diff_idx], device=device)
+        with torch.no_grad():
+            memory = model.encode_audio(audio)
+            harm_off_t = None
+            if args.harm_calib > 0:  # sparse-harm-in-quiet calibrator: tau MUST see the same offset generate() uses
+                if audio_dim != 42:
+                    raise SystemExit("--harm_calib needs --features highres (the 42-dim perc/harm channels).")
+                harm_off_t = torch.from_numpy(_sparse_harm_offset(audio_np, args.harm_calib, args.harm_quiet_q)).to(device)
+            if args.chaos_onset_gate > 0:  # chaos×onset gate (single-sourced in the harness); tau sees it too, below
+                if audio_dim != 42:
+                    raise SystemExit("--chaos_onset_gate needs --features highres (dims 41/35).")
+                chaos_val = float(radar_for_gen[0, 4]) if radar_for_gen is not None else 1.0
+                gate_np = chaos_onset_gate_offset(audio_np, args.chaos_onset_gate, chaos_val, subdiv=subdiv)
+                gate_t = torch.from_numpy(gate_np).to(device)
+                harm_off_t = gate_t if harm_off_t is None else harm_off_t + gate_t  # stack with harm (same slot)
+            # 16th-GRID SNAP (v2 only): auto = difficulty <= Medium (diff_idx<=2), all = every difficulty. Vetoes the
+            # pure-48th cells so busy low/mid charts stay on-grid. Same slot -> single-sourced into tau
+            # (conditioned_p_onset extra_offset=) AND decode (generate onset_logit_offset=). v1 (subdiv==4) = no-op.
+            do_snap = subdiv != 4 and (args.grid_snap == 'all' or (args.grid_snap == 'auto' and diff_idx <= 2))
+            if do_snap:
+                snap_t = grid_snap_offset(T, subdiv, keep_triplets=args.grid_snap_keep_triplets, device=device)
+                harm_off_t = snap_t if harm_off_t is None else harm_off_t + snap_t
+            # UNIVERSAL SUB-TRAIN-LENGTH WINDOW (off by default): tile the onset head over local-PE windows so a
+            # song ending in the under-trained abs-PE tail (v2 train len median 3120/max 5128) fires its tail
+            # normally (probe_universal_window.py). Single-sourced into BOTH tau (here) and generate() (below) so
+            # they can't drift. window=None (0) = single-pass = canonical byte-identical; a song < W is a no-op.
+            onset_window = (args.onset_window if args.onset_window and args.onset_window > 0 and subdiv != 4
+                            else None)   # v2-only lever (subdiv==4/v1 = no-op, like grid_snap/no_fast_jump)
+            _hv = str(args.onset_tail_hangover).strip().lower()
+            onset_hang = ((onset_window // 2 if onset_window else 0) if _hv == 'auto'
+                          else max(0, int(float(_hv))))
+            # tau via the shared decode harness — conditioned + guided + phase-calibrated + harm offset, EXACTLY as
+            # generate() decodes (conditioning-mechanics §3/§6). harm_off_t is also fed to generate() below.
+            p_onset = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
+                                          guidance=args.guidance, phase_calib=song_calib, extra_offset=harm_off_t,
+                                          subdiv=subdiv, window=onset_window, tail_hangover=onset_hang)
+        real_density = float((orig_typed != 0).any(1).mean())
+        # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
+        # E[density | difficulty, style], so stream-as-a-knob works and no source chart is needed) > the
+        # source chart's own density (eval convenience for A/B, NOT available for a brand-new song).
+        # Raising chaos at FIXED density forces quarter->off-beat REPLACEMENT (backbone collapse); real charts
+        # raise density WITH chaos (corr +0.63) -- the manifold density couples them so high-chaos lifts density.
+        if args.target_density is not None:
+            gen_density = args.target_density
+        elif style_density is not None:
+            gen_density = style_density
+        else:
+            gen_density = real_density
+        tau = compute_tau(p_onset, gen_density)
+
+        gen_kwargs = dict(onset_threshold=tau, type_sample=True,
+                          type_temperature=args.type_temperature,
+                          pattern_sample=True, pattern_temperature=args.pattern_temperature,
+                          repetition_penalty=args.repetition_penalty,
+                          max_jack_run=(args.max_jack_run if args.max_jack_run and args.max_jack_run > 0 else None),
+                          min_onset_gap=args.min_onset_gap,  # footspeed floor (frames); None -> auto per subdiv (§8)
+                          no_fast_jump=args.no_fast_jump,  # forbid >=2-fresh JUMP at sub-16th spacing (v1 no-op; §8b/§8d)
+                          jack_penalty=(args.jack_penalty if args.jack_penalty and args.jack_penalty > 0 else None),
+                          fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
+                          fatigue_free=args.fatigue_free,
+                          stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),  # Stage-2 per-region density relief (needs fatigue_penalty); <=0 = off
+                          stamina_tau=args.stamina_tau, stamina_scale=args.stamina_scale,
+                          stamina_breathe=args.stamina_breathe,  # Stage-3 ARC: ceiling breathes with audio energy
+                          hold_stream_penalty=args.hold_stream_penalty,  # suppress holds in dense streams (0=off)
+                          hold_stream_floor=args.hold_stream_floor, hold_stream_win=args.hold_stream_win,
+                          hold_release_run=args.hold_release_run, hold_release_gap=args.hold_release_gap,  # DEFECT-#3 force-close (§5b; None=off)
+                          hold_max_beats=args.hold_max_beats,  # DEFECT-#3 duration cap (§5c; None=off)
+                          footswitch=args.footswitch,  # DEFAULT False = forbid footswitch footing (force one-foot jacks)
+                          bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
+                          pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
+                          onset_phase_penalty=args.onset_phase_penalty,
+                          onset_phase_alloc=phase_alloc, onset_phase_calib=song_calib, subdiv=subdiv,
+                          onset_window=onset_window, onset_tail_hangover=onset_hang,  # universal sub-train-length window (§6; None=off)
+                          onset_logit_offset=harm_off_t,  # STEP-1 sparse-harm-in-quiet phrase calibrator (None=off)
+                          style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen,
+                          motif=motif_vec,  # H15 continuous motif knobs (global vector; None if --motif unset)
+                          figure=(torch.full((1, T), figure_tok, dtype=torch.long, device=device)
+                                  if figure_tok is not None else None))  # H15 discrete figure schedule
+        if args.override_playability:  # user-approved deviation -> respect the explicit flags
+            gen_kwargs.update(hold_aware=True, no_jump_during_hold=args.no_jump_during_hold,
+                              no_cross_during_hold=args.no_cross_during_hold)
+        enforce_playability(gen_kwargs, args.override_playability)  # MANDATORY pad-playability (forces them on)
+        # For a clean --ab_hold_stream A/B, SHARE the RNG state across both arms (variance reduction): the two
+        # generations then draw identical randoms and stay byte-identical until the penalty first changes a hold
+        # decision, so any A/B difference is attributable to the KNOB, not sampling noise (experiment-design Rule 11).
+        _ab_rng = torch.get_rng_state()
+        _ab_cuda = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+        gen = pair_holds(model.generate(audio, diff, lengths=torch.tensor([T], device=device),
+                                        **gen_kwargs)[0].cpu().numpy())
+
+        chart_obj = meta['chart']
+        bpm = float(chart_obj.bpm); music = os.path.basename(meta['audio_file'])
+        title = (chart_obj.title or Path(meta['chart_file']).stem)
+        dname = DIFFICULTY_NAMES[diff_idx]
+
+        folder = out_root / f"{exported:02d}_{safe_name(title)}"
+        folder.mkdir(parents=True, exist_ok=True)
+        if os.path.exists(meta['audio_file']):
+            try:
+                shutil.copy2(meta['audio_file'], folder / music)
+            except Exception:
+                pass
+        ab_charts = [
+            {"chart": gen, "difficulty_name": "Challenge", "difficulty_value": nd.difficulty_value, "author": "generated"},
+        ]
+        ab_overrides = {}                                      # the Edit arm = baseline gen_kwargs + these overrides
+        if args.ab_hold_stream and args.ab_hold_stream > 0:
+            ab_overrides['hold_stream_penalty'] = args.ab_hold_stream
+        if args.ab_footswitch:
+            ab_overrides['footswitch'] = not args.footswitch   # Edit arm = the opposite of the (default OFF) baseline
+        if args.ab_no_fast_jump:
+            ab_overrides['no_fast_jump'] = not args.no_fast_jump  # Edit arm = uncapped (sub-16th jumps restored)
+        if args.ab_hold_release:
+            # Edit arm = the OPPOSITE of the baseline: if release is OFF, turn the FULL fix ON (8th-run release=4 +
+            # speed limit is automatic + 6-beat duration cap); if ON, turn it OFF.
+            turn_on = args.hold_release_run is None
+            ab_overrides['hold_release_run'] = (4 if turn_on else None)
+            ab_overrides['hold_max_beats'] = (6.0 if turn_on else None)
+        if args.ab_onset_window and onset_window is not None:
+            # Edit arm = SINGLE-PASS (today's default); Challenge stays WINDOWED. The window shifts p_onset so the
+            # single-pass arm needs its OWN tau (recomputed here) — else it would flood/starve past the windowed tau.
+            with torch.no_grad():
+                p_sp = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
+                                           guidance=args.guidance, phase_calib=song_calib, extra_offset=harm_off_t,
+                                           subdiv=subdiv, window=None, tail_hangover=0)
+            ab_overrides['onset_window'] = None
+            ab_overrides['onset_tail_hangover'] = 0
+            ab_overrides['onset_threshold'] = compute_tau(p_sp, gen_density)
+        if ab_overrides:  # A/B: second "Edit" arm, shared-RNG with Challenge (only the override differs)
+            ab_kwargs = dict(gen_kwargs); ab_kwargs.update(ab_overrides)
+            torch.set_rng_state(_ab_rng)                       # restore -> same draws as the baseline arm
+            if _ab_cuda is not None:
+                torch.cuda.set_rng_state_all(_ab_cuda)
+            gen_fix = pair_holds(model.generate(audio, diff, lengths=torch.tensor([T], device=device),
+                                                **ab_kwargs)[0].cpu().numpy())
+            label = ", ".join(f"{k}={v}" for k, v in ab_overrides.items())
+            ab_charts.append({"chart": gen_fix, "difficulty_name": "Edit", "difficulty_value": nd.difficulty_value,
+                              "author": f"fix {label}"})
+        ab_charts.append({"chart": orig_typed, "difficulty_name": dname, "difficulty_value": nd.difficulty_value,
+                          "author": "original"})
+        sm = charts_to_sm(
+            charts=ab_charts,
+            bpm=bpm, title=f"{title} (gen)", artist=chart_obj.artist or "",
+            music=music, offset=float(chart_obj.offset), typed=True,
+            timesteps_per_beat=subdiv,   # 4 = 16th grid, 12 = the v2 48th grid -> 48 rows/measure so triplets land true
+        )
+        (folder / "chart.sm").write_text(sm, encoding="utf-8")
+
+        h = symbol_histogram(gen)
+        cpred = critic.predict(typed_binary(gen), audio_np[:, :23], bpm=DEFAULT_BPM)['name']  # critic is 23-dim Phase-1
+        gen_d = float((gen != 0).any(1).mean())
+        print(f"{safe_name(title)[:33]:<34} {dname:<8} {gen_d:>8.3f} {real_density:>8.3f} "
+              f"{h['hold_head']:>6} {cpred:>9}")
+        seen.add(meta['chart_file']); exported += 1
+
+    print("-" * 80)
+    print(f"Exported {exported} playable folders to {out_root}/ (chart.sm: Challenge=generated, "
+          f"+ original; both with holds). Drop a folder into StepMania to play.")
+
+    if args.install:
+        from src.utils.sm_install import install_to_stepmania
+        dests = install_to_stepmania(args.out_dir, args.songs_dir)
+        print("\nInstalled to StepMania (no sudo):")
+        for d in dests:
+            print(f"  {d}")
+
+
+if __name__ == '__main__':
+    main()

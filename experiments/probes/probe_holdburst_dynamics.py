@@ -11,7 +11,7 @@ window the generator saw predict the hold-burst defect NEGATIVELY — i.e. on sp
 the model has less structure to anchor footwork and commits MORE awkward held-note bursts.
 
 DESIGN (de-artifacts all three concerns):
-  - ONE target: `g_holdburst_excess`, REUSED from cache/quality_choreo_hard.csv (no regeneration; the choreo run
+  - ONE target: `g_holdburst_excess`, REUSED from outputs/probe_results/quality_choreo_hard.csv (no regeneration; the choreo run
     is reproducible and build_songs gives the identical song order — paired by index, title-asserted).
   - Features recomputed from RAW audio on the FIRST-T-FRAMES window the generator conditioned on (NOT the
     full-song z-scored cache) — removes the z-score/truncation mismatch that made d##_std murky.
@@ -38,8 +38,8 @@ def parse_args():
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--seed', type=int, default=42); p.add_argument('--difficulty', type=int, default=3)
     p.add_argument('--n', type=int, default=64); p.add_argument('--max_len', type=int, default=768)
-    p.add_argument('--choreo_csv', default='cache/quality_choreo_hard.csv')
-    p.add_argument('--out', default='cache/holdburst_dynamics.csv')
+    p.add_argument('--choreo_csv', default='outputs/probe_results/quality_choreo_hard.csv')
+    p.add_argument('--out', default='outputs/probe_results/holdburst_dynamics.csv')
     return p.parse_args()
 
 

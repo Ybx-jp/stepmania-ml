@@ -2,7 +2,7 @@
 """
 Generate a playable StepMania chart from a SINGLE audio file (bring-your-own-song).
 
-Unlike experiments/generation_typed/export_typed_samples.py (a dataset-bound A/B eval
+Unlike scripts/export_typed_samples.py (a dataset-bound A/B eval
 harness that generates on held-out songs from the training set), this needs NO dataset:
 point it at one audio file + a target difficulty and it writes a .sm you can drop into
 StepMania.

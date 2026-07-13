@@ -78,7 +78,7 @@ def parse_args():
     p.add_argument('--cache_dir', default='cache/samples_v3')
     p.add_argument('--spec', default='chaos=0.9,voltage=0.7,air=0.5,freeze=0.5', help='the milestone HIGH-chaos --style spec')
     p.add_argument('--guidance', default='1.0,1.5,2.0,3.0', help='CFG guidance sweep (the flip driver)')
-    p.add_argument('--out', default='cache/backbone_phase.csv')
+    p.add_argument('--out', default='outputs/probe_results/backbone_phase.csv')
     return p.parse_args()
 
 

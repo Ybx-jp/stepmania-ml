@@ -7,7 +7,7 @@ Research code lives here; **production code lives in `src/` and `scripts/`** and
 
 | Directory | What it is |
 |---|---|
-| `generation_typed/` | The active generator lab: probes/diagnostics for the deployed `LayeredTypedChartGenerator`, plus the two **live** trainers (`train_motif_figure.py` = legacy v1, `train_motif_figure_v2.py` = deployed v2 48th-grid) and the canonical exporter `export_typed_samples.py` (slated to move to `scripts/`; see notes/HANDOFF.md). |
+| `generation_typed/` | The active generator lab: probes/diagnostics for the deployed `LayeredTypedChartGenerator`, plus the two **live** trainers (`train_motif_figure.py` = legacy v1, `train_motif_figure_v2.py` = deployed v2 48th-grid) and a compat shim for the canonical exporter (now `scripts/export_typed_samples.py`). |
 | `probes/` | Standalone cross-cutting probes (quality attribution, BPM decomposition, backbone/flip-point, v2 grid checks). Formerly at repo root; they import each other as siblings. |
 | `realism_critic/` | Realism/taste critic training + evaluation. |
 | `generation_factorized/`, `generation_transformer/`, `generation_baselines/` | Earlier generator architectures (superseded; kept for lineage). |

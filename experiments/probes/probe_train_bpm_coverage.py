@@ -31,7 +31,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--data_dir', required=True); p.add_argument('--audio_dir', required=True)
     p.add_argument('--seed', type=int, default=42)
-    p.add_argument('--variance_csv', default='cache/quality_variance_hard.csv')  # per-song bpm + m_gen_mean (n=30)
+    p.add_argument('--variance_csv', default='outputs/probe_results/quality_variance_hard.csv')  # per-song bpm + m_gen_mean (n=30)
     return p.parse_args()
 
 

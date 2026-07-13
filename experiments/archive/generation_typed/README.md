@@ -1,4 +1,15 @@
-# Archived training scripts (generation_typed lineage)
+# Archived scripts (generation_typed lineage)
+
+**Phase-2 addition (2026-07-12):** 58 probe/diag/eval scripts from CLOSED arcs joined the trainers here
+(uncited by any skill/HANDOFF, untouched since June, superseded per the experiment-lineage INDEX):
+the conditioning-era `eval_*` suite, the chaos/16th diagnostics, the motif-gate diagnostics, the
+maskpredict prototypes, and the pre-governor foot-physics comparisons. Their conclusions live on in
+`notes/*_findings.md` and the lineage files; the scripts are the historical apparatus. The archive sits at
+the same directory depth as the original location, so each file's `parents[2]` path setup still resolves
+the repo root if rerun. (`diag_exertion_h13.py`'s sibling import was repointed to the archive path — the
+one edit made.)
+
+## Archived training scripts
 
 These are the **retired version-by-copy training scripts** of the typed chart generator. Each was the
 live trainer for one step of the model lineage; they are kept (with full git history via `git mv`) so any

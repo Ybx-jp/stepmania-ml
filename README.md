@@ -182,7 +182,7 @@ windows for long songs (no truncation). Requires the weights (see below).
 **Evaluate on held-out songs** (A/B vs the human chart — needs the training dataset on disk):
 ```bash
 # --style is the in-distribution (manifold) conditioning path; --radar is disabled (off-manifold).
-python experiments/generation_typed/export_typed_samples.py \
+python scripts/export_typed_samples.py \
     --data_dir data/ --audio_dir data/ --style "chaos=q0.9" --guidance 1.5
 ```
 

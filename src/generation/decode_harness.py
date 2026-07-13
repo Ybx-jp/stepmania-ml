@@ -7,7 +7,7 @@ pipeline (30+ probes did, several with their own buggy `calibrated_p_onset`), im
 
     from src.generation.decode_harness import conditioned_p_onset, compute_tau, phase_shares
 
-It is DOGFOODED: scripts/generate.py and experiments/.../export_typed_samples.py compute their own tau through
+It is DOGFOODED: scripts/generate.py and scripts/export_typed_samples.py compute their own tau through
 `conditioned_p_onset`/`compute_tau`, so a probe that uses these helpers is matching the deployed path BY
 CONSTRUCTION, not by remembering to.
 

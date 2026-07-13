@@ -127,7 +127,7 @@ This seeds: `torch`, `torch.cuda`, `numpy`, `random`, and sets `cudnn.determinis
 python scripts/generate.py --audio song.ogg --difficulty Hard --bpm 174 --out MyGenerated
 
 # Canonical dataset-bound export (the playtest/eval path; bare defaults = the deployed config)
-python experiments/generation_typed/export_typed_samples.py --data_dir data/ --audio_dir data/
+python scripts/export_typed_samples.py --data_dir data/ --audio_dir data/
 
 # Validate the canonical defaults & repo layout
 python tools/check_export_defaults.py

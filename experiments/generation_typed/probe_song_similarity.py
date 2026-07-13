@@ -82,7 +82,7 @@ def main():
     ap.add_argument('--seed', type=int, default=42)
     ap.add_argument('--store', default='cache/audio_fingerprints_highres.npz',
                     help='persistent per-song fingerprint cache (identity-stamped by chart_file)')
-    ap.add_argument('--out', default='cache/song_similarity_grandchariot.csv')
+    ap.add_argument('--out', default='outputs/probe_results/song_similarity_grandchariot.csv')
     args = ap.parse_args()
     set_seed(args.seed)
     store_path = PROJECT_ROOT / args.store
