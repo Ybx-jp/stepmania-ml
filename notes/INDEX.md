@@ -4,6 +4,37 @@ Map of `notes/`, organized by phase and thread. Findings notes (`*_findings.md`)
 results; plans/roadmaps hold forward design; `playtest_log.md` is the subjective play-feel ledger. Arcs are
 roughly chronological; the newest (motif → governor → release) is at the bottom.
 
+## Taste-critic quality arc (2026-07-11 — UN-PARK of ship mode; see lineage `taste-critic-arc.md`, `HANDOFF.md`)
+**UPDATE (2026-07-11):** goal = a taste-aligned critic for best-of-N conditioning SELECTION (kill f48's quality
+VARIANCE). `taste_critic_v2_findings.md` — diagnostic (critic rates the user's OWN charts "fake"; 16th critic can't
+see f48 = the grid wall) → **E1.1 retrained the graded critic on the 48th grid** (`realism_critic_graded_v2`, jitter
+ladder 0.98 = **R1 cleared**) → **E1.2** it catches the tail/placement defect but is presence-blind + rates gens
+above human charts on 2/3 (**R3 taste-alignment still open**). `stamina_longsong_findings.md` — user's long-song
+stamina hypothesis: ceiling IS length-mis-scoped (corr+0.83) but **doesn't bite the chart** (fair test + ear REFUTE;
+OFF worst) — the session's cleanest Rule-7/9 case; `local-z` lever kept as a mild #2 helper. Playtest (2026-07-11)
+enumerated 3 defects = the critic's target list (sub-16th tail / quiet under-charge / hold foot-speed). Decode-fix
+track started on #2: `generate.py --harm_quiet_feat total|perc` (both gates land offline; ⏳ by-ear PENDING).
+
+**UPDATE (2026-07-11 session 2 — decode-fix track advanced; all detail in `playtest_log.md`, probes
+`experiments/generation_typed/probe_{subtail_position,lick_vs_byebye,onset_window_sweep,harm_fills_middle}.py`):**
+harm_calib #2 gate PASSED by ear ("did its job") but is DENSITY-PRESERVING → TRADES melodic fill for percussive
+alignment (not a free add). Defect #1 (sub-16th tail) → a LENGTH-gated long-song defect (both long songs, neither
+short; harm_calib EXONERATED). Two parts: (i) tail quarter-backbone COLLAPSE = the onset-window TRAILING-EDGE (fix
+= the **HANGOVER PAD**, `--onset_tail_hangover`; **BY-EAR "definitely better"**; real-chart ref confirms the human
+keeps the quarter pulse in the tail); (ii) empty MIDDLES = global-tau ALLOCATION starving onset-poor regions (NOT
+windows, NOT harm_calib; local-tau fixes offline but SHELVED as the Rule-13 quota anti-pattern). USER DECISIONS:
+silence-pad adopted as the hangover default; local-tau shelved; OPEN priority = a UNIVERSAL sub-train-length window
+for broad short-song end-degeneration (untested — my sweep tested the wrong population).
+
+**UPDATE (2026-07-12 — UNIVERSAL sub-train-length window CONFIRMED; `universal_window_findings.md`, probes
+`probe_universal_window{,_decoded}.py`):** the user's premise MEASURED — v2 train-len median 3120 / MAX 5128,
+abs-PE exposure 31%/13%/6% by pos 3500/4000/4320, yet `onset_window`=V2_MSL(5400) never fires for T≤5400 → short
+songs' ends collapse like long songs'. RIGHT population (cached VAL, human ground truth, n=60/band): single-pass
+fires **30% of real TAIL notes** on the 3800–5128 band; **W3600 restores** recall + tail backbone Herfindahl to the
+HUMAN value; CONTROL (<3000) byte-identical no-op; W4320 ~no-op (proves abs-PE effect). Decoded: windowed tail
+quarter% 33–69 vs single-pass 4–8% collapse, tail jitter 0. WIRED off by default (`--onset_window/--ab_onset_window`,
+canonical byte-identical); **by-ear gate + default-flip PENDING** (A/B `~/sm-generated/universal_window_ab`).
+
 
 **CURRENT STATE (2026-06-26):** deployed model = **`gen_motif_full_fixed`** (42-dim highres, the H19 clean
 retrain). Two arcs shipped on top of it: (1) the **H15 motif arc** — steerable section-level candle/trill
@@ -97,8 +128,16 @@ protects sparse holds) + **`footswitch=False`** — a new footswitch on/off knob
 FOOTSWITCH STRATEGY not intrinsic jacks (forbidding it collapses same-panel runs 81–85%); playtest "sooooo much
 better", forbidding footswitch made the model ALTERNATE (more creative). Method keepers: pooled-vs-PAIRED baseline for
 a defect-vs-X slope; confirm a marginal lead at higher n; SHARED-RNG A/B (common random numbers) to isolate a decode
-knob from sampling noise. **OPEN:** free-foot-overload gate (robust successor to the density proxy); tasteful 16th-jack
+knob from sampling noise. **OPEN:** tasteful 16th-jack
 penalty on the intrinsic residue; graded footswitch policy. Lineage `.../experiment_lineage/hold-in-stream-arc.md`.
+**UPDATE (2026-07-12): the FREE-FOOT-OVERLOAD gate — SHIPPED + CANONICAL (`footspeed_floor_findings.md §5c`).** The robust
+structural successor to the `hold_stream_penalty` density proxy: `generate()` `hold_release_run=4`/`hold_release_gap=None(→8th)`/
+`hold_max_beats=6` (now in `CANONICAL_DECODE`, both CLIs default ON). An 8th is the fastest allowable free-foot note under a
+hold; a FASTER note concludes the hold ON the current note via the precomputed non-causal onset LOOKAHEAD (release on the FIRST
+note of the fast run → freed foot travels); 8th-run→release on the 4th; 6-beat duration cap. BY-EAR "much better, maybe totally
+fixed"; automaton-only (salience residual UNNEEDED). Metric `scratchpad/measure_defect.py` (rebuilt; validated vs the documented
+holdfix 2/holdbug 4 anchor). ★ METHOD SCAR: a persist-exclusion metric HID the defect 4× (dropped the release-coincident note) —
+the ear was ground truth. Residual accepted: a hold that OPENS on a fast note (two-foot hold-entry).
 **METRICS-HALF CONFIRMATION (2026-07-02, after the ship — playtest was PRIMARY):** rerunning `probe_quality_variance.py`
 under the new `CANONICAL_DECODE` shows the BPM→quality defect (r=−0.68) is **FULLY resolved → +0.11** (perm p 0.56),
 quality −2.07 → +1.48, 30/30 songs up — a defect-blind realism critic converged on the ears (clean 1-var: critic

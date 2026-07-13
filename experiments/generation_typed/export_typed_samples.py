@@ -36,7 +36,8 @@ from src.data.dataset import StepManiaDataset, DIFFICULTY_NAMES
 from src.data.stepmania_parser import StepManiaParser, INFERENCE_GATES
 from src.data.meter_detect import detect_triple_pref  # audio duple/triplet classifier for --auto_b_trip
 from src.generation.typed_model import MOTIF_DIM
-from src.generation.decode_defaults import CANONICAL_DECODE, calib_arg_default, parse_phase_calib, grid_snap_offset
+from src.generation.decode_defaults import (CANONICAL_DECODE, calib_arg_default, parse_phase_calib, grid_snap_offset,
+                                             UNIVERSAL_ONSET_WINDOW)
 from src.generation.decode_harness import (
     conditioned_p_onset, compute_tau, make_feature_extractor, load_generator, chaos_onset_gate_offset, MODEL_ARCH)
 from src.generation.motif_codebook import FIGURE_CLASSES
@@ -316,6 +317,22 @@ def parse_args():
                    help='A/B: ALSO emit a second "Edit" chart with hold_stream_penalty=this value, so a folder holds '
                         'baseline "Challenge" (--hold_stream_penalty, default 0) vs the fix "Edit" vs the "original" '
                         'for a by-ear baseline-vs-fix comparison. 0 = single-arm (no A/B).')
+    p.add_argument('--hold_release_run', type=int, default=CANONICAL_DECODE['hold_release_run'],
+                   help='[DEFECT-#3 free-foot force-close, §5c; DEFAULT 4 = ON, by-ear passed] while a hold pins one '
+                        'foot: an 8th is the fastest allowable free-foot note under it; a note FASTER than an 8th '
+                        '(precomputed onset LOOKAHEAD) concludes the hold ON the current note so the freed foot '
+                        'travels into the fast run; a run of this many 8ths also releases (3-note flourish is free). '
+                        'Fires only on a real defect -> byte-identical where none. 0/None = OFF. §5c.')
+    p.add_argument('--hold_release_gap', type=int, default=CANONICAL_DECODE['hold_release_gap'],
+                   help='the SPEED LIMIT under a hold (default: an 8th = subdiv//2 frames). Free-foot notes at this '
+                        'spacing accumulate toward --hold_release_run; anything FASTER (gap < this: 16th/24th/48th + '
+                        'irregular) force-releases the hold immediately (release on the FIRST note via lookahead).')
+    p.add_argument('--hold_max_beats', type=float, default=CANONICAL_DECODE['hold_max_beats'],
+                   help='[DEFECT-#3 duration cap, §5c; DEFAULT 6] force-close any hold open longer than this many '
+                        'beats regardless of what streams underneath (the quiet "monster" holds). None = no cap.')
+    p.add_argument('--ab_hold_release', action='store_true',
+                   help='A/B: emit the "Edit" arm with --hold_release_run FLIPPED (baseline OFF -> Edit ON, or vice '
+                        'versa), shared-RNG, for the by-ear gate on the free-foot-under-hold force-close.')
     p.add_argument('--footswitch', action=argparse.BooleanOptionalAction, default=CANONICAL_DECODE['footswitch'],
                    help='[DEFAULT OFF, playtest-validated] whether the fatigue governor may foot a same-panel run as '
                         'a FOOTSWITCH (alternating feet). OFF forces one-foot jacks -> the model ALTERNATES instead '
@@ -328,6 +345,21 @@ def parse_args():
                    help='A/B: emit the "Edit" arm with the no-fast-jump cap FLIPPED vs the default (ON), for a '
                         'shared-RNG by-ear diagnostic on the v2 48th grid — Challenge = capped (jumps forced to '
                         'playable singles), Edit = uncapped (the sub-16th jumps restored). v1 grid: both arms identical.')
+    p.add_argument('--onset_window', type=int, default=UNIVERSAL_ONSET_WINDOW,
+                   help='[UNIVERSAL SUB-TRAIN-LENGTH WINDOW — CANONICAL DEFAULT 3600, by-ear-validated 2026-07-12] tile '
+                        'the ONSET head over local-PE windows of this many frames for EVERY song longer than it, so a '
+                        "song's END leaves the under-trained abs-PE tail (v2 train len median 3120/max 5128 -> single-"
+                        'pass fires only ~30%% of real tail notes past ~3800; probe_universal_window.py). 3600 = p75 '
+                        'train length. Single-sourced into BOTH tau (conditioned_p_onset window=) and decode (generate '
+                        'onset_window=). 0 = OFF (single-pass, the pre-2026-07-12 behavior). v1/16th grid = no-op. A song '
+                        'shorter than W = byte-identical no-op.')
+    p.add_argument('--onset_tail_hangover', default='auto',
+                   help='hangover pad (frames) so the true song-END centers in a window (else it sits at the final '
+                        "window's under-trained trailing edge). auto = --onset_window//2; 0 = off. Silence-padded "
+                        '(the physically-correct future). No-op when --onset_window is 0 or the song fits.')
+    p.add_argument('--ab_onset_window', action='store_true',
+                   help='A/B: with --onset_window W, emit Challenge = WINDOWED (the fix) and the "Edit" arm = SINGLE-PASS '
+                        '(today\'s default), each with its OWN tau, shared RNG — the by-ear gate for the universal window.')
     p.add_argument('--harm_calib', type=float, default=0.0,
                    help='[STEP-1 phrase calibrator] sparse-harm-in-quiet onset logit boost (gain·quiet_gate·harm) '
                         'so the head allocates for a sparse melodic/harmonic event in a quiet phrase (the HSL '
@@ -690,11 +722,20 @@ def main():
             if do_snap:
                 snap_t = grid_snap_offset(T, subdiv, keep_triplets=args.grid_snap_keep_triplets, device=device)
                 harm_off_t = snap_t if harm_off_t is None else harm_off_t + snap_t
+            # UNIVERSAL SUB-TRAIN-LENGTH WINDOW (off by default): tile the onset head over local-PE windows so a
+            # song ending in the under-trained abs-PE tail (v2 train len median 3120/max 5128) fires its tail
+            # normally (probe_universal_window.py). Single-sourced into BOTH tau (here) and generate() (below) so
+            # they can't drift. window=None (0) = single-pass = canonical byte-identical; a song < W is a no-op.
+            onset_window = (args.onset_window if args.onset_window and args.onset_window > 0 and subdiv != 4
+                            else None)   # v2-only lever (subdiv==4/v1 = no-op, like grid_snap/no_fast_jump)
+            _hv = str(args.onset_tail_hangover).strip().lower()
+            onset_hang = ((onset_window // 2 if onset_window else 0) if _hv == 'auto'
+                          else max(0, int(float(_hv))))
             # tau via the shared decode harness — conditioned + guided + phase-calibrated + harm offset, EXACTLY as
             # generate() decodes (conditioning-mechanics §3/§6). harm_off_t is also fed to generate() below.
             p_onset = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
                                           guidance=args.guidance, phase_calib=song_calib, extra_offset=harm_off_t,
-                                          subdiv=subdiv)
+                                          subdiv=subdiv, window=onset_window, tail_hangover=onset_hang)
         real_density = float((orig_typed != 0).any(1).mean())
         # density target priority: explicit --target_density > manifold style density (SOURCE-CHART-FREE:
         # E[density | difficulty, style], so stream-as-a-knob works and no source chart is needed) > the
@@ -724,11 +765,14 @@ def main():
                           stamina_breathe=args.stamina_breathe,  # Stage-3 ARC: ceiling breathes with audio energy
                           hold_stream_penalty=args.hold_stream_penalty,  # suppress holds in dense streams (0=off)
                           hold_stream_floor=args.hold_stream_floor, hold_stream_win=args.hold_stream_win,
+                          hold_release_run=args.hold_release_run, hold_release_gap=args.hold_release_gap,  # DEFECT-#3 force-close (§5b; None=off)
+                          hold_max_beats=args.hold_max_beats,  # DEFECT-#3 duration cap (§5c; None=off)
                           footswitch=args.footswitch,  # DEFAULT False = forbid footswitch footing (force one-foot jacks)
                           bpm=float(meta['chart'].bpm),  # foot-exertion / fatigue governors need real BPM for press-rate
                           pattern_bias=pattern_bias, no_crossovers=args.no_crossovers,
                           onset_phase_penalty=args.onset_phase_penalty,
                           onset_phase_alloc=phase_alloc, onset_phase_calib=song_calib, subdiv=subdiv,
+                          onset_window=onset_window, onset_tail_hangover=onset_hang,  # universal sub-train-length window (§6; None=off)
                           onset_logit_offset=harm_off_t,  # STEP-1 sparse-harm-in-quiet phrase calibrator (None=off)
                           style=style_for_gen, guidance_scale=args.guidance, radar=radar_for_gen,
                           motif=motif_vec,  # H15 continuous motif knobs (global vector; None if --motif unset)
@@ -768,6 +812,22 @@ def main():
             ab_overrides['footswitch'] = not args.footswitch   # Edit arm = the opposite of the (default OFF) baseline
         if args.ab_no_fast_jump:
             ab_overrides['no_fast_jump'] = not args.no_fast_jump  # Edit arm = uncapped (sub-16th jumps restored)
+        if args.ab_hold_release:
+            # Edit arm = the OPPOSITE of the baseline: if release is OFF, turn the FULL fix ON (8th-run release=4 +
+            # speed limit is automatic + 6-beat duration cap); if ON, turn it OFF.
+            turn_on = args.hold_release_run is None
+            ab_overrides['hold_release_run'] = (4 if turn_on else None)
+            ab_overrides['hold_max_beats'] = (6.0 if turn_on else None)
+        if args.ab_onset_window and onset_window is not None:
+            # Edit arm = SINGLE-PASS (today's default); Challenge stays WINDOWED. The window shifts p_onset so the
+            # single-pass arm needs its OWN tau (recomputed here) — else it would flood/starve past the windowed tau.
+            with torch.no_grad():
+                p_sp = conditioned_p_onset(model, memory, diff, radar=radar_for_gen, style=style_for_gen,
+                                           guidance=args.guidance, phase_calib=song_calib, extra_offset=harm_off_t,
+                                           subdiv=subdiv, window=None, tail_hangover=0)
+            ab_overrides['onset_window'] = None
+            ab_overrides['onset_tail_hangover'] = 0
+            ab_overrides['onset_threshold'] = compute_tau(p_sp, gen_density)
         if ab_overrides:  # A/B: second "Edit" arm, shared-RNG with Challenge (only the override differs)
             ab_kwargs = dict(gen_kwargs); ab_kwargs.update(ab_overrides)
             torch.set_rng_state(_ab_rng)                       # restore -> same draws as the baseline arm

@@ -111,6 +111,46 @@ dominant canonical W=3 figure family of a section. Conditioning = a per-section 
   (r +0.63), which the manifold density coupling reproduces — so let density float with the manifold.
   NOTE: `tau` sets the BASE density, but the per-frame onset decision is made IN the AR loop and can be raised by
   the STAMINA governor (§8c) — so realized density ≤ the tau target wherever sustained workload is high.
+  ▸ **★ tau IS GLOBAL — the empty-middles gotcha (2026-07-11, `notes/playtest_log.md` + `probe_onset_window_sweep`).**
+  `tau` is ONE quantile over the WHOLE song, so a stretch where the onset head is weak/flat (low-energy build OR a
+  percussion-sparse melodic passage — the head keys on percussion) sinks BELOW tau → a long EMPTY section with a few
+  noise peaks poking through ("scattered random notes"). This is a DENSITY-ALLOCATION artifact, NOT a window bug: an
+  offline sweep showed window size/overlap don't fix it (more overlap makes gaps WORSE by over-smoothing), and
+  `harm_calib` is too weak (it keys on harmonic ONSETS a sustained hole lacks, +2 notes at gain 20). A per-region /
+  windowed tau (fire each region's top-X%) DOES fix it offline (maxgap 371→188; energy-gated leaves true silence
+  sparse) but is the experiment-design Rule-13 GLOBAL-QUOTA anti-pattern (forces notes onto onset-poor noise) → user
+  SHELVED it. Distinct from the tail collapse below (that IS a window bug).
+  ▸ **★ ONSET SLIDING-WINDOW + the HANGOVER PAD (long BYO songs, `generate.py` / `typed_model.onset_logits(window=,
+  tail_hangover=, hop_frac=, hangover_reflect=)`).** Songs longer than the trained PE context (v2 `V2_MSL=5400`) tile
+  the onset head over in-distribution `window`-frame windows (hop=`hop_frac`·W, triangular blend favoring CENTERS)
+  to fix the abs-PE "dead tail" (peaks compress past the trained window → nothing fires). RESIDUAL bug (2026-07-11):
+  the SONG-END unavoidably sits at the final window's TRAILING edge (high local-PE = the under-trained tail of the
+  training LENGTH distribution) with no later window to heal it → the tail quarter-backbone COLLAPSES to a 16th wash
+  (mid-song RECOVERS because overlapping windows re-cover it at a center — the recovery is the SIGNATURE of edge-
+  degradation, not counter-evidence). FIX = `tail_hangover` frames of pad past T so a full window CENTERS on the true
+  end (`auto`=W//2); **BY-EAR "definitely better."** `hangover_reflect=False` (DEFAULT since 2026-07-11 = SILENCE,
+  the correct "future"; True=mirror keeps energy but stops the wind-down). All generate.py-only + off unless the song
+  exceeds the window (byte-identical no-op otherwise); NOT on the canonical export path.
+  ▸ **★ UNIVERSAL sub-train-length window — CONFIRMED at onset + decode (2026-07-12, `notes/universal_window_findings.md`).**
+  The user's premise is measured: the v2 TRAIN-length dist (`cache/samples_v3_48th/train`, N=4547) is median 3120 /
+  p75 3648 / **MAX 5128** — no train song fills the 5400 buffer; abs-PE exposure collapses to 31%/13%/6% by pos
+  3500/4000/4320. So ANY song >~3500 sits its END in the under-trained abs-PE tail, yet `onset_window` is pinned at
+  V2_MSL=5400 → windowing NEVER fires for it → the SAME tail collapse as long songs, on SHORT songs. `probe_universal_
+  window.py` (cached VAL, human chart = ground truth, n=60/band): single-pass fires only **30% of real TAIL notes** on
+  the 3800–5128 band + tail backbone Herfindahl smears 0.61→0.34; **W3600 restores** recall (~0.63) + Herfindahl to
+  the HUMAN value (0.61); CONTROL (<3000) shows no degen + is BYTE-IDENTICAL (no-op); **W4320 ~no-op** (fires only
+  T>4320, past the ~3500 onset) = the sharpest proof it's an abs-PE effect (window must be < the degen onset to fire).
+  Decoded check (`probe_universal_window_decoded.py`): windowed tail quarter% 33–69 vs single-pass's collapsed 4–8%,
+  tail JITTER 0 (vs 4–12%), dead-tail recovered (DOMINION 227 vs 136 notes). **✅ BY-EAR PASSED + SHIPPED AS DEFAULT
+  (2026-07-12, `playtest_log.md`): windowed won on all 3 A/B songs** ("great" / "better" / "fine"; the bland ones =
+  per-song conditioning, not the window). **`decode_defaults.UNIVERSAL_ONSET_WINDOW=3600`; both CLIs default v2 →
+  3600** (exporter `--onset_window` default 3600, gated subdiv!=4; generate.py `--onset_window auto`→3600 +
+  `--onset_tail_hangover auto`), single-sourced through `conditioned_p_onset(window=)` + `generate(onset_window=)`;
+  `check_export_defaults` now 27 ✓. v1/16th grid + short-fit songs = byte-identical no-op; disable via `--onset_window
+  0`. **RNG:** shared RNG can't keep the windowed/single-pass arms close — the window diverges them at the ONSET level
+  + shifts the GLOBAL tau, so they differ from the intro on (not a bug). **New residual [H-winddown]:** neither arm
+  winds down into a silence/outro (PRE-EXISTING, not windowing) — candidate = the window restores tail p_onset peaks
+  → the stamina breathe arc thins the outro LESS (queued probe, don't build blind).
   NOTE (06-27): `onset_logit_scale` is a NO-OP under quantile thresholding — `p=sigmoid(scale·ol)` is monotonic,
   so it preserves the frame RANKING → the top-`density` frames are identical for any scale (confirmed: 0 frames
   differ at scale 0.5/2.0). There is NO "onset temperature" that changes WHICH onsets fire in deployment; it
@@ -218,8 +258,27 @@ missed `dens` (a FRACTION — doesn't scale with `f16`); same class as the `--st
 (A/B: broken was "significantly worse" but the defect PERSISTS):** the gate suppresses the hold-HEAD on onset density,
 but the felt pathology is a LONG hold (5–6 beats) with a sustained ONE-FOOT stream (8ths @148bpm) running underneath —
 not addressed by head-gating. Correct metric = free-foot stream ≥4 notes @≤8th UNDER a hold: holdfix 2, holdbug 4.
-The real fix is a FREE-FOOT-OVERLOAD gate (force-close the hold when the free foot streams) — IN PROGRESS. See
-`notes/footspeed_floor_findings.md §5`.
+The real fix is a FREE-FOOT-OVERLOAD gate (force-close the hold when the free foot streams) — ✅ BUILT + SHIPPED, below.
+**★ HOLD FORCE-CLOSE — `hold_release_run` / `hold_release_gap` / `hold_max_beats` (defect #3; SHIPPED CANONICAL DEFAULT
+2026-07-12, by-ear "much better, maybe totally fixed"; `notes/footspeed_floor_findings.md §5c`).** The structural successor
+to `hold_stream_penalty` for the free-foot-stream-under-a-hold pathology (a long hold pins one foot while the free foot
+streams). In `generate()`'s `hold_aware` block, right after `free_act` (`typed_model.py` ~:929), it force-closes an OPEN
+hold (folds into `close`) under three rules — the user's spec: **(1) SPEED LIMIT via NON-CAUSAL LOOKAHEAD** — an 8th
+(`hold_release_gap`, default `None`→`subdiv//2`) is the fastest allowable free-foot note under a hold; because the onset
+schedule is PRECOMPUTED for all frames, when a free-foot note under an already-open hold is FOLLOWED within < an 8th by
+another onset (`onset[:,t+1:t+gap].any()`: 16th/24th/48th + irregular), the hold CONCLUDES ON THE CURRENT note → the freed
+foot travels into the fast run (release on the FIRST note, not the 2nd). **(2) 8th-RUN** — a run of `hold_release_run`
+(=4) 8th-spaced free-foot notes force-releases (the 3-note flourish is free). **(3) DURATION CAP** — `hold_max_beats` (=6)
+force-closes any hold open longer than that (`hold_start` per-panel age), catching quiet 'monster' holds. **PRE-THINNING
+ORDERING GUARD** baked in: the trigger reads the raw `onset` intent, not the stamina-thinned `on_t`, so a future
+`stamina_hold_bump` can't erase it (never needed — automaton alone drives the defect to 0). Fires ONLY on a real defect →
+**byte-identical where none** (a no-op on clean charts + v1 where the pattern is absent). `hold_release_run=0/None` = OFF.
+**★ METRIC TRAP (bit 4× this arc):** the defect is INVISIBLE to a persist-exclusion metric — the release note co-occurs
+with the tail frame, so discarding it as a two-foot 'escape' HIDES the exact note the player feels. The correct metric
+(`scratchpad/measure_defect.py hold_speed_violations`, `freefoot_stream_runs`) counts a note under a PERSISTING hold (pin
+continues past it) followed by a faster-than-8th note — and the EAR was ground truth every round. Residual (accepted): a
+hold that OPENS on a fast note (a two-foot hold-ENTRY) — the lookahead can't release a hold the frame it opens.
+See `notes/footspeed_floor_findings.md §5c`, memory [[structural-over-salience]].
 **Metric caveat (2026-07-02):** the realism critic reads the BINARY note-PRESENCE grid (tap/hold/tail/roll all →
 "present"), so this knob is PRESENCE-BLIND to it — it changes tap-vs-hold type + a downstream same-panel-repeat jack,
 neither of which moves the grid much. Do NOT validate `hold_stream_penalty` on the presence critic (a rerun of

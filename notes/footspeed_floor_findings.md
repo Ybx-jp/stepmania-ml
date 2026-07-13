@@ -138,8 +138,11 @@ DIRECTION mirror of §1 (`--style` scaled a 16th-native value DOWN to v2 frames;
   proxy, then filtering the stream to pure-16ths). Dump the RAW grid and read it; don't trust an aggregation that
   encodes a too-narrow definition of the defect.
 
-### 5b. PARKED (2026-07-06) — the free-foot-stream-under-hold fix, designed + de-risked, NOT built
-User PARKED this as a detour (wants more playtest diversity first, not hacking). Captured so it's pick-up-ready.
+### 5b. ★ NEXT-UP (2026-07-12, was PARKED 2026-07-06) — the free-foot-stream-under-hold fix (defect #3)
+**Status flipped to NEXT-UP 2026-07-12:** the user chose to BUILD this BEFORE the taste-critic label matrix —
+because #3 is the one open defect that would POLLUTE the labels (it's CANDIDATE-VARYING under `freeze=high` AND
+presence-INVISIBLE to the critic, so labels on it can't even be learned; lineage `taste-critic-arc.md` Decisions
+2026-07-12b). Design directive below; build it structural-primary per [[structural-over-salience]].
 
 **Two failed levers ruled out (measured, not assumed):**
 1. **`hold_stream_floor` tweak** — sweep on Watch Out freeze=high (holds / free-foot-stream-under-hold):
@@ -166,7 +169,96 @@ if stamina_hold_bump is not None:                                              #
 `onset_threshold` IS the per-song tau (`onset = p > onset_threshold`, line 535), so `bump→1.0` can drop even a
 `p≈1` note. SELF-LIMITING: fewer notes → less grind → `E_slow` falls → bump falls → equilibrium at a sustainable
 free-foot rate (thins the stream, does NOT delete the hold). Near-inert where holds aren't grinds (`E_slow` low →
-`excess≈0`), so v1 charts ~unaffected. NEXT: test `stamina_hold_bump=1.0` on Watch Out (measure defect↓, holds held,
-density), tune, set the CANONICAL default, by-ear. Correct metric = `scratchpad/measure_defect.py` (free-foot stream
+`excess≈0`), so v1 charts ~unaffected. Correct metric = `scratchpad/measure_defect.py` (free-foot stream
 ≥4 @≤8th under a hold). Skill line FIXED this session: `conditioning-mechanics §8c` no longer says "stamina off by
 default" (that error burned this session).
+
+**★ DESIGN DIRECTIVE (2026-07-12, user) — TWO fixes, AUTOMATON PRIMARY, thinning is the RESIDUAL safety-net; they
+must be ORDERED or they undermine each other.** The user's principle: **"better hold-aware PATTERNING is a better
+principle than less-bad hold STREAMING"** and **"the automaton is a more reliable mechanism than salience thinning"**
+(salience points the WRONG way here — the offending notes are the loudest). So the priority INVERTS the paragraph
+above: the `stamina_hold_bump` salience-thinning is NOT the primary fix — it is the cleanup for whatever the
+structural fix leaves pinned.
+- **PRIMARY = a STRUCTURAL hold fix (automaton / pattern head).** Spectrum cheapest→best: (1) automaton FORCE-CLOSE —
+  free foot streams under a hold → release the held foot so the section becomes a proper two-foot stream (a decode
+  rule on the final symbols; reliable, blunt) and/or a hold-DURATION cap for the 6-beat monsters; (2) pattern/type-head
+  LOGIT SHAPING — bias AGAINST opening a long hold when a stream is imminent (make the human-like choice at generation,
+  not patch it after); (3) LEARNED (out of decode scope). The user leans 1–2 as the reliable core.
+- **SECONDARY = `stamina_hold_bump`** — thins ONLY the residual one-foot grind the automaton chose NOT to release
+  (e.g. a hold too short for a release to read well).
+- **⚠️ THE INTERACTION (the user's "could come out strangely") = a PIPELINE-ORDERING bug if stacked naively.** The two
+  act at DIFFERENT stages: stamina thins at the ONSET GATE (`on_t`, `typed_model.py:760`, EARLY) while the automaton
+  decides hold-release at SYMBOL RESOLUTION (`close = held & active`, `:919`, LATE). So stamina thins the free-foot
+  stream BEFORE the automaton sees it → the release TRIGGER (the stream) is erased → a monster hold stays OPEN with a
+  sparse awkward trickle = exactly the bad outcome. **Resolution:** compute the hold-release decision on the
+  PRE-thinning free-foot DEMAND (onset intent), and GATE `stamina_hold_bump` OFF on any hold the automaton is about to
+  force-close (thin only the NOT-released residual). Co-tune, by-ear. **NEXT-UP (2026-07-12): build this before the
+  critic label matrix.** Correct metric = `scratchpad/measure_defect.py` (free-foot stream ≥4 @≤8th under a hold);
+  probe song set = fast + `freeze=high` (e.g. Watch Out Pt.2, the original complaint).
+
+### 5c. ★ BUILT + MEASURED (2026-07-12) — the AUTOMATON FORCE-CLOSE alone solves it; NO thinning residual needed
+**The structural PRIMARY (§5b) is built and the salience SECONDARY (`stamina_hold_bump`) turned out to be UNNEEDED.**
+New `generate()` knobs `hold_release_run` / `hold_release_gap` (`typed_model.py`, in the `hold_aware` block right
+after `free_act`): while a hold pins one foot, count the FREE foot's stream (notes at ≤`hold_release_gap` frames = an
+8th, `subdiv//2`); when it reaches `hold_release_run` notes, force-close EVERY open hold that frame (fold into `close`).
+`hold_release_run=None` → skip → **BYTE-IDENTICAL** (v1 no-op). Exporter `--hold_release_run`/`--hold_release_gap` +
+shared-RNG `--ab_hold_release` (Edit arm flips it).
+- **THE USER'S RULE (2026-07-12), implemented exactly:** 3 free-foot notes is an acceptable one-foot flourish; the
+  **4th** qualifying note (`run=4`) is the trigger → release AT that frame so the freed foot takes it two-foot. A gap
+  wider than an 8th (e.g. a quarter rest) RESETS the run → a 3-then-rest hold is left untouched. Causal AR resolution:
+  the 4th note is the "escape" (release frame); it plays two-foot-free, so the metric must NOT count it (require the
+  pin to PERSIST past the note). `measure_defect.freefoot_stream_runs(require_persist=True)` — anchor-NEUTRAL
+  (holdfix 2 / holdbug 4 preserved).
+- **The metric ITSELF was rebuilt this session** (`scratchpad/measure_defect.py`; the prior one was lost with the
+  gitignored scratchpad). Validated against the documented anchor EXACTLY: `outputs/watchout_holdfix` = 2,
+  `outputs/watchout_holdbug` = 4 (incl. the exact `2700–2745` monster run). Parses an exported `.sm` (48 rows/measure)
+  → typed grid → `bipedal_metrics.foot_moves`; run-COUNT of ≥4 free-foot notes @≤8th under a PERSISTING hold.
+- **PIPELINE-ORDERING GUARD baked in from line 1:** the release trigger reads PRE-thinning intent (`onset[:,t]`, NOT
+  the stamina-gated `on_t`), so a future `stamina_hold_bump` can't erase the trigger (the §5b trap). ✅ never fired
+  a regression: the guard is inert today (no bump) and correctly does NOT over-release (See Me Now note-grid IDENTICAL).
+- **REFINEMENT (opening-frame consistency):** the first residual (Graceful Anomaly, 3→1 with the naive trigger) was a
+  `.H1.` hold that OPENS on the same frame as the free foot's first stream note. The metric counts that note (other
+  foot pinned from that instant) but the naive `hold_open=held.any(1)` reads `held` at frame START (False on the open
+  frame) → counted one short of 4. FIX: `opening = free_act & head/roll`; `hold_open = held.any(1) | opening.any(1)`;
+  and EXCLUDE the opening head from the demand (`& ~opening`) so a lone hold-open doesn't falsely start a run. Watch
+  Out's monster opens on a bare `.H..` → this refinement is a NO-OP there (still releases at the same frame); it only
+  catches the `.H1.` shape. Now Graceful → 0.
+- **MEASURED — Watch Out Pt.2 A/B (shared-RNG, `outputs/holdrelease_byear`):** defect **2 → 0**; NOTES held (390→390,
+  onset-decoupled); hold-HEADS preserved (19→20, holds SHORTENED not deleted); frames-under-a-hold 571→506. Artifact
+  spot-check: the 9-note `URULULUR` monster under a ~4-beat D-hold releases at the 4th note (`1t..`) → clean two-foot
+  stream after. Contrast the DEAD-END `hold_stream_floor` sweep (§5b) which reached 0 only by DELETING holds 19→0.
+- **ROBUSTNESS sweep (10 diverse `stream`/`rich` Hard songs, naive trigger, `outputs/holdrelease_sweep` +
+  `scratchpad/sweep_measure.py`):** total defect runs **21 → 1** (7/10 songs had it; 6 → 0, Graceful → 1 = the
+  opening-frame residual the refinement then closed). **Over-release flags = 0** (the 3 defect-free songs byte-
+  identical). Hold-heads 374 → 390 (preserved/shortened, NOT deleted). Density held per-song.
+- **★ BY-EAR ROUND 1 (2026-07-12) surfaced 2 MORE escape classes the ≥4@8th metric was BLIND to** (the recurring
+  "match the metric to the FELT property" trap — a THIRD time on this defect). User on the Edit track: "a 3-note 16th
+  stream broke through… 8th spacing is the fastest allowable note-speed during holds; tight against sub-16th or other
+  irregular fast patterns," + a **7.2-beat monster** hold the ≥4-run trigger missed (its under-notes are 8th-runs-of-3
+  split by rests). Exact-grid confirmed (every measure = 48 rows → parse is an identity map): `L`-hold then `R`(b84.75)
+  →`U`(b85.0) = a 16th on different arrows under the hold. WHY no existing guard caught it: `no_cross_during_hold` only
+  forbids true CROSSOVERS (R→U isn't one); the FATIGUE governor is HOLDS-BLIND (§8d — never pins the held foot, prices
+  R→U as a cheap two-foot move; pinning it REGRESSED before → the reliable lever is the automaton, per
+  [[structural-over-salience]]).
+- **★ FIX v2 (2026-07-12, user spec) — SPEED LIMIT + DURATION CAP added to the same release block:**
+  (1) **SPEED LIMIT:** an 8th (`hold_release_gap`=subdiv//2) is the fastest allowable note under a hold; ANY free-foot
+  note FASTER (gap < that: 16th/24th/48th + irregular 4-5f) whose PRIOR free-foot note was also under a hold
+  force-releases NOW (`fast_release`, guarded by `ff_last_uh` so a note at a hold's OPEN frame — fast vs a pre-hold
+  note — can't insta-close it). 8ths still accumulate to the `hold_release_run`=4 threshold (the 3-note flourish).
+  (2) **DURATION CAP** (`hold_max_beats`, user chose **6**): force-close any hold open > that many beats regardless of
+  under-activity (`hold_start` per-panel age). Exporter `--hold_max_beats`; the `--ab_hold_release` Edit arm turns the
+  FULL fix on (run=4 + speed limit + 6-beat cap).
+- **VERIFIED (invariants 0 across every fix chart — Watch Out/Raise/Giudecca):** fast-under-persisting-hold = 0,
+  8th-run≥4 = 0, >6-beat holds = 0. No hold THRASH (min hold 0.75 beats; the fix SHORTENS long holds — ≥4beat 4→2 —
+  not fragments them). Density held (390→387). ⚠️ CAVEAT: the fast-under-hold defect is RNG-RARE (1-2/song, specific
+  realizations) so a fresh baseline often has 0 to begin with; the fix's guarantee is STRUCTURAL (a fast 2nd note IS
+  the release → can never be a 2nd note under a PERSISTING hold). ⚠️ OPEN nuance for by-ear: a note under a hold + the
+  RELEASE note a 16th later (the "escape") is playable two-foot but may still READ as a fast-under-hold move; the fix
+  makes it two-foot but does not move the transition earlier.
+- **STATUS: automaton force-close + speed-limit + duration-cap VERIFIED at the metric + artifact; `stamina_hold_bump`
+  residual NOT built (unneeded).** ⏳ **BY-EAR ROUND 2 PENDING** — install-set `~/sm-generated/holdrelease_v2`
+  (Challenge=baseline vs Edit=full fix); compare to the round-1 `holdrelease_byear` (old trigger). ⏳ (orig line:) install-set
+  `~/sm-generated/holdrelease_byear` (Challenge=baseline monster vs Edit=fix). Ship as canonical (add to
+  `decode_defaults.CANONICAL_DECODE` + both CLIs) ONLY after by-ear passes. Harness notes: v2 export re-extracts
+  features every run (no cache) so it's slow; `--prefetch_workers` SILENTLY yields nothing when the pool holds broken-
+  audio community songs (exit 0, empty) — use `--song_filter` (pre-restricts) or `--prefetch_workers 0`.

@@ -47,7 +47,7 @@ from src.generation import sm_headers
 from src.generation.playtest_export import enforce_playability
 from src.generation.radar_manifold import RadarManifold
 from src.generation.decode_defaults import (
-    CANONICAL_DECODE, calib_arg_default, parse_phase_calib, grid_snap_offset)
+    CANONICAL_DECODE, calib_arg_default, parse_phase_calib, grid_snap_offset, UNIVERSAL_ONSET_WINDOW)
 from src.generation.decode_harness import (
     conditioned_p_onset, compute_tau, make_feature_extractor, load_generator, MODEL_ARCH)
 
@@ -71,18 +71,22 @@ def estimate_bpm(audio_path: str) -> float:
     return float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo)
 
 
-def _sparse_harm_offset(audio_np, gain, quiet_q):
+def _sparse_harm_offset(audio_np, gain, quiet_q, quiet_feat='total'):
     """The sparse-harm-in-quiet ONSET PHRASE CALIBRATOR (ported byte-for-byte from export_typed_samples.py):
     add a per-frame onset-logit boost `gain·quiet_gate·harm_onset` so a sparse harmonic/melodic event (a piano
-    line in a lull) fires where the flat governor would bury it. `quiet_gate` -> 1 as the (box-smoothed) total
-    energy dim-0 drops below the `quiet_q` percentile, 0 above it; dim-36 is the already-0-1 harmonic onset.
-    Rides the SAME onset_logit_offset slot as the grid snap, so tau MUST see it too (it does, below).
+    line in a lull) fires where the flat governor would bury it. `quiet_gate` -> 1 as the (box-smoothed) gate
+    feature drops below the `quiet_q` percentile, 0 above it; dim-36 is the already-0-1 harmonic onset.
+    `quiet_feat`: 'total' = dim-0 TOTAL energy (deployed default, byte-identical); 'perc' = dim-35 PERC_ONSET
+    ABSENCE — the conditioning-mechanics §6 fix, which fires inside an energy-LOUD but percussion-absent melodic
+    solo (a piano lead over a pad) that the total-energy gate MISSES (it once dumped boost onto a loud drum
+    section). Rides the SAME onset_logit_offset slot as the grid snap, so tau MUST see it too (it does, below).
     See conditioning-mechanics §6 / notes/phrasing_coherence_findings.md."""
-    e = audio_np[:, 0].astype(np.float64)
+    gcol = 0 if quiet_feat == 'total' else 35                    # dim-0 total energy | dim-35 perc onset (its absence)
+    e = audio_np[:, gcol].astype(np.float64)
     e = (e - e.min()) / (np.ptp(e) + 1e-9)                       # norm01
     w = 16; e = np.convolve(np.pad(e, w, mode='edge'), np.ones(2 * w + 1) / (2 * w + 1), mode='valid')  # boxsmooth
     q = np.percentile(e, quiet_q)
-    quiet_gate = np.clip((q - e) / (q + 1e-6), 0.0, 1.0)         # 0 above the quiet quantile, ->1 as energy->0
+    quiet_gate = np.clip((q - e) / (q + 1e-6), 0.0, 1.0)         # 0 above the quiet quantile, ->1 as feature->0
     return (gain * quiet_gate * audio_np[:, 36]).astype(np.float32)   # harm onset (dim36) already 0-1
 
 
@@ -198,6 +202,26 @@ def parse_args():
                    help="Stage-2 per-region density relief (canonical 50; 0 disables; needs --fatigue_penalty)")
     p.add_argument("--stamina_breathe", type=float, default=CANONICAL_DECODE["stamina_breathe"],
                    help="Stage-3 difficulty arc — ceiling breathes with audio energy (canonical 1.2; 0 = flat)")
+    p.add_argument("--stamina_breathe_local_win", type=int, default=None,
+                   help="EXPERIMENTAL (long-song fix, notes/stamina_longsong_findings.md): z-normalize the breathe "
+                        "envelope over a ROLLING window of this many FRAMES instead of the whole song. None (default) "
+                        "= deployed whole-song z. ~3600 (48th grid) ≈ one training-song span; fixes the length-mis-"
+                        "scoped arc on >130s songs.")
+    p.add_argument("--onset_tail_hangover", type=str, default="auto",
+                   help="tail-collapse fix (notes/playtest_log.md 2026-07-11/12): pad the audio past song-end by this "
+                        "many FRAMES (SILENCE) so the onset head's FINAL window CENTERS on the true end instead of "
+                        "leaving it at the under-trained trailing edge (fixes the tail quarter-backbone collapse on "
+                        "songs longer than the onset window). 'auto' (DEFAULT) = W//2. 0/off = disabled. No-op if the "
+                        "song fits the onset window (byte-identical).")
+    p.add_argument("--onset_window", type=str, default="auto",
+                   help="UNIVERSAL SUB-TRAIN-LENGTH WINDOW (notes/universal_window_findings.md): tile the ONSET head "
+                        "over local-PE windows of this many FRAMES for EVERY song longer than it. 'auto' (default) = the "
+                        "trained window (v2 V2_MSL=5400 / v1 the checkpoint PE size) = current behavior, only fires past "
+                        "the trained context. A SMALLER value (e.g. 3600 = v2 p75 train length) also fixes SHORT-song "
+                        "END-degeneration: the v2 abs-PE tail is under-trained past ~3500 (train len median 3120/max 5128) "
+                        "so a song ending there fires ~30%% of its real tail notes; ~3600 restores tail recall + backbone "
+                        "to human levels (probe_universal_window.py; by-ear gate pending). A song shorter than W = no-op "
+                        "(byte-identical). Single-sourced into BOTH tau and generate() so they can't drift.")
     p.add_argument("--pattern_temperature", type=float, default=CANONICAL_DECODE["pattern_temperature"],
                    help="footwork sampling temperature (canonical 1.0 — real jack/jump balance; NOT 0.7)")
     p.add_argument("--type_temperature", type=float, default=CANONICAL_DECODE["type_temperature"],
@@ -213,6 +237,10 @@ def parse_args():
                         "tau. Needs the 42-dim highres/highres_v2 features (perc/harm channels).")
     p.add_argument("--harm_quiet_q", type=float, default=40.0,
                    help="percentile of (smoothed) energy below which --harm_calib's quiet gate opens (default 40).")
+    p.add_argument("--harm_quiet_feat", choices=["total", "perc"], default="total",
+                   help="which feature --harm_calib's quiet gate keys on: 'total' (dim-0 total energy, deployed) or "
+                        "'perc' (dim-35 perc-onset ABSENCE — cond-mech §6 fix: fires in an energy-LOUD but "
+                        "percussion-absent melodic solo the total gate misses).")
     # ---- v2 (48th-grid) decode flags — all are v1 no-ops (subdiv=4) BY CONSTRUCTION, so they're safe defaults
     p.add_argument("--no_fast_jump", action=argparse.BooleanOptionalAction, default=True,
                    help="[v2; DEFAULT ON] forbid a >=2-fresh-press JUMP at sub-16th spacing (a 24th/48th gap on the "
@@ -415,9 +443,28 @@ def main():
     # ("dead tail": Toulouse tail onsets 44 abs-PE vs 127 windowed). So we run the onset head over IN-DISTRIBUTION
     # local-PE windows of `onset_window` frames (single-sourced into BOTH tau and generate() so they can't drift).
     # The DECODER (choreography) DOES extrapolate gracefully (panel entropy ~1.0 at 2x context) and can't change
-    # the onset count, so it keeps the extended absolute PE below — the two fixes compose. onset_window = the
+    # the onset count, so it keeps the extended absolute PE below — the two fixes compose. onset_window 'auto' = the
     # trained window (v2 = V2_MSL 5400; v1 = the checkpoint PE size); a song that fits is a no-op (byte-identical).
-    onset_window = V2_MSL if is_v2 else trained_ctx
+    # A SMALLER --onset_window (e.g. 3600) also fixes SHORT-song end-degeneration (the abs-PE tail is under-trained
+    # past ~3500 even below the trained window; notes/universal_window_findings.md) — by-ear gate pending.
+    _ow = str(args.onset_window).strip().lower()
+    # 'auto' (default): v2 = the by-ear-validated UNIVERSAL window (3600, fires on short songs too); v1 = the trained
+    # context (current behavior, the analysis is v2-specific). A positive number overrides on either grid; 0/off/none
+    # DISABLES the universal window and reverts to the trained-window behavior (only tiles past the trained context).
+    if _ow in ("auto", ""):
+        onset_window = UNIVERSAL_ONSET_WINDOW if is_v2 else trained_ctx
+    elif _ow in ("off", "none", "0"):
+        onset_window = V2_MSL if is_v2 else trained_ctx          # disable universal window, keep long-song safety
+    else:
+        _v = int(float(_ow))
+        onset_window = _v if _v > 0 else (V2_MSL if is_v2 else trained_ctx)
+    # TAIL HANGOVER (the long-song backbone-collapse fix, notes/playtest_log.md 2026-07-11): the onset head's FINAL
+    # window puts the song-end at its under-trained trailing edge -> the tail quarter-backbone collapses. Reflect-pad
+    # the audio memory by `onset_tail_hangover` frames so a full window can CENTER on the true end. 'auto' = W//2 (the
+    # minimum for a full window to place the end at its center); 0/off = disabled. Single-sourced into BOTH tau and
+    # generate() (like onset_window) so they can't drift. No-op unless the song is longer than the onset window.
+    _hv = str(args.onset_tail_hangover).strip().lower()
+    onset_tail_hangover = (onset_window // 2) if _hv == "auto" else max(0, int(float(_hv)))
     if T > trained_ctx:
         from src.generation.transformer import PositionalEncoding
         model.pos_encoding = PositionalEncoding(model.pos_encoding.pe.shape[-1], max_len=T + 128).to(device)
@@ -489,7 +536,7 @@ def main():
         if audio_tensor.shape[1] != 42:
             raise SystemExit("--harm_calib needs the 42-dim highres/highres_v2 features (perc/harm channels).")
         harm_t = torch.from_numpy(
-            _sparse_harm_offset(audio_tensor[:T], args.harm_calib, args.harm_quiet_q)).to(device)
+            _sparse_harm_offset(audio_tensor[:T], args.harm_calib, args.harm_quiet_q, args.harm_quiet_feat)).to(device)
         onset_off = harm_t if onset_off is None else onset_off + harm_t
     # the radar fed to BOTH tau and the decode MUST be the same one, else tau is calibrated on a different
     # distribution than generate() decodes from (conditioning-mechanics §3). No --style -> radar=None (null token).
@@ -500,7 +547,8 @@ def main():
         memory = model.encode_audio(audio)
         p_onset = conditioned_p_onset(model, memory, diff, radar=radar_arg, guidance=args.guidance,
                                       phase_calib=song_calib, extra_offset=onset_off, subdiv=subdiv,
-                                      window=onset_window)  # SAME window generate() decodes from (tau-coupling §3)
+                                      window=onset_window,           # SAME window generate() decodes from (tau-coupling §3)
+                                      tail_hangover=onset_tail_hangover)  # SAME hangover generate() uses (tau-coupling §3)
     tau = compute_tau(p_onset, gen_density)
 
     # 6. generate with the CANONICAL full-stack palette + mandatory playability (mirrors export_typed_samples.py)
@@ -514,15 +562,18 @@ def main():
         no_fast_jump=args.no_fast_jump,    # v2: forbid >=2-fresh JUMP at sub-16th spacing (v1 no-op; §8d)
         onset_phase_calib=song_calib, subdiv=subdiv,  # ★ the 16th-unlock + per-song triplet band (baked into tau above)
         onset_window=onset_window,  # ONSET sliding window for long songs (fixes the dead tail; no-op if song fits)
+        onset_tail_hangover=onset_tail_hangover,  # reflect-pad past song-end so the final window centers on it (§ tail-collapse fix)
         onset_logit_offset=onset_off,      # 16th-grid snap + --harm_calib (same offset baked into tau above; None if neither)
         fatigue_penalty=(args.fatigue_penalty if args.fatigue_penalty and args.fatigue_penalty > 0 else None),
         fatigue_free=args.fatigue_free,
         stamina_ceiling=(args.stamina_ceiling if args.stamina_ceiling and args.stamina_ceiling > 0 else None),
         stamina_tau=CANONICAL_DECODE["stamina_tau"], stamina_scale=CANONICAL_DECODE["stamina_scale"],
-        stamina_breathe=args.stamina_breathe,
+        stamina_breathe=args.stamina_breathe, stamina_breathe_local_win=args.stamina_breathe_local_win,
         hold_stream_penalty=CANONICAL_DECODE["hold_stream_penalty"],  # suppress holds in dense streams (2026-07-02)
         hold_stream_floor=CANONICAL_DECODE["hold_stream_floor"], hold_stream_win=CANONICAL_DECODE["hold_stream_win"],
         footswitch=CANONICAL_DECODE["footswitch"],  # DEFAULT False: force one-foot jacks, model alternates (2026-07-02)
+        hold_release_run=CANONICAL_DECODE["hold_release_run"],  # DEFECT-#3 free-foot-under-hold force-close (2026-07-12, §5c)
+        hold_release_gap=CANONICAL_DECODE["hold_release_gap"], hold_max_beats=CANONICAL_DECODE["hold_max_beats"],
         bpm=bpm, radar=radar_arg,  # SAME radar tau was computed from (conditioning-mechanics §3)
         style=None, guidance_scale=(args.guidance if style_spec else 1.0),
     )

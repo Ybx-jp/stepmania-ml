@@ -8,6 +8,316 @@ Sample sets live under `outputs/` (gitignored). Generation: `export_typed_sample
 
 ---
 
+## 2026-07-12 — UNIVERSAL sub-train-length window A/B VERDICT: windowed WINS on all 3 (great / better / fine); [H-subtail] short-song tail-collapse fix CONFIRMED by ear → default FLIPPED. New residual [H-winddown]. RNG question answered.
+
+**WHAT WAS PLAYED** — `~/sm-generated/universal_window_ab/` (3 long val songs, Hard; each `.sm` = **Challenge =
+WINDOWED W3600** / **Edit = single-pass**, today's default / **<Hard> = human original**; shared RNG). This is the
+by-ear gate for the universal sub-train-length window (`notes/universal_window_findings.md`): tile the onset head so
+a SHORT song's end leaves the under-trained abs-PE tail (train len median 3120 / max 5128; single-pass fires only
+~30% of real tail notes on the 3800–5128 band). Songs: DOMINION (4973 frames), チョコレートスマイル / GUMI (4992),
+ラクガキスト / "&"-artist (4800).
+
+**RAW FEEDBACK** (verbatim) —
+- **DOMINION:** windowed "**was great!** it did not wind down properly though, 1-2 measures after silence it was
+  still streaming." single-pass "did sorta the same but ended more disjointed rather than streamy." "the 2 charts
+  were VERY different, did they actually use the same rng? single pass **used sub-16ths liberally from the beginning**,
+  they didn't feel bad though, but it **did degenerate towards the end**."
+- **"&"-artist (ラクガキスト):** windowed "was fine, pretty **bland choreography** though — in sync but not
+  interesting." single-pass "similarly bland, but had **worse foot speed during holds** behavior. i suspect the bland
+  choreography is just an artifact of sub-optimal conditioning, more 'song specific conditioning' problems."
+- **GUMI one (チョコレートスマイル):** "windowed **was better**."
+
+**COMMENTARY / HYPOTHESIS** —
+1. **[H-subtail] THE BY-EAR GATE PASSES — windowed wins on all three (great / better / fine-and-no-worse).** This
+   confirms the onset-probe (n=60, single-pass tail recall 0.30→0.63) + decoded check (windowed tail quarter% 33–69
+   vs single-pass's collapsed 4–8%, tail jitter 0). The user even names the single-pass defect precisely on DOMINION:
+   "**degenerate towards the end**" — the exact tail-collapse the window fixes. **Action: default FLIPPED to the
+   universal window (W3600) in both CLIs.** The prior tail-hangover fix (07-11) handled long songs (T>5400); this
+   extends the same mechanism to the ~3500–5400 band that never windowed.
+2. **RNG question ANSWERED — same RNG, legitimately VERY different, NOT a bug.** The A/B DOES share the RNG state
+   (`_ab_rng` restored before the Edit arm). But shared RNG only keeps two arms identical UP TO their first
+   divergence (as in the footswitch / hold_stream / no_fast_jump A/Bs, where only a LATE decode gate differs). Here
+   the window changes the arms at the ONSET level AND changes the GLOBAL tau (each arm recomputes tau from its own
+   `p_onset`): single-pass's tau is set over a p-distribution whose TAIL is flattened/degenerate, which shifts the
+   whole-song threshold → different frames fire from the INTRO onward (this is the user's "single-pass used sub-16ths
+   liberally from the beginning" — the body over-fires because the collapsed tail can't compete for the fixed density
+   budget). Once the onset stream diverges, the AR pattern/type sampling consumes the shared draws at different
+   points → the charts diverge globally. So the divergence is REAL and expected — a nice illustration that `tau` is a
+   whole-song coupling (cond-mech §6). Not a harness error.
+3. **[H-winddown] NEW residual defect — the chart does not WIND DOWN into a silence/outro (present on BOTH arms →
+   PRE-EXISTING, not caused by windowing).** windowed "still streaming 1-2 measures after silence"; single-pass "did
+   sorta the same but ended more disjointed." So neither arm tapers; windowing just makes the over-run a coherent
+   STREAM (better feel) vs single-pass's disjointed over-run. Mechanism candidates (to test, do NOT commit): (a) the
+   stamina BREATHING arc (§8c, `stamina_breathe=1.2`, floor 0.4) is supposed to thin low-energy outros using the
+   smoothed `p_onset` as the energy proxy — but the window RESTORES the tail `p_onset` peaks, so the breathe envelope
+   now reads HIGHER energy in the tail → LESS thinning (a plausible interaction the window introduced on TOP of a
+   pre-existing weak wind-down); (b) global-tau over-firing a genuinely quiet outro (the inverse of the shelved
+   empty-middles — same global-allocation root). This is a SEPARATE lead from [H-subtail]; the window is still a
+   clean win. Relates to the abrupt-ending / `stamina_breathe_floor` history.
+4. **[H-song-conditioning] BLANDNESS = sub-optimal per-song conditioning, NOT the window (user's own read).** Both
+   arms bland on ラクガキスト; the user attributes it to "song specific conditioning problems." This is exactly the
+   f48 quality-VARIANCE the taste-critic arc exists to solve via best-of-N SELECTION (the deployed default is
+   no-groove-conditioning; a per-song manifold pick could lift the bland ones). Corroborates the arc's framing:
+   choreography INTEREST is a conditioning/selection problem, orthogonal to the placement/timing fixes.
+5. **[H-foot-hold] single-pass "worse foot speed during holds" (defect #3) still present** — the parked free-foot-
+   overload gate (§5b). Note it recurs; not addressed this session.
+
+**ACTION / NEXT** —
+- [x] Flip the default to the universal window (W3600) in both CLIs (`export_typed_samples.py`, `generate.py`);
+      update `check_export_defaults.py` + HANDOFF canonical block + skills/memory.
+- [ ] **[H-winddown]** cheap probe: does the windowed tail over-fire a LOW-ENERGY outro vs the human? (bin outro
+      energy vs firing; test whether `stamina_breathe` thins less post-window; candidate fix = a stronger outro
+      taper / breathe-floor interaction). Do not build blind.
+- [ ] **[H-song-conditioning]** feeds the taste-critic best-of-N track (E0.1/E3) — the bland songs are the argument
+      for per-song conditioning selection.
+- [ ] **[H-foot-hold]** free-foot-overload gate still parked (§5b) — recurred here on single-pass.
+
+---
+
+## 2026-07-11 (b) — harm_calib A/B VERDICT: both gates LAND by ear, but the density-PRESERVING design makes them TRADE percussive alignment for melodic fill; PERC feeds the sub-16th tail
+
+**WHAT WAS PLAYED** — the two remaining Bye Bye arms of the stamina/harm group (`~/sm-generated/stamina_probe/`):
+**HARM-TOTAL** (`--harm_calib 10 --harm_quiet_feat total`, dim-0 energy gate) and **HARM-PERC** (`--harm_calib 10
+--harm_quiet_feat perc`, dim-35 perc-absence gate), vs the GLOBAL baseline. v2 Hard, gain 10. This is the ⏳ HANDOFF
+binding gate (does the silent-lull fill or the harmonic-passage fill land the choreography; does gain 10 over-boost).
+
+**RAW FEEDBACK** (verbatim) —
+- **HARM-TOTAL** "succeeded in filling drum-empty melodic sections with more notes, and these notes did generally
+  feel properly choreographed. **however, it came at the expense of sections where i would have wanted choreographic
+  alignment with heavier/percussive themes.**"
+- **HARM-PERC** "did its job." Question: "you said these are orthogonal, so they can be run together? it seemed like
+  they play off each other, might need some calibration but the mechanism is working."
+- **HARM-PERC** "really **degenerated its backbone increasingly towards the end** more so than the other songs — but
+  i'm thinking it might be the same [sub-16th jitter near song end] phenomenon but we've exacerbated it somehow."
+
+**COMMENTARY / HYPOTHESIS** —
+1. **[H-quiet-choreo] BOTH GATES LAND — the by-ear gate PASSES, and it was NOT gain-10 junk.** Offline
+   (`probe_harm_offline.py` on the installed arms): gate overlap Jaccard **0.20** (orthogonal, confirmed);
+   **HARM-TOTAL +40%** density in silent-lulls (−3% perc-absent), **HARM-PERC +17%** in perc-absent (+1% silent) —
+   each lever raised ITS OWN region, near-zero cross-talk. The ear agrees ("properly choreographed", "did its job").
+   So harm_calib is the real #2 (quiet-section under-charge) fix the 07-11(a) entry flagged, and gain 10 is fine —
+   NOT over-boost.
+2. **★ THE CRUX — harm_calib is DENSITY-PRESERVING, so it TRADES, it does not ADD (this IS the user's "at the expense
+   of percussive themes").** The offset is baked into `tau` → total note count held ~constant (1229–1295 across all
+   arms). So every note it moves INTO a melodic/harmonic section is STOLEN from elsewhere. Probe shows the theft:
+   HARM-TOTAL raised silent-lull density +40% but DROPPED out-of-gate (loud/percussive) density 0.145→0.126 (**−13%**)
+   — the percussive sections the user wanted aligned. This is the mechanism, not a bug (cond-mech §6, "density-
+   preserving"). **CONSEQUENCE for "run both together":** yes mechanically (two independent additive offsets sharing
+   the dim-36 harm multiplier, mostly-disjoint gates) — BUT they draw from ONE fixed density budget, so TOTAL+PERC
+   stacked pulls EVEN MORE away from percussive alignment. "Play off each other, need calibration" = they compete for
+   a zero-sum budget. Calibration lever = the gain. **The deeper read: what the user actually wants (more melodic
+   notes WITHOUT thinning percussive) is a density INCREASE, not a redistribution — i.e. the onset-head melodic-
+   under-placement gap (cond-mech §8d) that harm_calib only PATCHES at decode.**
+3. **[H-subtail] BACKBONE-DEGRADES-TOWARD-END = a LENGTH / PE-EXTRAPOLATION effect, NOT harm_calib. My "PERC feeds
+   the tail" hypothesis is REFUTED by the positional probe** (`probe_subtail_position.py`, run 2026-07-11; exp-design
+   Rule 9 — the cheap fair test overturned a plausible-but-committed mechanism). Pure-48th jitter `{1,5,7,11} mod 12`
+   (the cells grid_snap vetoes) by normalized song position, all Bye Bye arms: **exactly 0% through the first 80%**
+   (bins 0–7), ~1% at bin 8, then a CLIFF to **6–8% in the final 10%** (bin 9). It's arm-INVARIANT — HARM-PERC's tail
+   is 6%, LOWER than OFF/GLOBAL/LOCAL's 8%, and its overall jitter is the lowest arm (0.7%). So harm_calib does NOT
+   concentrate jitter into the tail (the density-preserving-relocation-feeds-the-tail story is wrong). **The driver is
+   LENGTH:** GLOBAL arm across the 3 songs — Calling (3124 fr) **0.0%** tail, Switch (6952 fr) **0.0%** tail, Bye Bye
+   (12673 fr ≈ 1056 beats, ~2.3× the v2 ~458-beat trained context) **8.0%** tail. Only the song that most exceeds the
+   trained context jitters, and only in its far tail. This is the OOD-tail / positional-encoding-extrapolation family
+   from 07-08 ("OOD-tail collapse"), same root as the dead-tail the sliding-window onset head fixed — but the symptom
+   here is JITTERY placement, not sparsity. The user's "harm perc worst" = a LENGTH confound (Bye Bye longest, A/B'd
+   vs shorter Switch/Calling; the HARM-PERC arm was incidental). **FIX candidates:** (A) cheap/targeted — extend the
+   pure-48th grid_snap veto into the final ~10–15% at ANY difficulty (currently OFF at Hard); body jitter is 0 for
+   every song so a tail-scoped snap zeroes the defect with ~zero collateral (no legit body sub-16th runs touched);
+   (B) root — long-song handling (sliding-window onset head at export / PE-extension), more work.
+   **USER CORRECTION (2026-07-11): "harm perc was worst because it came along with the backbone DISSOLVING — the whole
+   thing was SMEARED, not just the jitter."** So the pure-48th metric was too narrow (exp-design Rule 1). Re-probed
+   with a SMEAR metric (phase-histogram Herfindahl concentration + quarter-backbone share + density-by-position,
+   `probe_subtail_position.py`): **the tail IS a dense, quarter-less 8th-WASH** — body→tail quarter share collapses
+   38%→22%, 8th balloons 15%→47%, and the tail (bin 8) is the DENSEST bin of the song. That dense 8th-stream with no
+   quarter anchor IS the felt "smear/backbone dissolving." **BUT it is ARM-INVARIANT:** OFF/GLOBAL/HARM-PERC tails are
+   near-identical (quarter 22–23%, H≈0.32, jitter 2–3%) — harm_calib does NOT worsen the phase smear. Its ONLY
+   footprint is a small density RELOCATION into the degrading zone (HARM-PERC bins 7–8: 90/206 vs GLOBAL 73/196;
+   HARM-TOTAL bin 9: 103 vs 89 — a few %). **HONEST verdict: "HARM-PERC worst" = the LENGTH-driven OOD-tail wash +
+   perceptual salience** (PERC's added melodic notes over the drumless outro drew the ear to the already-degrading
+   tail), plus at most that marginal density bump — NOT a harm-specific backbone dissolve at the rhythm level. **ONE
+   untested axis (probe is blind to it):** the SMEAR could be the AR PATTERN head (which-panel footing) going
+   incoherent in the OOD tail — a SPATIAL/panel axis the onset-phase histogram can't see; the pattern head drifts
+   worst past trained context, and harm's extra tail density gives it more notes to drift on. That's the only
+   mechanism that could make harm_calib genuinely worse; measure with tail-vs-body jack/crossover/transition-entropy
+   per arm before concluding.
+   **★ LENGTH-vs-SONG CONTROL RESOLVED (2026-07-11, user-directed): it's LENGTH; harm_calib FULLY EXONERATED.**
+   Generated Lick the Rainbow (128bpm, 420s ≈ 896 beats, 10752 fr — a 2nd long song ~2× the ~458-beat context) via
+   the IDENTICAL deployed generate.py v2 path, Hard, **GLOBAL/no-harm** (`probe_lick_vs_byebye.py`). Lick's tail
+   collapses HARDER than Bye Bye's: quarter-backbone share **48%→3%** body→tail (Bye Bye 39%→22%), replaced by a
+   dense (**2.27×** body density) 16th/8th wash; jitter 0%-body→3%-tail. So the "backbone dissolving / whole thing
+   smeared" REPRODUCES on a second long song with ZERO harm_calib → harm_calib does NOT cause it; "HARM-PERC worst"
+   was the length confound + perceptual salience, CONFIRMED. Both LONG songs show the signature; both SHORT songs
+   (Calling/Switch) show none → a generalizable LENGTH-gated defect. TWO components: (i) off-grid `{1,5,7,11}` JITTER
+   (unambiguous defect, 0 in body, tail-only, long-songs-only); (ii) a QUARTER-BACKBONE COLLAPSE in the tail
+   (Bye Bye body 39%→tail 22%, craters to 3-4% in the final 10%; Lick craters through its whole 2nd half).
+   **REAL-CHART reference (exp-design Rule 5, the DECISIVE control):** the user's own hand-made Bye Bye chart (1506
+   notes, full song) keeps quarter-share ~50% FLAT across the whole song INCLUDING the tail (50-58%) — the human does
+   NOT abandon the quarter pulse in the outro, but the GEN does → the within-chart body→tail collapse is a divergence
+   from human choreography = defect-like, not merely "the song got busy." (Lick's real chart is only ~14% charted, a
+   WIP intro — unusable; so this rests on Bye Bye + a Beginner-vs-Hard difficulty confound in the LEVEL, though the
+   SHAPE/within-chart-collapse is the signal.)
+   **★ MECHANISM PINNED (2026-07-11, user's hypothesis, CONFIRMED by the window arithmetic) = the ONSET-HEAD SLIDING
+   WINDOW's TRAILING EDGE at song-end.** (My earlier "decoder PE extrapolation" call is RETRACTED — wrong site; and
+   my "Bye Bye recovers to 100% past its context boundary, so it's NOT edge-degradation" objection is ALSO retracted:
+   the user pointed out the recovery is the SIGNATURE of window-edge degradation, not evidence against it.) The onset
+   head (`typed_model.py:343-358`) tiles W=5400-frame windows with hop=W/2=2700 and a TRIANGULAR blend favoring window
+   CENTERS. So every MID-song frame is covered by some later window's healthy center → recovers to 100% quarter; but
+   the SONG-END is unavoidably at the trailing edge of the FINAL window with NO window after it to re-cover it at a
+   low/well-trained local position → degradation survives → cliff. Window layout (computed): Bye Bye last window
+   [8100,12673) L=4573, song-end at local-PE 4572, only-last-window region = last 15%; **Lick last window [5400,10752)
+   L=5352, song-end at local-PE 5351 — RIGHT at the trained ceiling ~5400, only-last-window region = last 25%.** This
+   explains why **Lick collapses HARDER despite being SHORTER**: where T lands mod hop=2700 gives it a LONGER final
+   window, so its end sits deeper in the under-trained trailing edge (local 5351 vs 4572) over a bigger region (25% vs
+   15%) — exactly the user's "long ending window" intuition. The windowing FIXED tail DENSITY (notes fire — Lick 1141)
+   but NOT PHASE precision at the deep trailing edge (quarter peaks compress → 16th noise wins the tau competition).
+   **FIX (decode-only, cheap, targets the exact defect): a HANGOVER PAD** — extend the audio `memory` past T
+   (reflect/repeat the last chunk) so the true final frame sits near a window CENTER (~local 2700) instead of the
+   edge, then discard the padded output. **DECISIVE TEST:** regenerate Lick with the hangover (or a different W that
+   moves the end's local-PE) and confirm the tail quarter-backbone recovers. Probes:
+   `experiments/generation_typed/probe_{subtail_position,lick_vs_byebye}.py`; onset-window code `typed_model.py:321`.
+   **✅ FIX BUILT + OFFLINE-CONFIRMED (2026-07-11): the HANGOVER PAD.** `onset_logits(tail_hangover=)` reflect-pads
+   `memory` past T so the final window CENTERS on the true song-end (single-sourced into tau via
+   `conditioned_p_onset(tail_hangover=)` + into `generate(onset_tail_hangover=)`; exporter untouched). generate.py
+   flag `--onset_tail_hangover auto|N` (default 0=off; auto=W//2=2700). Smoke test: no-op byte-identical, and with the
+   pad ON the HEAD is EXACTLY unchanged (max|Δ|=0) — only the tail moves (surgical). Regenerated Lick with `auto`
+   (`probe_lick_vs_byebye.py`, GLOBAL vs HANGOVER): **off-grid JITTER 0.6%→0.0% ELIMINATED**; very-end QUARTER
+   backbone recovered (b9 2%→14%, tailQ 3%→11%); density preserved (1144 vs 1141 notes). The recovery is CONCENTRATED
+   in the only-last-window region (b8-b9) exactly as the arithmetic predicted; b5-b7 (which have healthy low-local
+   coverage) barely moved → that residual 2nd-half 16th-heaviness is likely the SONG (electro-house drops), not the
+   defect. So the fix is TARGETED + correct, MECHANISM EMPIRICALLY CONFIRMED. WATCH-ITEM: tail density concentration
+   b8b9/body 2.27×→2.98× (healthier end-of-song peaks win more tau budget) — needs a BY-EAR gate (does it read
+   "cleaner" or "busier"?). ⏳ AWAITING USER: play `~/sm-generated/stamina_probe/Lick {GLOBAL,HANGOVER}` A/B; if the
+   tail is cleaner, wire `--onset_tail_hangover auto` toward a default for long songs. Code: `typed_model.py`
+   onset_logits/generate, `decode_harness.conditioned_p_onset`, `scripts/generate.py`.
+   **BY-EAR on the hangover (2026-07-11): "the fix is DEFINITELY better!" — hangover CONFIRMED for the tail backbone.**
+   BUT surfaced TWO more defects: (a) last couple measures too BUSY (didn't wind down with the song); (b) BOTH long
+   songs have "reeeeaaalllly bad MIDDLES — very long empty sections with a couple scattered random notes." User
+   hypothesis: windows too big (= trained length, but the model is WEAK at the trained-length TAIL = the under-trained
+   end of the length distribution), so use a SMALLER window (~80%) and/or MORE OVERLAP to keep peak window quality.
+   **★ WINDOW HYPOTHESIS TESTED OFFLINE + REFUTED for the MIDDLES (`probe_onset_window_sweep.py`, onset→tau only, no
+   AR decode = cheap; Rule 6 saved a wasted regen).** Made W/hop/pad tunable (`onset_logits(hop_frac=,
+   hangover_reflect=)`, default-inert byte-identical). Sweep {W 3600-5400 × hop_frac .125-.5 × reflect/silence} on
+   Lick: all fire the SAME 1151 notes (fixed global-tau budget) and MORE overlap makes maxgap WORSE (371→1658 fr) by
+   over-smoothing the logits (marginal regions sink uniformly below tau instead of poking peaks). Window config does
+   NOT fix the empty middles. **DIAGNOSIS (gap localization + energy): the empty middles are NOT a window bug — they
+   are (1) genuinely QUIET passages (pos 73%,32%: energy < p10, correct-ish sparse) + (2) the MELODIC/PERC-SPARSE
+   UNDER-PLACEMENT defect #2** — the biggest hole (pos 55%, 7.7 measures) is NORMAL energy but perc 0.066 (a drumless
+   melodic passage the percussion-keyed onset head reads as empty → global tau starves it). Exact target of
+   `harm_calib --harm_quiet_feat perc`. So: TAIL collapse = window-local-position artifact (hangover fixes it, user's
+   instinct right there); empty MIDDLES = global-tau ALLOCATION + onset under-placement (harm_calib PERC, or a
+   local/windowed tau = the Rule-13 global-quota anti-pattern, use care); BUSY END = Lick's genuinely high-energy
+   drop-ending (silence-pad barely moved raw firing; needs a forced outro taper via the breathe floor, not the pad).
+   Window knobs `hop_frac`/`hangover_reflect` kept probe-only (default-inert), NOT wired to CLI (they don't help).
+   **★ MIDDLES FIX ISOLATED (2026-07-11, `probe_harm_fills_middle.py`, offline onset→tau):** (1) `harm_calib` PERC
+   is a WEAK fix — even gain 20 (2× deployed) adds only +2 notes to the big p54 hole, because harm keys on harmonic
+   ONSETS (dim-36 attacks) and that hole is sustained/onset-poor (no attacks to boost); refuted as the middles fix.
+   (2) **LOCAL/WINDOWED TAU is the fix**: a per-region (4-measure) density quantile instead of the ONE global
+   quantile → maxgap 371→188, ≥1meas gaps 17→2, the 7.7-measure p54 hole fills +26 (budget ~held, 1137 notes). (3)
+   **ENERGY-GATED local tau = the SMART version**: fills the MODERATE-energy onset-poor holes (p54,p30,p62) but leaves
+   the genuinely-QUIET passages sparse (p32,p72 energy<p10 get ~+3) → respects the density ARC (H5) while curing the
+   defect holes. **⚠️ CAVEAT (exp-design Rule 13, the global-quota anti-pattern):** the probe proves the density
+   DISTRIBUTION improves but NOT that the filled notes are MUSICAL (on real events vs forced onto noise in onset-poor
+   regions) — the skill warns local quotas "damaged local coherence / forced unplayable spots." ONLY the ear settles
+   it (Rule 8). Probes `probe_{onset_window_sweep,harm_fills_middle}.py`.
+   **★ USER DECISIONS (2026-07-11, end of session):** (1) **LOCAL TAU = SHELVED** — "adds too much complexity to an
+   already hard-to-debug conditioning/decode harness; get real mastery of what we have before something so surgical."
+   Offline evidence kept above so it's NOT re-derived; do NOT build it without a fresh directive. (2) **SILENCE PAD
+   ADOPTED as the hangover default** (`hangover_reflect=False` now the default in `typed_model.onset_logits`) — a
+   correctness call ("the obvious thing — pad silence even if it does nothing"); offline near-identical to reflection,
+   but the ear-validated hangover used REFLECTION, so re-confirm silence by ear on the next long-song playtest. (3)
+   **★ OPEN HYPOTHESIS — UNIVERSAL SUB-TRAIN-LENGTH WINDOW (user, untested; my sweep tested the WRONG population).**
+   User: "a significant share of generated songs degenerate near the END, including SHORT val-set songs from BEFORE
+   windowing existed — cutting the window to ~80% train length should fix that." KEY: short songs (T ≤ 5400) currently
+   get NO windowing (single abs-PE pass), so a ~4800-frame song's end sits at the under-trained abs-PE TAIL → end
+   degeneration. Applying a sub-train-length window (~4096-4320) UNIVERSALLY (even to songs that "fit") would put EVERY
+   song's end at a well-trained local position. My `probe_onset_window_sweep` tested smaller-W on Lick's MIDDLES (long
+   song) and found no help — but that is NOT this claim (exp-design Rule 5/11, wrong population). NEXT (when un-
+   shelved): test smaller-W applied universally on the SHORT val-set songs that show end-degeneration; measure end-
+   backbone vs the current abs-PE single pass. This is the user's priority window direction, NOT local tau.
+
+**CONNECTING THREAD** — this closes the HANDOFF's binding gate: the #2 quiet-under-charge fix WORKS by ear, so it is
+a real decode lever for the taste-critic arc's track-(A). But it exposed the tension that #2 (quiet fill) and #1
+(sub-16th tail) are COUPLED under density-preservation: harm_calib's relocation FEEDS the tail defect. So a clean #2
+fix probably needs to (i) cap harm_calib's reach in the OOD tail and/or turn grid_snap ON at Hard for the tail, or
+(ii) move from redistribution to a genuine density INCREASE in harmonic sections (onset-head territory → the critic/
+retrain target list). One-change-at-a-time: settle #1's tail before pushing harm_calib gain higher.
+
+**ACTION / NEXT** —
+- [x] harm_calib #2 by-ear gate → PASS (both gates land, gain 10 OK). HANDOFF ⏳ gate RESOLVED.
+- [ ] **Lock the #2 decode fix**: pick TOTAL vs PERC vs both as default-off `generate.py` lever; DOCUMENT the density-
+      preservation trade so a future session doesn't stack gains blindly. Fold `local-z` in (same quiet-section axis).
+- [ ] **[H-subtail] tail probe** (deferred from 07-11a): sub-16th rate vs normalized song position, WITH vs WITHOUT
+      harm_calib — confirm PERC concentrates budget into the jittery tail. Test: grid_snap ON at Hard for tail frames.
+- [ ] Do NOT stack TOTAL+PERC as a default until the budget-competition is calibrated (zero-sum with percussive align).
+- [ ] Feed "harm_calib trades percussive alignment; PERC feeds the tail" into the taste-critic reward-model spec (E2)
+      as a negative pattern (over-charged melodic + starved percussive + sub-16th tail).
+
+## 2026-07-11 — Stamina long-song EXONERATED by ear; 3 real defects surfaced (quiet-section under-choreography, sub-16th tail, hold foot-speed)
+
+**WHAT WAS PLAYED** — 3-arm stamina probe (`~/sm-generated/stamina_probe/`): {Calling 125s *control*, Switch 217s,
+Bye Bye 364s} × {**OFF** `stamina_ceiling=0` / **GLOBAL** deployed whole-song z-norm / **LOCAL** the new rolling-window
+`stamina_breathe_local_win=3600`}, all v2 Hard, manifold density ~0.107. Tests the user's hypothesis that the breathing
+arc's whole-song z-normalization (tuned on the ≤130s corpus) neuters choreography on longer songs. Branch
+`explore/taste-critic-quality-resolution`.
+
+**RAW FEEDBACK** (verbatim) —
+- **Calling:** "global and off were pretty close. local perhaps slightly worse."
+- **Switch:** "global a bit better than off, **'tasteful edit'** came to mind [the original design intent]. local close.
+  all feel very similar — but the stamina system wasn't meant to make charts drastically different, just quiet the excess."
+- **Bye Bye:** "global was **really bad in the quiet parts where I would have expected choreography with the harmonic
+  onsets** — reminded me we explored this with **harm_calib and I kinda left that alone... perhaps that was a mistake?**
+  stamina off was **much worse**, a mid-energy bridge had disjointed choreography; both had misses but **LOCAL somewhat
+  recovered the bridge** (user correction to first report — *not* global), and **both LOCAL and GLOBAL beat OFF** there.
+  **awkward sub-16th notes near the end** (global maybe too). **increased
+  count of sub-16th notes near the end is a consistent finding among many songs.** local may have slightly recovered notes
+  in quiet sections, maybe slightly better than the other 2. **all 9 had spurious 16ths, Bye Bye worst. all songs had ≥1
+  instance of very high foot speed during a hold, Bye Bye worst.**"
+
+**COMMENTARY / HYPOTHESIS** —
+1. **STAMINA EXONERATED — hypothesis REFUTED, offline AND by ear.** Density-by-section (`scratchpad/density_by_section.py`)
+   showed OFF≈GLOBAL≈LOCAL in section shape (corr→real Bye Bye 0.68/0.74/0.67 — GLOBAL best); the ear agrees — GLOBAL is
+   the best-or-tied arm (Switch global>off; Bye Bye bridge: **both LOCAL and GLOBAL beat OFF's "disjointed"**, with
+   **LOCAL** the one that recovered it). Turning stamina OFF made it WORSE, the opposite of "neuters choreography." The
+   ceiling IS length-mis-scoped (corr(len,global-vs-local ceiling divergence)=+0.83, `scratchpad/probe_stamina_longsong.py`)
+   but at deployed density it sheds only ~4% of onsets → doesn't bite the DENSITY. **Method note:** the cheap CEILING probe
+   looked confirmatory on the density hypothesis; the fair AR-loop test + the ear overturned THAT direction (exp-design Rule
+   7/9 — necessary≠sufficient). The user's reframe is right: stamina "just quiets the excess," and it does — GLOBAL stays
+   the DEFAULT. **BUT `local-z` is NOT worthless (corrected):** it subtly RECOVERED the Bye Bye bridge + some quiet-section
+   notes — i.e. exactly the long-song quiet sections it targets, which is the SAME axis as defect #2 (quiet under-charge).
+   So keep the `local-z` lever (a mild partial #2 fix), even though it's not the density-culprit fix it was hypothesized to
+   be. The user's length instinct was right on the QUIET-SECTION axis, wrong on the "stamina neuters density" axis.
+2. **[H-quiet-choreo] UNDER-CHOREOGRAPHY of quiet/harmonic sections = the ONSET-HEAD melodic under-placement (cond-mech
+   §8d), NOT stamina.** Same defect as the 2026-07-08 Toulouse "dead spots where it should be charting notes." The user's
+   own pointer — **`harm_calib`** (sparse-harm-in-quiet onset phrase calibrator, BUILT + OFF by default) — is the designed
+   lever. CAVEAT (cond-mech §6): harm_calib keys on dim-0 TOTAL energy → misses energy-LOUD melodic solos; gate on
+   `perc_onset` dim-35 ABSENCE instead. Targeted A/B warranted (the user is asking whether leaving it off was a mistake).
+3. **[H-subtail] SPURIOUS SUB-16th NOTES, worst NEAR THE END, CONSISTENT across many songs** — new robust finding. Two
+   testable mechanisms: (a) `grid_snap` is OFF at Hard by design ("fast 48th runs legit there") → nothing vetoes spurious
+   pure-48th `{1,5,7,11}` cells at Hard; (b) the tail concentration points at PE-EXTRAPOLATION degradation past the trained
+   context on long songs (connects to 07-08 "OOD-tail collapse"). Cheap probe: sub-16th rate vs normalized song position,
+   long vs short.
+4. **[H-holdfoot] VERY HIGH FOOT-SPEED DURING A HOLD, ≥1×/song, Bye Bye (174bpm) worst** — reconfirms the KNOWN
+   free-foot-stream-under-a-hold defect (cond-mech §7 / `footspeed_floor_findings.md §5b`), the one shipping as a documented
+   KNOWN LIMITATION. The ear says it's NOT just a `freeze=high` edge — it shows on plain Hard gens, worst on the fastest
+   song. The designed free-foot-overload gate (PARKED) is the fix; priority bumped.
+
+**CONNECTING THREAD** — a stamina probe incidentally enumerated the concrete "bad" signals that make gens feel off:
+spurious sub-16ths (esp. tail), hold foot-speed, under-charted quiet sections, occasional disjointed bridges. **These ARE
+the targets of the un-parked TASTE-CRITIC arc** (lineage `taste-critic-arc.md`): a taste-aligned critic for best-of-N must
+penalize exactly these — and E1.1's 48th graded critic ALREADY grades sub-16th JITTER monotonically (0.98), so it can
+likely flag defect #3 today. So the defects both (a) give the critic concrete targets and (b) are individually cheap decode
+leads (harm_calib, grid_snap-at-Hard, free-foot gate). Decode-fix vs critic-select are COMPLEMENTARY.
+
+**ACTION / NEXT** —
+- [x] Stamina long-song hypothesis REFUTED (offline + ear). Thread CLOSED; GLOBAL stays default.
+- [x] `local-z` flag: KEEP (corrected — subtly recovers long-song quiet/bridge sections = a mild partial #2 fix, not a
+      density-culprit fix). Fold into the defect-#2 (quiet under-charge) investigation, not reverted.
+- [ ] [H-quiet-choreo] A/B `harm_calib` (perc-gated) on Bye Bye quiet sections — the user's flagged lead; converges with
+      `local-z` on the same quiet-section axis.
+- [ ] [H-subtail] probe sub-16th rate vs song position (grid_snap-at-Hard vs PE-tail).
+- [ ] [H-holdfoot] un-park the free-foot-overload gate? (reconfirmed, worst on fast songs).
+- [ ] Feed all three as concrete NEGATIVE targets into the taste-critic reward-model spec (E2).
+
 ## 2026-07-09 — Sliding-window PASS + "cut v1"; v2 admitted to the canonical default
 
 **WHAT WAS PLAYED** — `toulouse_win_anchor` (v2 `gen_motif_v2_48th_cont`, 128 BPM, 48th grid, anchor-beat +

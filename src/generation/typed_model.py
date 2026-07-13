@@ -318,7 +318,8 @@ class LayeredTypedChartGenerator(nn.Module):
     def encode_audio(self, audio):
         return self.audio_encoder(audio)
 
-    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None, motif=None, window=None):
+    def onset_logits(self, memory, difficulty, mask=None, radar=None, style=None, motif=None, window=None,
+                     tail_hangover=0, hop_frac=0.5, hangover_reflect=False):
         # Motif shapes WHICH panels (a pattern-head concern) — the MotifBasis is which-panels only, rhythm &
         # density excluded. Timing/density is the onset head's job, controlled by radar. Conditioning onset on
         # motif was spurious and let CFG inflate density (notes/h15_local_motif_plan.md), so onset sees
@@ -341,21 +342,46 @@ class LayeredTypedChartGenerator(nn.Module):
         # apply downstream identically at both the tau site and the decode site (the §3 tau-coupling holds).
         B, T, _ = memory.shape
         if window is not None and T > int(window):
-            W = int(window); hop = max(W // 2, 1)
-            acc = memory.new_zeros(B, T); wsum = memory.new_zeros(T)
+            # `hop_frac` = window stride as a fraction of W. 0.5 (default) = 50% overlap; SMALLER = MORE overlapping
+            # windows so every frame sits nearer SOME window's CENTER (peak onset quality), fixing the weak/empty
+            # mid-song sections where a global-tau starves low-confidence frames (notes/playtest_log.md 2026-07-11).
+            W = int(window); hop = max(int(round(W * hop_frac)), 1)
+            # TAIL HANGOVER (notes/playtest_log.md 2026-07-11, the Lick-the-Rainbow long-song backbone-collapse fix):
+            # the SONG-END sits at the trailing edge of the FINAL window (high local-PE, under-trained: few training
+            # songs filled a full W window) with NO later window to re-cover it at a low local position -> the tail
+            # quarter-backbone collapses to a 16th wash (Lick's end lands at local-PE 5351 ~ the trained ceiling).
+            # Fix: REFLECT-pad `memory` by `tail_hangover` frames so the true final frame is followed by (mirrored)
+            # "future" content and a FULL window can center on it; tile over the padded length, then slice back to
+            # [:T] (the padded output is discarded). H = W//2 lets a full window place T-1 at its CENTER. H=0 -> no-op
+            # (byte-identical). `memory` is length-safe (Conv1D audio encoder, no PE) so reflecting it is exact.
+            Tproc = T
+            if tail_hangover and int(tail_hangover) > 0:
+                H = min(int(tail_hangover), T)
+                # pad the "future" past song-end. hangover_reflect=False (DEFAULT, the correctness call 2026-07-11) =
+                # SILENCE (the physically-correct future — the song is over — so the model TAPERS into the ending);
+                # True MIRRORS the tail (keeps energy, but the model then hears the song CONTINUING and never winds
+                # down). Either way the true final frame gains a full-window center. (Offline the two are near-identical
+                # in raw firing; the ear-validated hangover used reflection, so re-confirm silence by ear on a long song.)
+                pad = (memory[:, T - H:].flip(1) if hangover_reflect
+                       else memory.new_zeros(B, H, memory.shape[-1]))
+                memory = torch.cat([memory, pad], dim=1)
+                if mask is not None:
+                    mask = torch.cat([mask, mask[:, T - H:].flip(1)], dim=1)
+                Tproc = T + H
+            acc = memory.new_zeros(B, Tproc); wsum = memory.new_zeros(Tproc)
             s = 0
-            while s < T:
-                e = min(s + W, T)
+            while s < Tproc:
+                e = min(s + W, Tproc)
                 msl = mask[:, s:e] if mask is not None else None
                 ol = self.onset_logits(memory[:, s:e], difficulty, msl, radar, style, motif, window=None)  # local PE
                 L = e - s
                 w = torch.minimum(torch.arange(L, device=memory.device) + 1,
                                   L - torch.arange(L, device=memory.device)).float()  # triangular: favor centers
                 acc[:, s:e] += ol * w; wsum[s:e] += w
-                if e >= T:
+                if e >= Tproc:
                     break
                 s += hop
-            return acc / wsum.clamp(min=1e-6)
+            return (acc / wsum.clamp(min=1e-6))[:, :T]
         cond = self._cond(difficulty, radar, style, motif=None)   # onset: NO motif (density stays radar-controlled)
         x = self.dropout(self.pos_encoding(memory) + cond)
         pad = (~mask.bool()) if mask is not None else None
@@ -417,14 +443,16 @@ class LayeredTypedChartGenerator(nn.Module):
                  guidance_scale=1.0, reference=None, reference_mask=None, style=None, motif=None, figure=None,
                  no_jump_during_hold=False, onset_phase_penalty=0.0, no_cross_during_hold=False,
                  boundary_reset=None, onset_phase_alloc=None, onset_phase_calib=None, onset_logit_offset=None, subdiv=4,
-                 onset_window=None,
+                 onset_window=None, onset_tail_hangover=0,
                  min_onset_gap=None, max_jack_run=None, no_fast_jump=True,
                  jack_penalty=None, jack_free_rate=5.0, jack_max_gap=4, bpm=None,
                  fatigue_penalty=None, fatigue_tau=2.0, jack_weight=1.0, travel_weight=0.6, fatigue_free=12.0,
                  footswitch_pen=4.0, fatigue_cap=30.0, footswitch=True,
                  stamina_ceiling=None, stamina_tau=8.0, stamina_scale=15.0, stamina_max_bump=0.45,
                  stamina_breathe=0.0, stamina_breathe_win=96, stamina_breathe_floor=0.4,
-                 hold_stream_penalty=0.0, hold_stream_win=16, hold_stream_floor=0.25):
+                 stamina_breathe_local_win=None,
+                 hold_stream_penalty=0.0, hold_stream_win=16, hold_stream_floor=0.25,
+                 hold_release_run=None, hold_release_gap=None, hold_max_beats=None):
         """KV-cached decode -> typed (B, T, 4). onset -> pattern (which panels, >=1 guaranteed)
         -> per-active-panel type. No enforcement needed (all 15 patterns are non-empty).
 
@@ -514,9 +542,11 @@ class LayeredTypedChartGenerator(nn.Module):
             p = None                                          # no onset probs under override (footspeed-floor skipped)
             p_onset = None                                    # no probs under override -> stamina gate skipped
         else:
-            ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif, window=onset_window)
+            ol = self.onset_logits(memory, difficulty, radar=radar, style=style, motif=motif, window=onset_window,
+                                   tail_hangover=onset_tail_hangover)
             if do_cfg:  # classifier-free guidance: push onset toward the conditioned prediction
-                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None, motif=None, window=onset_window)
+                ol_u = self.onset_logits(memory, difficulty, radar=None, style=None, motif=None, window=onset_window,
+                                         tail_hangover=onset_tail_hangover)
                 ol = ol_u + guidance_scale * (ol - ol_u)
             if onset_phase_penalty != 0.0:
                 # metric gate: off-beat frames need higher onset confidence (on-beat free, 8th -p, 16th -2p).
@@ -632,6 +662,16 @@ class LayeredTypedChartGenerator(nn.Module):
         gen = torch.zeros(B, T, NUM_PANELS, dtype=torch.long, device=device)
         prev_emb = self.bos.expand(B, 1, -1)
         held = torch.zeros(B, NUM_PANELS, dtype=torch.bool, device=device)  # hold automaton state
+        # DEFECT-#3 free-foot-stream-under-hold force-close (§5b): while a hold pins one foot, if the FREE foot
+        # streams >= hold_release_run notes at <= hold_release_gap (8th) spacing, RELEASE the held foot so the
+        # section becomes a two-foot stream. hold_release_run=None -> skip -> BYTE-IDENTICAL (and v1 no-op via the
+        # onset intent being the trigger). Gap default = an 8th (subdiv//2). Run counter + last-free-foot frame:
+        hold_release_gap = int(hold_release_gap) if hold_release_gap is not None else max(1, subdiv // 2)  # 8th = speed limit
+        hold_max_frames = int(round(hold_max_beats * subdiv)) if hold_max_beats is not None else None      # duration cap (beats->frames)
+        ff_run = torch.zeros(B, dtype=torch.long, device=device)             # free-foot stream length while a hold is open
+        ff_last = torch.full((B,), -999, dtype=torch.long, device=device)    # frame of last free-foot press (<=8th gap check)
+        ff_last_uh = torch.zeros(B, dtype=torch.bool, device=device)         # was the last free-foot note UNDER a hold?
+        hold_start = torch.full((B, NUM_PANELS), -1, dtype=torch.long, device=device)  # frame each open hold began (dur cap)
         prev_pat = torch.full((B,), -1, dtype=torch.long, device=device)    # previous note's pattern (for rep penalty)
         next_foot = torch.zeros(B, dtype=torch.long, device=device)         # 0=left, 1=right (crossover automaton)
         if pattern_bias is not None:
@@ -690,13 +730,26 @@ class LayeredTypedChartGenerator(nn.Module):
                 w = max(int(stamina_breathe_win) * f16, 1)                    # phrase window: frames -> subdiv-scaled
                 env = torch.nn.functional.avg_pool1d(p_onset.unsqueeze(1), kernel_size=2 * w + 1,
                                                      stride=1, padding=w, count_include_pad=False).squeeze(1)  # (B,T) phrase energy
-                if lengths is not None:  # z-normalize over VALID frames per song (pad frames excluded)
+                if stamina_breathe_local_win and stamina_breathe_local_win > 0:
+                    # LOCAL-z (2026-07-11, notes/stamina_longsong_findings.md): z-normalize the phrase envelope
+                    # against a ROLLING window instead of the WHOLE song. The whole-song z (else-branches below)
+                    # means something DIFFERENT on a long verse/chorus/breakdown song than on the <=130s training
+                    # corpus it was tuned on (corr(song_len, global-vs-local ceiling divergence)=+0.83): the arc
+                    # thins by whole-song energy RANK, mis-placed vs the local phrase. A rolling ~training-song-sized
+                    # window judges each section against its NEIGHBOURS. None (default) = deployed whole-song z, so
+                    # this branch is inert unless the caller opts in. (Single-song generation => no pad contamination.)
+                    lhw = max(int(stamina_breathe_local_win) // 2, 1); ek = env.unsqueeze(1)
+                    lmu = torch.nn.functional.avg_pool1d(ek, 2 * lhw + 1, 1, lhw, count_include_pad=False).squeeze(1)
+                    lex2 = torch.nn.functional.avg_pool1d(ek * ek, 2 * lhw + 1, 1, lhw, count_include_pad=False).squeeze(1)
+                    z = (env - lmu) / (lex2 - lmu ** 2).clamp(min=1e-6).sqrt()
+                elif lengths is not None:  # z-normalize over VALID frames per song (pad frames excluded)
                     vmask = (torch.arange(T, device=device).unsqueeze(0) < lengths.unsqueeze(1)).float()
                     mu = (env * vmask).sum(1, keepdim=True) / vmask.sum(1, keepdim=True).clamp(min=1)
                     var = ((env - mu) ** 2 * vmask).sum(1, keepdim=True) / vmask.sum(1, keepdim=True).clamp(min=1)
+                    z = (env - mu) / var.clamp(min=1e-6).sqrt()
                 else:
                     mu = env.mean(1, keepdim=True); var = env.var(1, keepdim=True, unbiased=False)
-                z = (env - mu) / var.clamp(min=1e-6).sqrt()
+                    z = (env - mu) / var.clamp(min=1e-6).sqrt()
                 # FLOOR the effective ceiling at stamina_breathe_floor x base: without it, a low-energy outro
                 # (z very negative) collapses the ceiling to ~0 -> max thinning -> EMPTY tail = abrupt early ending
                 # (worse at high breathe). The floor keeps low-energy/low-workload sections (outros) from being
@@ -876,11 +929,51 @@ class LayeredTypedChartGenerator(nn.Module):
                 proposed = typ + 1                                            # symbol 1..4
                 close = held & active                                         # model notes a held panel -> close it
                 free_act = (~held) & active                                   # fresh note on a free panel
+                if hold_release_run is not None:                              # DEFECT-#3 free-foot force-close (§5b/§5c)
+                    opening = free_act & ((proposed == 2) | (proposed == 4))   # (B,4) hold(s) OPENING this very frame
+                    hold_open = held.any(1) | opening.any(1)                   # (B,) a hold is open (incl. one opening now)
+                    # PRE-THINNING demand (ordering guard): the free-foot INTENT this frame reads the raw onset,
+                    # NOT the stamina-thinned on_t -> a future stamina_hold_bump can't erase the release trigger.
+                    # EXCLUDE the opening hold-head itself (~opening): it's a hold, not a free-foot stream note, else
+                    # a lone hold-open would falsely start a run. A note simultaneous with a hold-OPEN (.H1.) DOES count.
+                    ff_demand = ((~held) & panel_bits[pat].bool() & onset[:, t].unsqueeze(1) & ~opening).any(1)   # (B,)
+                    gap = t - ff_last                                          # frames since the last free-foot note
+                    in_stream = ff_demand & hold_open & (gap > 0) & (gap <= hold_release_gap)   # within an 8th
+                    ff_run = torch.where(ff_demand & hold_open,                # streaming under an open hold:
+                                         torch.where(gap <= hold_release_gap, ff_run + 1, torch.ones_like(ff_run)),
+                                         torch.where(hold_open, ff_run, torch.zeros_like(ff_run)))   # hold up: hold run; else 0
+                    # ★ SPEED LIMIT via NON-CAUSAL LOOKAHEAD (user 2026-07-12): an 8th is the FASTEST allowable note
+                    # under a hold. The onset schedule is PRECOMPUTED for all frames, so when a free-foot note under an
+                    # already-open hold is FOLLOWED within < an 8th (any onset in t+1..t+gap-1: 16th/24th/48th + irregular
+                    # 4-5f) by another onset, CONCLUDE THE HOLD ON THIS note -> the freed foot travels DURING it for the
+                    # fast note (release on the FIRST note of the run, per the user's rule). `held.any(1)` (not hold_open)
+                    # requires the hold to predate THIS frame, so a hold's own .H1. open frame can't insta-close.
+                    hi = min(t + hold_release_gap, T)
+                    next_fast = (onset[:, t + 1:hi].any(1) if hi > t + 1
+                                 else torch.zeros(B, dtype=torch.bool, device=device))  # a note faster than an 8th ahead
+                    # BACKWARD guard for the .H1. edge (a fast note whose predecessor was the hold's OPEN-frame note):
+                    back_fast = (gap > 0) & (gap < hold_release_gap) & ff_last_uh
+                    fast_release = ff_demand & held.any(1) & (next_fast | back_fast)
+                    run_release = ff_run >= hold_release_run                   # a run of 8ths reaching the threshold
+                    # ★ DURATION CAP (hold_max_beats): force-close any hold open longer than hold_max_frames beats,
+                    # regardless of what's underneath (the quiet 'monster' holds). None -> no cap.
+                    if hold_max_frames is not None:
+                        dur_close = held & (hold_start >= 0) & ((t - hold_start) >= hold_max_frames)
+                    else:
+                        dur_close = torch.zeros_like(held)
+                    force_close = (held & (fast_release | run_release).unsqueeze(1)) | dur_close
+                    close = close | force_close
+                    ff_last = torch.where(ff_demand, torch.full_like(ff_last, t), ff_last)
+                    ff_last_uh = torch.where(ff_demand, hold_open, ff_last_uh)  # was THIS free-foot note under a hold?
+                    ff_run = torch.where(force_close.any(1), torch.zeros_like(ff_run), ff_run)   # reset after release
                 prop = torch.where(proposed == 3, torch.ones_like(proposed), proposed)  # tail-on-free -> tap
                 state = torch.zeros(B, NUM_PANELS, dtype=torch.long, device=device)
                 state = torch.where(close, torch.full_like(state, 3), state)  # tail closes the hold
                 state = torch.where(free_act, prop, state)                    # tap/head/roll on free panels
                 held = (held & ~close) | (free_act & ((prop == 2) | (prop == 4)))
+                if hold_release_run is not None:  # track each open hold's START frame (for the duration cap)
+                    hold_start = torch.where(held & (hold_start < 0), torch.full_like(hold_start, t), hold_start)
+                    hold_start = torch.where(~held, torch.full_like(hold_start, -1), hold_start)  # clear on release
                 fresh_press = free_act                                        # panels FRESHLY pressed (what a foot hits)
             else:
                 state = torch.where(active, typ + 1, torch.zeros_like(typ))   # stateless per-panel symbol

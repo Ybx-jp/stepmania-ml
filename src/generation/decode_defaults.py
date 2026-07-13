@@ -42,6 +42,15 @@ CANONICAL_DECODE: dict = {
     # be one-foot jacks. Playtest: OFF forced the model to ALTERNATE (more creative, less brutal voltage); japa1
     # "sooooo much better". Set the DEPLOYED default OFF for now; revisit a graded footswitch policy later.
     "footswitch": False,
+    # ★ FREE-FOOT-UNDER-HOLD FORCE-CLOSE (defect #3; 2026-07-12, by-ear PASSED "much better, maybe totally fixed").
+    # While a hold pins one foot: (a) an 8th is the fastest allowable free-foot note under it — a note FASTER than an
+    # 8th (via the precomputed non-causal onset LOOKAHEAD) concludes the hold ON the current note so the freed foot
+    # travels into the fast run; (b) a run of 8ths reaching hold_release_run force-releases; (c) hold_max_beats caps
+    # duration. Fires ONLY on a real defect -> byte-identical where none (no-op). See notes/footspeed_floor_findings.md
+    # §5c + conditioning-mechanics §7. hold_release_gap=None -> generate() resolves it to an 8th (subdiv//2).
+    "hold_release_run": 4,          # 8th-run length under a hold that triggers release (the 3-note flourish is free)
+    "hold_release_gap": None,       # speed limit (frames); None -> an 8th = subdiv//2; faster-than-this force-releases
+    "hold_max_beats": 6.0,          # force-close any hold open longer than this many beats (the quiet monster cap)
 }
 
 
@@ -93,6 +102,16 @@ def triplet_band_positions(subdiv=4):
 # per-frame offset so it rides the SAME onset_logit_offset slot (single-sourced to tau + decode) and is
 # byte-identical to a no-op on the 16th grid. See grid_snap_offset.
 GRID_SNAP_NEG = 30.0
+
+# UNIVERSAL sub-train-length ONSET WINDOW (v2/48th grid), by-ear-validated 2026-07-12 (notes/universal_window_
+# findings.md, playtest_log 2026-07-12): tile the non-causal onset head over local-PE windows of this many FRAMES
+# for EVERY song longer than it, so a song's END leaves the UNDER-TRAINED absolute-PE tail (v2 train len median 3120
+# / p75 3648 / MAX 5128; abs-PE exposure 31%/13%/6% by pos 3500/4000/4320). Single-pass fires only ~30% of the real
+# TAIL notes past ~3800; this restores tail recall + backbone to human levels. 3600 = the v2 p75 train length (75% of
+# training songs fit fully in one window; the rest tile). A song shorter than this = byte-identical no-op. v1/16th
+# grid keeps the trained-context window (the analysis is v2-specific). Single-sourced into BOTH tau
+# (conditioned_p_onset window=) and decode (generate onset_window=).
+UNIVERSAL_ONSET_WINDOW = 3600
 
 
 def grid_snap_offset(T, subdiv=4, keep_triplets=False, neg=GRID_SNAP_NEG, device=None):

@@ -58,7 +58,7 @@ __all__ = [
 
 
 def conditioned_p_onset(model, memory, difficulty, *, radar=None, style=None,
-                        guidance=1.0, phase_calib=None, extra_offset=None, subdiv=4, window=None):
+                        guidance=1.0, phase_calib=None, extra_offset=None, subdiv=4, window=None, tail_hangover=0):
     """The deployed onset -> p_onset path (the tau source), built EXACTLY as generate()/the exporter do.
 
     Steps, in the order the decode uses them (conditioning-mechanics §3 + §6):
@@ -77,9 +77,11 @@ def conditioned_p_onset(model, memory, difficulty, *, radar=None, style=None,
     # `window` = the sliding-window onset for songs longer than the trained PE context (single-sourced with
     # generate() via model.onset_logits(window=) so tau matches the decode; conditioning-mechanics §3 + §6,
     # notes/byo_sliding_window_findings.md). None / short song => byte-identical single pass.
-    ol = model.onset_logits(memory, difficulty, radar=radar, style=style, window=window)[0]
+    ol = model.onset_logits(memory, difficulty, radar=radar, style=style, window=window,
+                            tail_hangover=tail_hangover)[0]
     if guidance != 1.0 and (radar is not None or style is not None):
-        ol_u = model.onset_logits(memory, difficulty, radar=None, style=None, window=window)[0]
+        ol_u = model.onset_logits(memory, difficulty, radar=None, style=None, window=window,
+                                  tail_hangover=tail_hangover)[0]
         ol = ol_u + guidance * (ol - ol_u)
     ol = apply_phase_calib(ol, phase_calib, subdiv)
     if extra_offset is not None:

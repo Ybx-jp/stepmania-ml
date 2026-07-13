@@ -127,6 +127,7 @@ DECODE = dict(
     onset_phase_calib=(0.0, 1.0),                      # ★ THE 16th-UNLOCK — un-buries 16th-offbeats so they fire where audio affords; b8=0, b16≈1.0
     hold_stream_penalty=8.0, hold_stream_floor=0.45, hold_stream_win=16,  # HOLD-IN-STREAM fix (2026-07-02): suppress holds in dense streams; floor protects sparse holds
     footswitch=False,                                  # (2026-07-02) forbid footswitch footing -> model ALTERNATES same-panel runs (playtest "sooooo much better")
+    hold_release_run=4, hold_release_gap=None, hold_max_beats=6.0,  # ★ FREE-FOOT-UNDER-HOLD force-close (defect #3, 2026-07-12, by-ear PASSED): 8th = fastest allowable note under a hold; a faster note concludes the hold ON that note (onset LOOKAHEAD -> freed foot travels); 6-beat duration cap. Byte-identical where no defect. §5c
 )
 # generate() supplies the rest of the governor internals — DO NOT hand-set unless retuning:
 #   stamina_breathe_floor=0.4 (outro-collapse fix), stamina_max_bump=0.45, stamina_breathe_win=96,
@@ -138,9 +139,14 @@ g = model.generate(audio, diff, lengths=torch.tensor([T], device=device),
 - **No groove conditioning by default:** `radar=None, style=None, motif=None, figure=None, guidance_scale=1.0`.
   That's clean audio+difficulty — the baseline most playtests use. Add a groove knob ONLY deliberately, via the
   manifold (`--style`, never `--radar` mean-pin), per `conditioning-mechanics` §2–§6.
-- **Two v2-only AUTO defaults (on by default, v1 no-ops; see the flags section below):** `--grid_snap auto` (16th-grid
-  snap for difficulty ≤ Medium — vetoes pure-48th jitter) + `--auto_b_trip` (triplet band on audio-detected triplet
-  songs). Both resolve into the `onset_logit_offset` / `onset_phase_calib` slots (NOT generate() kwargs). BY-EAR-PENDING.
+- **Three v2-only defaults (on by default, v1 no-ops):** `--grid_snap auto` (16th-grid snap for difficulty ≤ Medium —
+  vetoes pure-48th jitter) + `--auto_b_trip` (triplet band on audio-detected triplet songs; both resolve into the
+  `onset_logit_offset` / `onset_phase_calib` slots) + **`--onset_window 3600` (2026-07-12, by-ear PASSED, `notes/
+  universal_window_findings.md`)** = the UNIVERSAL sub-train-length window (`decode_defaults.UNIVERSAL_ONSET_WINDOW`):
+  tile the onset head so a song's END leaves the under-trained abs-PE tail (v2 train len median 3120/max 5128 →
+  single-pass fires only ~30% of real tail notes past ~3800). Single-sourced into tau (`conditioned_p_onset window=`)
+  + decode (`generate onset_window=`) with `--onset_tail_hangover auto` (=W//2, end-centering). A song < 3600 frames
+  or v1 = byte-identical no-op; disable via `--onset_window 0`. generate.py: `--onset_window auto` (v2→3600).
 
 ## 1a. ★ `onset_phase_calib` — the 16th-unlock that ties the rhythm together (don't omit it)
 The governor/breathe shape DENSITY; `onset_phase_calib` fixes WHERE the notes land on the 16th grid. Without it the
