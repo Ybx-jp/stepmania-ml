@@ -108,11 +108,11 @@ mechanism; **this skill is the config VALUES.**
   hold-stream `freeze=high` edge ships as a documented KNOWN LIMITATION (user call). Groove-radar chaos fix is
   RETRAIN-GATED (`notes/manifold_radar_subdiv_findings.md` — do NOT refit the manifold for the current model). See
   `notes/footspeed_floor_findings.md`, `notes/data_layer_v2_scope.md`, `conditioning-mechanics §6/§8`.
-- ⚠️ **TRAP:** `export_typed_samples.py`'s argparse `--checkpoint` DEFAULT is the legacy `gen_style` (23-dim) and
-  `--features` DEFAULTS now correctly resolve to the v2 canonical model (`gen_motif_v2_48th_cont` + `highres_v2`) as
-  of 2026-07-09 — the *bare* run loads the RIGHT model (the old "bare default = wrong model" trap is FIXED). The
-  remaining footgun is MIXING: never pair `--features highres_v2` with a v1 checkpoint (or vice-versa) — the grid
-  mismatches. To run the legacy v1 model, pass BOTH `--checkpoint checkpoints/gen_motif_full_fixed/best_val.pt
+- ✅ **BARE RUN IS CORRECT (verified 2026-07-13):** `export_typed_samples.py`'s argparse `--checkpoint` DEFAULT is
+  now `checkpoints/gen_motif_v2_48th_cont/best_val.pt` (line ~169) and `--features` defaults to `highres_v2` — so a
+  BARE run loads the RIGHT v2 canonical model. (The old "argparse default is legacy `gen_style`" claim was STALE;
+  the code moved on.) The remaining footgun is MIXING: never pair `--features highres_v2` with a v1 checkpoint (or
+  vice-versa) — the grid mismatches. To run the legacy v1 model, pass BOTH `--checkpoint checkpoints/gen_motif_full_fixed/best_val.pt
   --features highres`.
 
 ## 1. THE canonical decode palette (copy-paste)
