@@ -5,6 +5,16 @@ results; plans/roadmaps hold forward design; `playtest_log.md` is the subjective
 roughly chronological; the newest (motif → governor → release) is at the bottom.
 
 ## Taste-critic quality arc (2026-07-11 — UN-PARK of ship mode; see lineage `taste-critic-arc.md`, `HANDOFF.md`)
+**UPDATE (2026-07-13 — critic-v3 REBUILD; `critic_v3_findings.md`):** user CAUGHT graded_v2's `max_len=2304`
+tail-truncation flaw (GLOBAL-pool → tail-blind on ~70% of songs, where defect #1 lives). Chose the FULL critic-v3
+rebuild — `experiments/realism_critic/{windowed_critic,train_critic_v3,eval_critic_v3_gates}.py` →
+`checkpoints/realism_critic_v3`. WindowedLocalCritic = SOFT-MIN over multi-scale overlapping windows (non-gameable,
+length-agnostic) + 42-dim audio + TYPED chart; objective = graded ladder + a LOCALITY term. **WINS:** R1 jitter 0.98;
+length-fix uniform tail-response incl. long>3600; locality clean (0.00 leakage). **SOFT SPOTS:** panel 0.56 / shift
+collapsed (within-window mean-pool is ORDER-destroying). **ARBITER = the EAR** — E1.2-redux on the E0.1-v2 rankings.
+E0.1 rebuilt as **E0.1-v2** (first set trashed: maxed refs + match_radar): 27-song BPM×length factorial, moderate
+style guidance sweep, no match_radar (`scratchpad/e01v2_{select,merge}.py`).
+
 **UPDATE (2026-07-13 — status corrections + the INFRASTRUCTURE layer):** the 07-12 entry below is superseded on two
 points: the **universal window PASSED by-ear and SHIPPED as the canonical default** (W3600, both CLIs;
 `universal_window_findings.md`) and **defect #3 free-foot-under-hold was FIXED + canonicalized**

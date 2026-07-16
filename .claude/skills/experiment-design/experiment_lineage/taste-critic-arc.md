@@ -168,17 +168,57 @@ taste labels):
   conditioning/ranking axis for this label round** (its melodic↔percussive trade is a genuine taste question but not
   for round 1 — keeps the axes clean).
 - **★ E4 (future direction, RECORDED not committed) — critic-as-OPTIMIZER.** The user's "maybe if we cover the gaps,
-  even train from scratch, it could enable automated iterative refinement." Two ORTHOGONAL gaps: (i) INPUT richness —
-  the binary presence grid → the full TYPED symbol grid (tap/hold/tail/roll) + LOCALITY (region scores, not one pooled
-  global verdict; the interpretability arc showed the critic's cue is GLOBAL/pooled) so hold-type (#3) + where-it's-bad
-  become visible; (ii) OBJECTIVE — a preference reward-model (a richer-input critic on the corrupted-corpus objective
-  STILL learns "typical of training", not taste). **The load-bearing insight: the more the critic is used as an
+  even train from scratch, it could enable automated iterative refinement." **THREE ORTHOGONAL gaps** (the user
+  re-flagged 2026-07-13 that the audio-input gap was documented as a limitation but NEVER as a planned fix — added
+  here): (i) CHART-INPUT richness — the binary presence grid → the full TYPED symbol grid (tap/hold/tail/roll) +
+  LOCALITY (region scores, not one pooled global verdict; the interpretability arc showed the critic's cue is
+  GLOBAL/pooled) so hold-type (#3) + where-it's-bad become visible; (ii) **AUDIO-INPUT richness — the critic reads only
+  23 of the generator's 42 highres dims (`train_graded_critic_v2.py:113` slices `audio[..., :23]`), so it is
+  AUDIO-UNDERPOWERED relative to the model it judges → feed it the FULL 42-dim `highres_v2` audio the deployed generator
+  conditions on. NOTE: widening the audio input BREAKS the clean 23-dim warm-start from the 16th binary critic (the
+  audio input projection changes shape) → this is part of WHY E4 may need a from-scratch train.** (iii) OBJECTIVE — a
+  preference reward-model (a richer-input critic on the corrupted-corpus objective STILL learns "typical of training",
+  not taste). *(RESOLUTION — the 4th classic limitation — is the ONE already fixed: E1.1 moved the graded critic
+  16th→48th, R1 cleared.)* **★ (iv) LENGTH/LOCALITY — CONFIRMED STRUCTURAL FLAW (user-caught 2026-07-13, verified):
+  the critic hard-TRUNCATES at `max_len=2304` frames (192 beats) — `collect()` slices `[:min(T,2304)]` — and
+  GLOBAL-POOLS (MaskedAttentionPool) the whole song to ONE score. So (a) the median 48th song (3120 frames; ~70% of
+  songs exceed 2304) has its TAIL contribute ZERO — the exact region where defect #1 (tail collapse) lives → a
+  best-of-N loop is structurally tail-blind on most songs; (b) even for songs that fit, a global pool DILUTES a
+  localized tail defect (~1:10). Root = "reduce the whole song to one pooled number." NOT a cost constraint: the
+  backbone is Conv1D (O(T)) + attention-POOL (O(T)), so 2304 was an arbitrary cap — raising to full length (~5400) is
+  a ~2.3× (afternoon) retrain. FIX SCOPE OPEN: (minimal) raise max_len to cover the full length dist; (principled)
+  WINDOWED/LOCAL scoring — length-agnostic AND delivers the LOCALITY half of gap (i) + prevents dilution (one change
+  closes both). KNOCK-ON RESOLVED (2026-07-13 code-read): E1.2's `probe_critic_catches_defects.py` scores in SLIDING 2304-frame
+  windows (WIN=2304/STRIDE=1152) across the whole song → its tail-catch (−1.59) is VALID (fed the true tail in
+  isolation). This DOUBLES as validation of the windowed-local fix: windowed scoring on the EXISTING critic already
+  recovers the tail signal the truncated whole-song global-pool path loses → the deployment flaw is specifically the
+  NAIVE whole-song-truncated scoring path. USER PICKED (2026-07-13): the FULL critic-v3 rebuild — windowed-local +
+  42-dim audio + typed (tap/hold/tail/roll) grid + (preference objective folded in later once E0.1/playtest labels
+  exist), from-scratch (warm-start broken by the 42-dim + typed input change).** **The
+  load-bearing insight: the more the critic is used as an
   OPTIMIZATION TARGET, the more its blind spots become Goodhart/reward-hacking liabilities.** Ladder of rising
   power+risk: (1) best-of-N SELECTION [tolerates a mediocre critic] → (2) rejection-sampling LOOP → (3) critic-GUIDED
   decode → (4) RL generator fine-tune [needs a robust, hard-to-hack, taste-aligned, LOCAL critic]. So covering the
   gaps is the PRECONDITION for rungs 2–4, not polish. **E0.1 still gates the whole ladder** (if best-of-N spread
   doesn't help even an oracle, the vision is moot) → run it BEFORE any from-scratch train. Label cost is unavoidable
   regardless of architecture (taste is a supervision problem).
+
+## Results — 2026-07-13 (critic-v3 BUILT + first train; `notes/critic_v3_findings.md`)
+The user caught the graded_v2 `max_len=2304` tail-truncation flaw (median 48th song 3120 → tail-blind on ~70%/
+180-of-200-val songs, exactly where defect #1 lives; global-pool also dilutes localized defects). Chose the FULL
+critic-v3 rebuild. BUILT `experiments/realism_critic/{windowed_critic.py,train_critic_v3.py,eval_critic_v3_gates.py}`
+→ `checkpoints/realism_critic_v3/best_val.pt` (WindowedLocalCritic: soft-min over multi-scale overlapping windows,
+42-dim audio, typed chart; from scratch).
+- **✅ CORE WINS (measured):** R1 jitter mono **0.98** (spread +2.44…−6.14); **length fix** tail-drop uniform by
+  length short 5.13 / mid 5.68 / **long>3600 5.46** (the old critic was BLIND on the >2304 majority); **locality**
+  a first/middle/last-third defect drops ONLY overlapping windows (4.76/4.93/5.56) with **0.00 leakage** = clean
+  "where it's bad". Gaps (i-locality)+(ii)+(iv) closed.
+- **⚠️ SOFT SPOTS (reported, [[claim-precision]]):** panel-scramble mono only **0.56**; shift mono COLLAPSED
+  0.88→0.01. Root hypothesis = **within-window MEAN-pool is ORDER-DESTROYING** (dilutes panel-config + small-shift,
+  both arrangement signals; jitter survives = an on/off-grid PHASE change). The trade that bought length-agnosticism
+  + non-gameability cost order-sensitivity. v3.1 lever: within-window mean+MAX or order-aware pool.
+- **ARBITER = the EAR.** Whether panel-weakness matters for SELECTION is E1.2-redux (correlate v3 vs the user's E0.1
+  taste ranking) — NOT decidable offline. Pending: 42-vs-23 audio ablation; E1.2-redux (needs E0.1 rankings).
 
 ## Open fork (binding question)
 NEXT ACTION = **the E0.1 best-of-N spread set** (harm_calib excluded as an axis) — the #3 fix that gated it is now DONE.
