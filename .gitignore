@@ -137,3 +137,5 @@ teaching/
 # scratchpad/measure_defect.py are work-product a prior session lost once — don't re-lose them)
 scratchpad/*
 !scratchpad/*.py
+
+.claude/commands
